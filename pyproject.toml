@@ -18,6 +18,7 @@ dependencies = [
     "ebooklib>=0.19",
     "beautifulsoup4>=4.13.4",
     "PyMuPDF>=1.25.5",
+    "docling>=2.31.0",
     "platformdirs>=4.3.7",
     "soundfile>=0.13.1",
     "pygame>=2.6.1",

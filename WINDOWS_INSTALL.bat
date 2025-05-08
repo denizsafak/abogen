@@ -228,6 +228,15 @@ if errorlevel 1 (
     exit /b
 )
 
+:: Install pylatexenc's fixed version
+echo Installing fixed version of pylatexenc...
+%PYTHON_CONSOLE_PATH% -m pip install --force-reinstall https://github.com/denizsafak/abogen/raw/refs/heads/main/abogen/resources/pylatexenc-2.10-py3-none-any.whl --no-warn-script-location
+if errorlevel 1 (
+    echo Failed to install fixed version of pylatexenc.
+    pause
+    exit /b
+)
+
 :: Install setup requirements
 echo Installing setup requirements...
 %PYTHON_CONSOLE_PATH% -m pip install --upgrade setuptools wheel sphinx hatchling --no-warn-script-location
