@@ -85,7 +85,7 @@ Here’s Abogen in action: in this demo, it processes ∼3,000 characters of tex
 - **Voices**: First letter of the language code (e.g., `a` for American English, `b` for British English, etc.), second letter is for `m` for male and `f` for female.
 - **Voice mixer**: Create custom voices by mixing different voice models with a profile system.
 - **Generate subtitles**: `Disabled`, `Sentence`, `Sentence + Comma`, `1 word`, `2 words`, `3 words`, etc. (Represents the number of words in each subtitle entry)
-- **Output formats**: `.WAV`, `.FLAC`, `.MP3`, and `M4B (with chapters)` (Special thanks to @jborza for chapter support in PR #10)
+- **Output formats**: `.WAV`, `.FLAC`, `.MP3`, and `M4B (with chapters)` (Special thanks to [@jborza](https://github.com/jborza) for chapter support in PR [#10](https://github.com/denizsafak/abogen/pull/10))
 - **Save location**: `Save next to input file`, `Save to desktop`, or `Choose output folder`
 - **Chapter Control**: Select specific `chapters` from ePUBs or `chapters + pages` from PDFs.
 - **Options**:
@@ -181,7 +181,7 @@ docker run --name abogen -v $(pwd):/shared -p 5800:5800 -p 5900:5900 abogen
 ```
 
 Abogen launches automatically inside the container. 
-- You can access it via a web browser at `http://localhost:5800` or connect to it using a VNC client at `localhost:5900`.
+- You can access it via a web browser at [http://localhost:5800](http://localhost:5800) or connect to it using a VNC client at `localhost:5900`.
 - You can use `/shared` directory to share files between your host and the container.
 - For later use, start it with `docker start abogen` and stop it with `docker stop abogen`.
 
@@ -200,9 +200,9 @@ Abogen is a standalone project, but it is inspired by and shares some similariti
 
 ## `Roadmap`
 - [ ] Improve PDF support for better text extraction.
-- [x] Add chapter metadata for .m4a files. (Issue #9, PR #10)
+- [x] Add chapter metadata for .m4a files. (Issue [#9](https://github.com/denizsafak/abogen/issues/9), PR [#10](https://github.com/denizsafak/abogen/pull/10))
 - [ ] Add support for different languages in GUI.
-- [x] Add voice formula feature that enables mixing different voice models. (Issue #1, PR #5)
+- [x] Add voice formula feature that enables mixing different voice models. (Issue [#1](https://github.com/denizsafak/abogen/issues/1), PR [#5](https://github.com/denizsafak/abogen/pull/5))
 - [ ] Add support for kokoro-onnx.
 - [ ] Add dark mode.
 

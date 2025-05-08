@@ -290,8 +290,8 @@ class InputBox(QLabel):
                 )
                 win.selected_book_path = file_path
                 win.open_book_file(
-                    file_path
-                )  # This will handle the dialog and setting file info
+                    file_path  # This will handle the dialog and setting file info
+                )
                 event.acceptProposedAction()
             else:
                 self.set_error("Please drop a .txt, .epub, or .pdf file.")
@@ -328,7 +328,7 @@ class TextboxDialog(QDialog):
         self.setWindowFlags(
             Qt.Window | Qt.WindowCloseButtonHint | Qt.WindowMaximizeButtonHint
         )
-        self.resize(600, 400)
+        self.resize(700, 500)
 
         layout = QVBoxLayout(self)
 
@@ -357,6 +357,11 @@ class TextboxDialog(QDialog):
         self.save_as_button = QPushButton("Save as text", self)
         self.save_as_button.clicked.connect(self.save_as_text)
         self.save_as_button.setToolTip("Save the current text to a file")
+
+        self.insert_chapter_btn = QPushButton("Insert Chapter Marker", self)
+        self.insert_chapter_btn.setToolTip("Insert a chapter marker at the cursor")
+        self.insert_chapter_btn.clicked.connect(self.insert_chapter_marker)
+        button_layout.addWidget(self.insert_chapter_btn)
 
         self.cancel_button = QPushButton("Cancel", self)
         self.cancel_button.clicked.connect(self.reject)
@@ -443,6 +448,13 @@ class TextboxDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "Save Error", f"Could not save file:\n{e}")
+
+    def insert_chapter_marker(self):
+        # Insert a fixed chapter marker without prompting
+        cursor = self.text_edit.textCursor()
+        cursor.insertText("<<CHAPTER_MARKER:Title>>")
+        self.text_edit.setTextCursor(cursor)
+        self.update_char_count()
 
 
 class abogen(QWidget):
@@ -670,9 +682,16 @@ class abogen(QWidget):
         format_layout = QVBoxLayout()
         format_layout.addWidget(QLabel("Output Format:", self))
         self.format_combo = QComboBox(self)
-        self.format_combo.setStyleSheet("QComboBox { min-height: 20px; padding: 6px 12px; }")
+        self.format_combo.setStyleSheet(
+            "QComboBox { min-height: 20px; padding: 6px 12px; }"
+        )
         # Add items with display labels and underlying keys
-        for key, label in [("wav","wav"),("flac","flac"),("mp3","mp3"),("m4b","m4b (with chapters)")]:
+        for key, label in [
+            ("wav", "wav"),
+            ("flac", "flac"),
+            ("mp3", "mp3"),
+            ("m4b", "m4b (with chapters)"),
+        ]:
             self.format_combo.addItem(label, key)
         # Initialize selection by matching saved key
         idx = self.format_combo.findData(self.selected_format)
@@ -1422,6 +1441,7 @@ class abogen(QWidget):
         if self.preview_playing:
             try:
                 import pygame
+
                 pygame.mixer.music.stop()
             except Exception:
                 pass
@@ -1436,18 +1456,20 @@ class abogen(QWidget):
         self.voice_combo.setEnabled(False)
         self.btn_voice_formula_mixer.setEnabled(False)  # Disable mixer button
         self.btn_start.setEnabled(False)  # Disable start button during preview
-        
+
         # Start loading animation - ensure signal connection is always active
-        if hasattr(self, 'loading_movie'):
+        if hasattr(self, "loading_movie"):
             # Disconnect previous connections to avoid multiple connections
             try:
                 self.loading_movie.frameChanged.disconnect()
             except TypeError:
                 pass  # Ignore error if not connected
-            
+
             # Reconnect the signal
             self.loading_movie.frameChanged.connect(
-                lambda: self.btn_preview.setIcon(QIcon(self.loading_movie.currentPixmap()))
+                lambda: self.btn_preview.setIcon(
+                    QIcon(self.loading_movie.currentPixmap())
+                )
             )
             self.loading_movie.start()
 
@@ -1478,14 +1500,14 @@ class abogen(QWidget):
             # Build voice formula string
             components = [f"{name}*{weight}" for name, weight in self.mixed_voice_state]
             voice = " + ".join(filter(None, components))
-            # determine language: use profile setting if available, else first voice code
+            # determine language: use profile setting, else explicit mixer selection, else fallback to first voice code
             if self.selected_profile_name:
                 from voice_profiles import load_profiles
 
                 entry = load_profiles().get(self.selected_profile_name, {})
                 lang = entry.get("language")
             else:
-                lang = None
+                lang = self.selected_lang
             if not lang and self.mixed_voice_state:
                 lang = (
                     self.mixed_voice_state[0][0][0]
@@ -1500,7 +1522,7 @@ class abogen(QWidget):
         gpu_msg, gpu_ok = get_gpu_acceleration(self.use_gpu)
 
         self.preview_thread = VoicePreviewThread(
-            np_module, kpipeline_class, lang, voice, speed, gpu_ok 
+            np_module, kpipeline_class, lang, voice, speed, gpu_ok
         )
         self.preview_thread.finished.connect(self._play_preview_audio)
         self.preview_thread.error.connect(self._preview_error)
@@ -1569,7 +1591,7 @@ class abogen(QWidget):
             self.loading_movie.frameChanged.disconnect()
         except Exception:
             pass  # Ignore error if not connected
-        self.btn_preview.setIcon(self.play_icon) 
+        self.btn_preview.setIcon(self.play_icon)
         self.btn_preview.setToolTip("Preview selected voice")
         self.btn_preview.setEnabled(True)
         self.voice_combo.setEnabled(True)
@@ -1845,6 +1867,7 @@ class abogen(QWidget):
 
     def show_voice_formula_dialog(self):
         from voice_profiles import load_profiles
+
         profiles = load_profiles()
         initial_state = None
         selected_profile = self.selected_profile_name

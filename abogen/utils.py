@@ -67,6 +67,7 @@ def get_version():
 # Define config path
 def get_user_config_path():
     from platformdirs import user_config_dir
+
     # TODO Config directory is changed for Linux and MacOS. But if old config exists, it will be used.
     # On non‑Windows, prefer ~/.config/abogen if it already exists
     if platform.system() != "Windows":

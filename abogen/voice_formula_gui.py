@@ -47,7 +47,7 @@ VOICE_MIXER_WIDTH = 100
 SLIDER_WIDTH = 32
 MIN_WINDOW_WIDTH = 600
 MIN_WINDOW_HEIGHT = 400
-INITIAL_WINDOW_WIDTH = 1000
+INITIAL_WINDOW_WIDTH = 1200
 INITIAL_WINDOW_HEIGHT = 500
 
 # Language options for the language selector loaded from constants
@@ -413,6 +413,11 @@ class VoiceFormulaDialog(QDialog):
             self.language_combo.setCurrentIndex(idx)
         self.language_combo.currentIndexChanged.connect(self.mark_profile_modified)
         header_row.addWidget(self.language_combo)
+        # Preview current voice mix using main window's preview
+        self.btn_preview_mix = QPushButton("Preview", self)
+        self.btn_preview_mix.setToolTip("Preview current voice mix")
+        self.btn_preview_mix.clicked.connect(self.preview_current_mix)
+        header_row.addWidget(self.btn_preview_mix)
         mixer_layout.addLayout(header_row)
 
         # Error message
@@ -708,6 +713,9 @@ class VoiceFormulaDialog(QDialog):
         ]
 
         total = sum(w for _, w in selected)
+        # disable Preview if no voices selected, but don't enable while loading
+        if not getattr(self, "_loading", False):
+            self.btn_preview_mix.setEnabled(total > 0)
 
         if total > 0:
             self.error_label.hide()
@@ -943,6 +951,7 @@ class VoiceFormulaDialog(QDialog):
 
     def new_profile(self):
         import re
+
         while True:
             name, ok = QInputDialog.getText(self, "New Profile", "Enter profile name:")
             if not ok or not name:
@@ -950,8 +959,12 @@ class VoiceFormulaDialog(QDialog):
             name = name.strip()  # Remove leading/trailing spaces
             if not name:
                 continue
-            if not re.match(r'^[\w\- ]+$', name):
-                QMessageBox.warning(self, "Invalid Name", "Profile name can only contain letters, numbers, spaces, underscores, and hyphens.")
+            if not re.match(r"^[\w\- ]+$", name):
+                QMessageBox.warning(
+                    self,
+                    "Invalid Name",
+                    "Profile name can only contain letters, numbers, spaces, underscores, and hyphens.",
+                )
                 continue
             profiles = load_profiles()
             # Remove 'New profile' placeholder if not persisted in JSON
@@ -1173,13 +1186,16 @@ class VoiceFormulaDialog(QDialog):
     def rename_profile(self, item):
         name = item.text().lstrip("*")
         # block if profile has unsaved changes and it's not a virtual New profile
-        if self._profile_dirty.get(name, False) and not (self._virtual_new_profile and name == "New profile"):
+        if self._profile_dirty.get(name, False) and not (
+            self._virtual_new_profile and name == "New profile"
+        ):
             QMessageBox.warning(
                 self, "Unsaved Changes", "Please save the profile before renaming."
             )
             return
         old = item.text().lstrip("*")
         import re
+
         while True:
             new, ok = QInputDialog.getText(
                 self, "Rename Profile", f"Profile name:", text=old
@@ -1189,15 +1205,19 @@ class VoiceFormulaDialog(QDialog):
             new = new.strip()  # Remove leading/trailing spaces
             if not new:
                 continue
-            if not re.match(r'^[\w\- ]+$', new):
-                QMessageBox.warning(self, "Invalid Name", "Profile name can only contain letters, numbers, spaces, underscores, and hyphens.")
+            if not re.match(r"^[\w\- ]+$", new):
+                QMessageBox.warning(
+                    self,
+                    "Invalid Name",
+                    "Profile name can only contain letters, numbers, spaces, underscores, and hyphens.",
+                )
                 continue
-            
+
             profiles = load_profiles()
             if new in profiles:
                 QMessageBox.warning(self, "Duplicate Name", "Profile already exists.")
                 continue
-                
+
             # Special case for renaming the virtual "New profile"
             if self._virtual_new_profile and name == "New profile":
                 # Create the profile with the new name
@@ -1206,12 +1226,12 @@ class VoiceFormulaDialog(QDialog):
                     "language": self.language_combo.currentData(),
                 }
                 save_profiles(profiles)
-                
+
                 # Update tracking properties
                 self._virtual_new_profile = False
                 self._profile_dirty.pop("New profile", None)
                 self._profile_dirty[new] = False
-                
+
                 # Update the current profile name
                 self.current_profile = new
                 item.setText(new)
@@ -1220,11 +1240,11 @@ class VoiceFormulaDialog(QDialog):
                 profiles[new] = profiles.pop(old)
                 save_profiles(profiles)
                 item.setText(new)
-                
+
                 # Update the current profile name if it was renamed
                 if self.current_profile == old:
                     self.current_profile = new
-            
+
             parent = self.parent()
             if hasattr(parent, "populate_profiles_in_voice_combo"):
                 parent.populate_profiles_in_voice_combo()
@@ -1326,3 +1346,39 @@ class VoiceFormulaDialog(QDialog):
                 else:
                     item.setBackground(QColor("white"))
         self.update_profile_save_buttons()
+
+    def preview_current_mix(self):
+        # Disable preview until playback completes
+        self.btn_preview_mix.setEnabled(False)
+        self.btn_preview_mix.setText("Loading...")
+        self._loading = True
+        parent = self.parent()
+        if parent and hasattr(parent, "preview_voice"):
+            # Apply mixed voices and selected language
+            parent.mixed_voice_state = self.get_selected_voices()
+            parent.selected_profile_name = None
+            lang = self.language_combo.currentData()
+            parent.selected_lang = lang
+            parent.subtitle_combo.setEnabled(
+                lang in SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION
+            )
+            # Reset start flag and trigger preview
+            self._started = False
+            parent.preview_voice()
+            # Poll preview_playing: wait for start then end
+            self._preview_poll_timer = QTimer(self)
+            self._preview_poll_timer.timeout.connect(self._check_preview_done)
+            self._preview_poll_timer.start(200)
+
+    def _check_preview_done(self):
+        parent = self.parent()
+        if parent and hasattr(parent, "preview_playing"):
+            # Mark when playback starts
+            if parent.preview_playing:
+                self._started = True
+            # Once started and then stopped, re-enable
+            elif getattr(self, "_started", False):
+                self.btn_preview_mix.setEnabled(True)
+                self.btn_preview_mix.setText("Preview")
+                self._loading = False
+                self._preview_poll_timer.stop()

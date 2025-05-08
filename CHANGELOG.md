@@ -1,3 +1,5 @@
-- Added new output format: `m4b`, enabling chapter metadata in audiobooks. Special thanks to @jborza for implementing this feature in PR #10.
-- Better approach for determining the correct configuration folder for Linux and MacOS, using platformdirs. (Fixes Docker issue #12)
-- Improvements in documentation and code.
+- Added `Insert chapter marker` button in text editor to insert chapter markers at the current cursor position.
+- Added `Preview` button in voice mixer to preview the voice mix with the selected settings.
+- Fixed `f-string: unmatched '['` error in Voice preview, mentioned in #14
+- Fixed the issue with the content before first chapter not being included in the output.
+- Fixed m4b chapter generation opens CMD window in Windows.
