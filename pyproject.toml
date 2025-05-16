@@ -40,6 +40,10 @@ classifiers = [
 
 dynamic = ["version"]
 
+[project.optional-dependencies]
+dev = [
+    "pyinstaller"
+]
 [project.urls]
 Homepage = "https://github.com/denizsafak/abogen"
 Documentation = "https://github.com/denizsafak/abogen"
