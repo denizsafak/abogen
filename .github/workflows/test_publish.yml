@@ -1,0 +1,59 @@
+name: Build multi-arch Docker Image
+
+on:
+  # Build and push
+  release:
+    types: [published]
+  # Build only
+  push:
+    branches: [main]
+  # TODO - enable build on pull requests if build times can be reduced
+  # pull_request:
+
+env:
+  IMAGE_REPOSITORY: ghcr.io/denizsafak/abogen
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Login to Github Container Registry
+      # Only if we need to push an image
+      if: ${{ github.event_name == 'release' && github.event.action == 'published' }}
+      uses: docker/login-action@v3
+      with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+    # Setup for buildx
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      id: buildx
+      uses: docker/setup-buildx-action@v3
+
+    # Debugging information
+    - name: Docker info
+      run: docker info
+
+    - name: Buildx inspect
+      run: docker buildx inspect
+
+    # Build and (optionally) push the image
+    - name: Build image
+      uses: docker/build-push-action@v6
+      with:
+        context: ./abogen
+        file: Dockerfile
+        platforms: linux/amd64,linux/arm/v7,linux/arm64,linux/ppc64le,linux/s390x
+        # Only push if we are publishing a release
+        push: ${{ github.event_name == 'release' && github.event.action == 'published' }}
+        # Use a 'temp' tag, that won't be pushed, for non-release builds
+        tags: ${{ env.IMAGE_REPOSITORY }}:${{ github.event.release.tag_name || 'temp' }}
+        # Use a cache to reduce build times
+        cache-to: type=gha,mode=max
+        cache-from: type=gha
