@@ -111,7 +111,7 @@ class HandlerDialog(QDialog):
         # Build treeview
         self.treeWidget = QTreeWidget(self)
         self.treeWidget.setHeaderHidden(True)
-        self.treeWidget.setSelectionMode(QTreeWidget.SingleSelection)
+        self.treeWidget.setSelectionMode(QTreeWidget.ExtendedSelection)
         self.treeWidget.setContextMenuPolicy(Qt.CustomContextMenu)
         self.treeWidget.customContextMenuRequested.connect(self.on_tree_context_menu)
 
@@ -848,6 +848,12 @@ class HandlerDialog(QDialog):
         if iterator.value():
             has_parents = True
         self.treeWidget.setRootIsDecorated(has_parents)
+        
+    def _update_checkbox_states(self):
+        """Update the checkbox states based on the current checked chapters."""
+        for i in range(self.treeWidget.topLevelItemCount()):
+            item = self.treeWidget.topLevelItem(i)
+            self._update_item_checkbox_state(item)
 
     def _build_epub_tree_from_nav(
         self, nav_nodes, parent_item, seen_content_hashes=None
@@ -1808,9 +1814,34 @@ class HandlerDialog(QDialog):
 
     def get_save_as_project(self):
         return self.save_as_project
+    
+    def check_selected_items(self):
+        self.set_selected_items_checked(True)
+        
+    def uncheck_selected_items(self):
+        self.set_selected_items_checked(False)
+        
+    def set_selected_items_checked(self, state: bool):
+        print(f"Checking selected items: {state}")
+        self.treeWidget.blockSignals(True)
+        for item in self.treeWidget.selectedItems():
+                if item.flags() & Qt.ItemIsUserCheckable:
+                    item.setCheckState(0, Qt.Checked if state else Qt.Unchecked)
+        self.treeWidget.blockSignals(False)
+        self._update_checked_set_from_tree()        
 
     def on_tree_context_menu(self, pos):
         item = self.treeWidget.itemAt(pos)
+        # multi-select context menu
+        if self.treeWidget.selectedItems() and len(self.treeWidget.selectedItems()) > 1:
+            menu = QMenu(self)
+            action = menu.addAction("Select")
+            action.triggered.connect(self.check_selected_items)
+            action = menu.addAction("Clear")
+            action.triggered.connect(self.uncheck_selected_items)
+            menu.exec_(self.treeWidget.mapToGlobal(pos))
+            return
+        
         if (
             not item
             or item.childCount() == 0
