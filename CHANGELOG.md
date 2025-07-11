@@ -1,3 +1,7 @@
+# v1.1.1
+- Fixed adding wrong file in queue for EPUB and PDF files, ensuring the correct file is added to the queue.
+- Reformatted the code using Black.
+
 # v1.1.0
 - Added queue system for processing multiple items, allowing users to add multiple files and process them in a queue, mentioned by @jborza in #30 (Special thanks to @jborza for implementing this feature in PR #35)
 - Added a feature that allows selecting multiple items in book handler (in right click menu) by @jborza in #31, that fixes #28

@@ -105,19 +105,21 @@ def clean_text(text, *args, **kwargs):
 
 default_encoding = sys.getfilesystemencoding()
 
+
 def create_process(cmd, stdin=None, text=True, capture_output=False):
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     # Configure root logger to output to console if not already configured
     root = logging.getLogger()
     if not root.handlers:
         handler = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter('%(message)s')
+        formatter = logging.Formatter("%(message)s")
         handler.setFormatter(formatter)
         root.addHandler(handler)
         root.setLevel(logging.INFO)
-    
+
     # Determine shell usage: use shell only for string commands
     use_shell = isinstance(cmd, str)
     kwargs = {
@@ -151,11 +153,12 @@ def create_process(cmd, stdin=None, text=True, capture_output=False):
 
     # Print the command being executed
     print(f"Executing: {cmd if isinstance(cmd, str) else ' '.join(cmd)}")
-    
+
     proc = subprocess.Popen(cmd, **kwargs)
-    
+
     # Stream output to console in real-time if not capturing
     if proc.stdout and not capture_output:
+
         def _stream_output(stream):
             if text:
                 # For text mode, read character by character for real-time output
@@ -174,12 +177,14 @@ def create_process(cmd, stdin=None, text=True, capture_output=False):
                         break
                     try:
                         # Try to decode binary data for display
-                        sys.stdout.write(chunk.decode(default_encoding, errors='replace'))
+                        sys.stdout.write(
+                            chunk.decode(default_encoding, errors="replace")
+                        )
                         sys.stdout.flush()
                     except Exception:
                         pass
             stream.close()
-        
+
         # Start a daemon thread to handle output streaming
         Thread(target=_stream_output, args=(proc.stdout,), daemon=True).start()
 
@@ -220,6 +225,7 @@ def get_gpu_acceleration(enabled):
     try:
         import torch
         from torch.cuda import is_available
+
         if not enabled:
             return "CUDA GPU available but using CPU.", False
         if is_available():
@@ -227,7 +233,11 @@ def get_gpu_acceleration(enabled):
         # Gather more diagnostic info if CUDA is not available
         try:
             cuda_devices = torch.cuda.device_count()
-            cuda_error = torch.cuda.get_device_name(0) if cuda_devices > 0 else "No devices found"
+            cuda_error = (
+                torch.cuda.get_device_name(0)
+                if cuda_devices > 0
+                else "No devices found"
+            )
         except Exception as e:
             cuda_error = str(e)
         return f"CUDA GPU is not available. Using CPU. ({cuda_error})", False
@@ -239,6 +249,7 @@ def prevent_sleep_start():
     system = platform.system()
     if system == "Windows":
         import ctypes
+
         ctypes.windll.kernel32.SetThreadExecutionState(
             0x80000000 | 0x00000001 | 0x00000040
         )
@@ -246,19 +257,22 @@ def prevent_sleep_start():
         _sleep_procs["Darwin"] = create_process(["caffeinate"])
     elif system == "Linux":
         # use a sleep that never exits so inhibition stays active
-        _sleep_procs["Linux"] = create_process([
-            "systemd-inhibit",
-            "--what=handle-lid-switch:sleep",
-            "--mode=block",
-            "sleep",
-            "infinity",
-        ])
+        _sleep_procs["Linux"] = create_process(
+            [
+                "systemd-inhibit",
+                "--what=handle-lid-switch:sleep",
+                "--mode=block",
+                "sleep",
+                "infinity",
+            ]
+        )
 
 
 def prevent_sleep_end():
     system = platform.system()
     if system == "Windows":
         import ctypes
+
         ctypes.windll.kernel32.SetThreadExecutionState(0x80000000)  # ES_CONTINUOUS
     elif system in ("Darwin", "Linux") and _sleep_procs[system]:
         try:

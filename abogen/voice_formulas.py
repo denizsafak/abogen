@@ -1,6 +1,7 @@
 import re
 from abogen.constants import VOICES_INTERNAL
 
+
 # Calls parsing and loads the voice to gpu or cpu
 def get_new_voice(pipeline, formula, use_gpu):
     try:

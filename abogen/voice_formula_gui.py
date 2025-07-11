@@ -230,13 +230,15 @@ class VoiceMixer(QWidget):
             appstyle = QApplication.instance().style().objectName().lower()
             if appstyle != "windowsvista":
                 # Set custom groove color for disabled state using COLORS["GREY_BACKGROUND"]
-                self.slider.setStyleSheet(f"""
+                self.slider.setStyleSheet(
+                    f"""
                     QSlider::groove:vertical:disabled {{
                         background: {COLORS.get("GREY_BACKGROUND")};
                         width: 4px;
                         border-radius: 4px;
                     }}
-                """)
+                """
+                )
 
         # Connect controls
         self.slider.valueChanged.connect(lambda val: self.spin_box.setValue(val / 100))
@@ -330,7 +332,9 @@ class VoiceFormulaDialog(QDialog):
         self._original_mixed_voice_state = None
         if parent is not None:
             self._original_profile_name = getattr(parent, "selected_profile_name", None)
-            self._original_mixed_voice_state = getattr(parent, "mixed_voice_state", None)
+            self._original_mixed_voice_state = getattr(
+                parent, "mixed_voice_state", None
+            )
         profiles = load_profiles()
         self._virtual_new_profile = False
         if not profiles:
@@ -369,7 +373,9 @@ class VoiceFormulaDialog(QDialog):
         self.profile_list = QListWidget()
         self.profile_list.setSelectionMode(QListWidget.SingleSelection)
         self.profile_list.setSelectionBehavior(QListWidget.SelectRows)
-        self.profile_list.setStyleSheet("QListWidget::item:selected { background: palette(highlight); color: palette(highlighted-text); }")
+        self.profile_list.setStyleSheet(
+            "QListWidget::item:selected { background: palette(highlight); color: palette(highlighted-text); }"
+        )
         icon = QIcon(get_resource_path("abogen.assets", "profile.png"))
         if self._virtual_new_profile:
             item = QListWidgetItem(icon, "New profile")
@@ -976,6 +982,7 @@ class VoiceFormulaDialog(QDialog):
     def _parse_rgba_to_qcolor(self, rgba_str):
         from PyQt5.QtCore import Qt
         from PyQt5.QtGui import QColor
+
         """Helper to convert 'rgba(R,G,B,A_float)' string to QColor."""
         match = re.match(r"rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)", rgba_str)
         if match:
@@ -1372,6 +1379,7 @@ class VoiceFormulaDialog(QDialog):
 
     def update_profile_list_colors(self):
         from PyQt5.QtCore import Qt
+
         profiles = load_profiles()
         for i in range(self.profile_list.count()):
             item = self.profile_list.item(i)
@@ -1383,7 +1391,9 @@ class VoiceFormulaDialog(QDialog):
                 color = self._parse_rgba_to_qcolor(COLORS.get("YELLOW_BACKGROUND"))
                 item.setData(Qt.BackgroundRole, color)
             else:
-                item.setData(Qt.BackgroundRole, self.profile_list.palette().base().color())
+                item.setData(
+                    Qt.BackgroundRole, self.profile_list.palette().base().color()
+                )
                 weights = profiles.get(name, {}).get("voices", [])
                 total = 0
                 if isinstance(weights, list):

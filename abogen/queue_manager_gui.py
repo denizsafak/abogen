@@ -20,6 +20,7 @@ from abogen.constants import COLORS
 from copy import deepcopy
 from PyQt5.QtGui import QFontMetrics
 
+
 class ElidedLabel(QLabel):
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
@@ -40,6 +41,7 @@ class ElidedLabel(QLabel):
     def fullText(self):
         return self._full_text
 
+
 class QueueListItemWidget(QWidget):
     def __init__(self, file_name, char_count):
         super().__init__()
@@ -47,6 +49,7 @@ class QueueListItemWidget(QWidget):
         layout.setContentsMargins(12, 0, 6, 0)
         layout.setSpacing(0)
         import os
+
         name_label = ElidedLabel(os.path.basename(file_name))
         char_label = QLabel(f"Chars: {char_count}")
         char_label.setStyleSheet(f"color: {COLORS['LIGHT_DISABLED']};")
@@ -55,6 +58,7 @@ class QueueListItemWidget(QWidget):
         layout.addWidget(name_label, 1)
         layout.addWidget(char_label, 0)
         self.setLayout(layout)
+
 
 class DroppableQueueListWidget(QListWidget):
     def __init__(self, parent_dialog):
@@ -73,7 +77,7 @@ class DroppableQueueListWidget(QListWidget):
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
-                if url.isLocalFile() and url.toLocalFile().lower().endswith('.txt'):
+                if url.isLocalFile() and url.toLocalFile().lower().endswith(".txt"):
                     self.drag_overlay.resize(self.size())
                     self.drag_overlay.setVisible(True)
                     event.acceptProposedAction()
@@ -84,7 +88,7 @@ class DroppableQueueListWidget(QListWidget):
     def dragMoveEvent(self, event):
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
-                if url.isLocalFile() and url.toLocalFile().lower().endswith('.txt'):
+                if url.isLocalFile() and url.toLocalFile().lower().endswith(".txt"):
                     event.acceptProposedAction()
                     return
         event.ignore()
@@ -96,7 +100,11 @@ class DroppableQueueListWidget(QListWidget):
     def dropEvent(self, event):
         self.drag_overlay.setVisible(False)
         if event.mimeData().hasUrls():
-            file_paths = [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile() and url.toLocalFile().lower().endswith('.txt')]
+            file_paths = [
+                url.toLocalFile()
+                for url in event.mimeData().urls()
+                if url.isLocalFile() and url.toLocalFile().lower().endswith(".txt")
+            ]
             if file_paths:
                 self.parent_dialog.add_files_from_paths(file_paths)
                 event.acceptProposedAction()
@@ -107,14 +115,17 @@ class DroppableQueueListWidget(QListWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, 'drag_overlay'):
+        if hasattr(self, "drag_overlay"):
             self.drag_overlay.resize(self.size())
+
 
 class QueueManager(QDialog):
     def __init__(self, parent, queue: list, title="Queue Manager", size=(600, 700)):
         super().__init__()
         self.queue = queue
-        self._original_queue = deepcopy(queue)  # Store a deep copy of the original queue
+        self._original_queue = deepcopy(
+            queue
+        )  # Store a deep copy of the original queue
         self.parent = parent
         layout = QVBoxLayout()
         layout.setContentsMargins(15, 15, 15, 15)  # set main layout margins
@@ -141,10 +152,12 @@ class QueueManager(QDialog):
         # Overlay label for empty queue
         self.empty_overlay = QLabel(
             "Drag and drop your text files here or use the 'Add files' button.",
-            self.listwidget
+            self.listwidget,
         )
         self.empty_overlay.setAlignment(Qt.AlignCenter)
-        self.empty_overlay.setStyleSheet(f"color: {COLORS['LIGHT_DISABLED']}; background: transparent; padding: 20px;")
+        self.empty_overlay.setStyleSheet(
+            f"color: {COLORS['LIGHT_DISABLED']}; background: transparent; padding: 20px;"
+        )
         self.empty_overlay.setWordWrap(True)
         self.empty_overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.empty_overlay.hide()
@@ -208,13 +221,14 @@ class QueueManager(QDialog):
             file_name = item.file_name
             display_name = file_name
             import os
+
             if os.path.sep in file_name:
                 display_name = os.path.basename(file_name)
             # Get icon for the file
             icon = icon_provider.icon(QFileInfo(file_name))
             list_item = QListWidgetItem()
             # Set tooltip with detailed info
-            output_folder = getattr(item, 'output_folder', '')
+            output_folder = getattr(item, "output_folder", "")
             tooltip = (
                 f"<b>Path:</b> {file_name}<br>"
                 f"<b>Language:</b> {getattr(item, 'lang_code', '')}<br>"
@@ -222,7 +236,7 @@ class QueueManager(QDialog):
                 f"<b>Voice:</b> {getattr(item, 'voice', '')}<br>"
                 f"<b>Save Option:</b> {getattr(item, 'save_option', '')}<br>"
             )
-            if output_folder not in (None, '', 'None'):
+            if output_folder not in (None, "", "None"):
                 tooltip += f"<b>Output Folder:</b> {output_folder}<br>"
             tooltip += (
                 f"<b>Subtitle Mode:</b> {getattr(item, 'subtitle_mode', '')}<br>"
@@ -233,7 +247,7 @@ class QueueManager(QDialog):
             list_item.setToolTip(tooltip)
             list_item.setIcon(icon)
             # Use custom widget for display
-            char_count = getattr(item, 'total_char_count', 0)
+            char_count = getattr(item, "total_char_count", 0)
             widget = QueueListItemWidget(file_name, char_count)
             self.listwidget.addItem(list_item)
             self.listwidget.setItemWidget(list_item, widget)
@@ -244,6 +258,7 @@ class QueueManager(QDialog):
         if not items:
             return
         from PyQt5.QtWidgets import QMessageBox
+
         # Remove by index to ensure correct mapping
         rows = sorted([self.listwidget.row(item) for item in items], reverse=True)
         # Warn user if removing multiple files
@@ -253,7 +268,7 @@ class QueueManager(QDialog):
                 "Confirm Remove",
                 f"Are you sure you want to remove {len(rows)} selected items from the queue?",
                 QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
+                QMessageBox.No,
             )
             if reply != QMessageBox.Yes:
                 return
@@ -265,19 +280,22 @@ class QueueManager(QDialog):
 
     def clear_queue(self):
         from PyQt5.QtWidgets import QMessageBox
+
         if len(self.queue) > 1:
             reply = QMessageBox.question(
                 self,
                 "Confirm Clear Queue",
                 f"Are you sure you want to clear {len(self.queue)} items from the queue?",
                 QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
+                QMessageBox.No,
             )
             if reply != QMessageBox.Yes:
                 return
         self.queue.clear()
         self.listwidget.clear()
-        self.empty_overlay.resize(self.listwidget.size())  # Ensure overlay is sized correctly
+        self.empty_overlay.resize(
+            self.listwidget.size()
+        )  # Ensure overlay is sized correctly
         self.empty_overlay.show()  # Show the overlay when queue is empty
         self.update_button_states()
 
@@ -290,56 +308,74 @@ class QueueManager(QDialog):
         parent = self.parent
         if parent is not None:
             # lang_code: use parent's get_voice_formula and get_selected_lang
-            if hasattr(parent, 'get_voice_formula') and hasattr(parent, 'get_selected_lang'):
+            if hasattr(parent, "get_voice_formula") and hasattr(
+                parent, "get_selected_lang"
+            ):
                 voice_formula = parent.get_voice_formula()
-                attrs['lang_code'] = parent.get_selected_lang(voice_formula)
-                attrs['voice'] = voice_formula
+                attrs["lang_code"] = parent.get_selected_lang(voice_formula)
+                attrs["voice"] = voice_formula
             else:
-                attrs['lang_code'] = getattr(parent, 'selected_lang', '')
-                attrs['voice'] = getattr(parent, 'selected_voice', '')
+                attrs["lang_code"] = getattr(parent, "selected_lang", "")
+                attrs["voice"] = getattr(parent, "selected_voice", "")
             # speed
-            if hasattr(parent, 'speed_slider'):
-                attrs['speed'] = parent.speed_slider.value() / 100.0
+            if hasattr(parent, "speed_slider"):
+                attrs["speed"] = parent.speed_slider.value() / 100.0
             else:
-                attrs['speed'] = getattr(parent, 'speed', 1.0)
+                attrs["speed"] = getattr(parent, "speed", 1.0)
             # save_option
-            attrs['save_option'] = getattr(parent, 'save_option', '')
+            attrs["save_option"] = getattr(parent, "save_option", "")
             # output_folder
-            attrs['output_folder'] = getattr(parent, 'selected_output_folder', '')
+            attrs["output_folder"] = getattr(parent, "selected_output_folder", "")
             # subtitle_mode
-            if hasattr(parent, 'get_actual_subtitle_mode'):
-                attrs['subtitle_mode'] = parent.get_actual_subtitle_mode()
+            if hasattr(parent, "get_actual_subtitle_mode"):
+                attrs["subtitle_mode"] = parent.get_actual_subtitle_mode()
             else:
-                attrs['subtitle_mode'] = getattr(parent, 'subtitle_mode', '')
+                attrs["subtitle_mode"] = getattr(parent, "subtitle_mode", "")
             # output_format
-            attrs['output_format'] = getattr(parent, 'selected_format', '')
+            attrs["output_format"] = getattr(parent, "selected_format", "")
             # total_char_count
-            attrs['total_char_count'] = getattr(parent, 'char_count', '')
+            attrs["total_char_count"] = getattr(parent, "char_count", "")
             # replace_single_newlines
-            attrs['replace_single_newlines'] = getattr(parent, 'replace_single_newlines', False)
+            attrs["replace_single_newlines"] = getattr(
+                parent, "replace_single_newlines", False
+            )
         else:
             # fallback: empty values
-            attrs = {k: '' for k in [
-                'lang_code', 'speed', 'voice', 'save_option',
-                'output_folder', 'subtitle_mode', 'output_format', 'total_char_count', 'replace_single_newlines']}
+            attrs = {
+                k: ""
+                for k in [
+                    "lang_code",
+                    "speed",
+                    "voice",
+                    "save_option",
+                    "output_folder",
+                    "subtitle_mode",
+                    "output_format",
+                    "total_char_count",
+                    "replace_single_newlines",
+                ]
+            }
         return attrs
 
     def add_files_from_paths(self, file_paths):
         from abogen.utils import calculate_text_length
         from PyQt5.QtWidgets import QMessageBox
         import os
+
         current_attrs = self.get_current_attributes()
         duplicates = []
         for file_path in file_paths:
+
             class QueueItem:
                 pass
+
             item = QueueItem()
             item.file_name = file_path
             for attr, value in current_attrs.items():
                 setattr(item, attr, value)
             # Read file content and calculate total_char_count using calculate_text_length
             try:
-                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                     file_content = f.read()
                 item.total_char_count = calculate_text_length(file_content)
             except Exception:
@@ -348,16 +384,26 @@ class QueueManager(QDialog):
             is_duplicate = False
             for queued_item in self.queue:
                 if (
-                    getattr(queued_item, 'file_name', None) == getattr(item, 'file_name', None) and
-                    getattr(queued_item, 'lang_code', None) == getattr(item, 'lang_code', None) and
-                    getattr(queued_item, 'speed', None) == getattr(item, 'speed', None) and
-                    getattr(queued_item, 'voice', None) == getattr(item, 'voice', None) and
-                    getattr(queued_item, 'save_option', None) == getattr(item, 'save_option', None) and
-                    getattr(queued_item, 'output_folder', None) == getattr(item, 'output_folder', None) and
-                    getattr(queued_item, 'subtitle_mode', None) == getattr(item, 'subtitle_mode', None) and
-                    getattr(queued_item, 'output_format', None) == getattr(item, 'output_format', None) and
-                    getattr(queued_item, 'total_char_count', None) == getattr(item, 'total_char_count', None) and
-                    getattr(queued_item, 'replace_single_newlines', False) == getattr(item, 'replace_single_newlines', False)
+                    getattr(queued_item, "file_name", None)
+                    == getattr(item, "file_name", None)
+                    and getattr(queued_item, "lang_code", None)
+                    == getattr(item, "lang_code", None)
+                    and getattr(queued_item, "speed", None)
+                    == getattr(item, "speed", None)
+                    and getattr(queued_item, "voice", None)
+                    == getattr(item, "voice", None)
+                    and getattr(queued_item, "save_option", None)
+                    == getattr(item, "save_option", None)
+                    and getattr(queued_item, "output_folder", None)
+                    == getattr(item, "output_folder", None)
+                    and getattr(queued_item, "subtitle_mode", None)
+                    == getattr(item, "subtitle_mode", None)
+                    and getattr(queued_item, "output_format", None)
+                    == getattr(item, "output_format", None)
+                    and getattr(queued_item, "total_char_count", None)
+                    == getattr(item, "total_char_count", None)
+                    and getattr(queued_item, "replace_single_newlines", False)
+                    == getattr(item, "replace_single_newlines", False)
                 ):
                     is_duplicate = True
                     break
@@ -369,7 +415,7 @@ class QueueManager(QDialog):
             QMessageBox.warning(
                 self,
                 "Duplicate Item(s)",
-                f"Skipping {len(duplicates)} file(s) with the same attributes, already in the queue."
+                f"Skipping {len(duplicates)} file(s) with the same attributes, already in the queue.",
             )
         self.process_queue()
         self.update_button_states()
@@ -377,20 +423,23 @@ class QueueManager(QDialog):
     def add_more_files(self):
         from PyQt5.QtWidgets import QFileDialog
         from abogen.utils import calculate_text_length  # import the function
+
         # Only allow .txt files
-        files, _ = QFileDialog.getOpenFileNames(self, "Select .txt files", "", "Text Files (*.txt)")
+        files, _ = QFileDialog.getOpenFileNames(
+            self, "Select .txt files", "", "Text Files (*.txt)"
+        )
         if not files:
             return
         self.add_files_from_paths(files)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, 'empty_overlay'):
+        if hasattr(self, "empty_overlay"):
             self.empty_overlay.resize(self.listwidget.size())
 
     def update_button_states(self):
         # Enable Remove if at least one item is selected, else disable
-        if hasattr(self, 'remove_button'):
+        if hasattr(self, "remove_button"):
             selected_count = len(self.listwidget.selectedItems())
             self.remove_button.setEnabled(selected_count > 0)
             if selected_count > 1:
@@ -398,7 +447,7 @@ class QueueManager(QDialog):
             else:
                 self.remove_button.setText("Remove selected")
         # Disable Clear if queue is empty
-        if hasattr(self, 'clear_button'):
+        if hasattr(self, "clear_button"):
             self.clear_button.setEnabled(bool(self.queue))
 
     def show_context_menu(self, pos):
@@ -406,6 +455,7 @@ class QueueManager(QDialog):
         from PyQt5.QtGui import QDesktopServices
         from PyQt5.QtCore import QUrl
         import os
+
         global_pos = self.listwidget.viewport().mapToGlobal(pos)
         selected_items = self.listwidget.selectedItems()
         menu = QMenu(self)
@@ -417,35 +467,45 @@ class QueueManager(QDialog):
 
             # Add Open file action
             open_file_action = QAction("Open file", self)
+
             def open_file():
                 from PyQt5.QtWidgets import QMessageBox
+
                 item = selected_items[0]
                 display_name = item.text()
                 for q in self.queue:
                     if os.path.basename(q.file_name) == display_name:
                         if not os.path.exists(q.file_name):
-                            QMessageBox.warning(self, "File Not Found", f"The file does not exist.")
+                            QMessageBox.warning(
+                                self, "File Not Found", f"The file does not exist."
+                            )
                             return
                         QDesktopServices.openUrl(QUrl.fromLocalFile(q.file_name))
                         break
+
             open_file_action.triggered.connect(open_file)
             menu.addAction(open_file_action)
 
             # Add Go to folder action
             go_to_folder_action = QAction("Go to folder", self)
+
             def go_to_folder():
                 from PyQt5.QtWidgets import QMessageBox
+
                 item = selected_items[0]
                 display_name = item.text()
                 for q in self.queue:
                     if os.path.basename(q.file_name) == display_name:
                         if not os.path.exists(q.file_name):
-                            QMessageBox.warning(self, "File Not Found", f"The file does not exist.")
+                            QMessageBox.warning(
+                                self, "File Not Found", f"The file does not exist."
+                            )
                             return
                         folder = os.path.dirname(q.file_name)
                         if os.path.exists(folder):
                             QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
                         break
+
             go_to_folder_action.triggered.connect(go_to_folder)
             menu.addAction(go_to_folder_action)
 
@@ -466,6 +526,7 @@ class QueueManager(QDialog):
     def reject(self):
         # Cancel: restore original queue
         from PyQt5.QtWidgets import QMessageBox
+
         # Warn if user changed a lot (e.g., more than 1 items difference)
         original_count = len(self._original_queue)
         current_count = len(self.queue)
@@ -475,7 +536,7 @@ class QueueManager(QDialog):
                 "Confirm Cancel",
                 f"Are you sure you want to cancel and discard all changes?",
                 QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
+                QMessageBox.No,
             )
             if reply != QMessageBox.Yes:
                 return
@@ -485,6 +546,7 @@ class QueueManager(QDialog):
 
     def keyPressEvent(self, event):
         from PyQt5.QtCore import Qt
+
         if event.key() == Qt.Key_Delete:
             self.remove_item()
         else:

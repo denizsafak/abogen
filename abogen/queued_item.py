@@ -1,6 +1,7 @@
 # represents a queued item - book, chapters, voice, etc.
 from dataclasses import dataclass
 
+
 @dataclass
 class QueuedItem:
     file_name: str

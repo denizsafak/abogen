@@ -25,6 +25,7 @@ if sys.stderr is None:
 if platform.system() == "Darwin" and platform.processor() == "arm":
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
+
 # Custom message handler to filter out specific Qt warnings
 def qt_message_handler(mode, context, message):
     if "Wayland does not support QWindow::requestActivate()" in message:

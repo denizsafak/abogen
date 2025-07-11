@@ -849,7 +849,7 @@ class HandlerDialog(QDialog):
         if iterator.value():
             has_parents = True
         self.treeWidget.setRootIsDecorated(has_parents)
-        
+
     def _update_checkbox_states(self):
         """Update the checkbox states based on the current checked chapters."""
         for i in range(self.treeWidget.topLevelItemCount()):
@@ -997,10 +997,21 @@ class HandlerDialog(QDialog):
                     bookmark_item.setData(0, Qt.UserRole, page_id)
                     # only allow checking if this chapter has content
                     if self.content_lengths.get(page_id, 0) > 0:
-                        bookmark_item.setFlags(bookmark_item.flags() | Qt.ItemIsUserCheckable)
-                        bookmark_item.setCheckState(0, Qt.Checked if page_id in self.checked_chapters else Qt.Unchecked)
+                        bookmark_item.setFlags(
+                            bookmark_item.flags() | Qt.ItemIsUserCheckable
+                        )
+                        bookmark_item.setCheckState(
+                            0,
+                            (
+                                Qt.Checked
+                                if page_id in self.checked_chapters
+                                else Qt.Unchecked
+                            ),
+                        )
                     else:
-                        bookmark_item.setFlags(bookmark_item.flags() & ~Qt.ItemIsUserCheckable)
+                        bookmark_item.setFlags(
+                            bookmark_item.flags() & ~Qt.ItemIsUserCheckable
+                        )
                     # map for uncategorized pages
                     self.bookmark_items_map[page_num] = bookmark_item
 
@@ -1027,10 +1038,21 @@ class HandlerDialog(QDialog):
                         page_item.setData(0, Qt.UserRole, page_id)
                         # only allow checking if this sub-page has content
                         if self.content_lengths.get(page_id, 0) > 0:
-                            page_item.setFlags(page_item.flags() | Qt.ItemIsUserCheckable)
-                            page_item.setCheckState(0, Qt.Checked if page_id in self.checked_chapters else Qt.Unchecked)
+                            page_item.setFlags(
+                                page_item.flags() | Qt.ItemIsUserCheckable
+                            )
+                            page_item.setCheckState(
+                                0,
+                                (
+                                    Qt.Checked
+                                    if page_id in self.checked_chapters
+                                    else Qt.Unchecked
+                                ),
+                            )
                         else:
-                            page_item.setFlags(page_item.flags() & ~Qt.ItemIsUserCheckable)
+                            page_item.setFlags(
+                                page_item.flags() & ~Qt.ItemIsUserCheckable
+                            )
 
                         added_pages.add(sub_page_num)
 
@@ -1038,11 +1060,15 @@ class HandlerDialog(QDialog):
 
         covered_pages = set(added_pages)
         # attach any pages without direct bookmarks under nearest preceding chapter
-        uncategorized_pages = [i for i in range(len(self.pdf_doc)) if i not in covered_pages]
+        uncategorized_pages = [
+            i for i in range(len(self.pdf_doc)) if i not in covered_pages
+        ]
         for page_num in uncategorized_pages:
             # find nearest previous bookmark
             prev_nums = [n for n in sorted(self.bookmark_items_map) if n < page_num]
-            parent_item = self.bookmark_items_map[prev_nums[-1]] if prev_nums else self.treeWidget
+            parent_item = (
+                self.bookmark_items_map[prev_nums[-1]] if prev_nums else self.treeWidget
+            )
             page_id = f"page_{page_num+1}"
             title = f"Page {page_num+1}"
             text = self.content_texts.get(page_id, "").strip()
@@ -1055,7 +1081,9 @@ class HandlerDialog(QDialog):
             # only allow checking if uncategorized page has content
             if self.content_lengths.get(page_id, 0) > 0:
                 page_item.setFlags(page_item.flags() | Qt.ItemIsUserCheckable)
-                page_item.setCheckState(0, Qt.Checked if page_id in self.checked_chapters else Qt.Unchecked)
+                page_item.setCheckState(
+                    0, Qt.Checked if page_id in self.checked_chapters else Qt.Unchecked
+                )
             else:
                 page_item.setFlags(page_item.flags() & ~Qt.ItemIsUserCheckable)
 
@@ -1081,7 +1109,9 @@ class HandlerDialog(QDialog):
             # only allow checking if standalone page has content
             if self.content_lengths.get(page_id, 0) > 0:
                 page_item.setFlags(page_item.flags() | Qt.ItemIsUserCheckable)
-                page_item.setCheckState(0, Qt.Checked if page_id in self.checked_chapters else Qt.Unchecked)
+                page_item.setCheckState(
+                    0, Qt.Checked if page_id in self.checked_chapters else Qt.Unchecked
+                )
             else:
                 page_item.setFlags(page_item.flags() & ~Qt.ItemIsUserCheckable)
 
@@ -1182,7 +1212,7 @@ class HandlerDialog(QDialog):
         self.save_chapters_checkbox = QCheckBox(checkbox_text, self)
         self.save_chapters_checkbox.setChecked(self.save_chapters_separately)
         self.save_chapters_checkbox.stateChanged.connect(self.on_save_chapters_changed)
-        leftLayout.addWidget(self.save_chapters_checkbox)        
+        leftLayout.addWidget(self.save_chapters_checkbox)
         self.merge_chapters_checkbox = QCheckBox(
             "Create a merged version at the end", self
         )
@@ -1191,7 +1221,7 @@ class HandlerDialog(QDialog):
             self.on_merge_chapters_changed
         )
         leftLayout.addWidget(self.merge_chapters_checkbox)
-        
+
         self.save_as_project_checkbox = QCheckBox(
             "Save in a project folder with metadata", self
         )
@@ -1501,7 +1531,9 @@ class HandlerDialog(QDialog):
             authors_text = ", ".join(self.book_metadata["authors"])
             html_content += f"<p style='text-align: center; font-style: italic;'>By {authors_text}</p>"
 
-        if self.book_metadata["publisher"] or self.book_metadata.get("publication_year"):
+        if self.book_metadata["publisher"] or self.book_metadata.get(
+            "publication_year"
+        ):
             pub_info = []
             if self.book_metadata["publisher"]:
                 pub_info.append(f"Published by {self.book_metadata['publisher']}")
@@ -1543,7 +1575,9 @@ class HandlerDialog(QDialog):
             try:
                 author_items = self.book.get_metadata("DC", "creator")
                 if author_items:
-                    metadata["authors"] = [author[0] for author in author_items if len(author) > 0]
+                    metadata["authors"] = [
+                        author[0] for author in author_items if len(author) > 0
+                    ]
             except Exception as e:
                 logging.warning(f"Error extracting author metadata: {e}")
 
@@ -1560,14 +1594,14 @@ class HandlerDialog(QDialog):
                     metadata["publisher"] = publisher_items[0][0]
             except Exception as e:
                 logging.warning(f"Error extracting publisher metadata: {e}")
-                
+
             # Try to extract publication year
             try:
                 date_items = self.book.get_metadata("DC", "date")
                 if date_items and len(date_items) > 0:
                     date_str = date_items[0][0]
                     # Try to extract just the year from the date string
-                    year_match = re.search(r'\b(19|20)\d{2}\b', date_str)
+                    year_match = re.search(r"\b(19|20)\d{2}\b", date_str)
                     if year_match:
                         metadata["publication_year"] = year_match.group(0)
                     else:
@@ -1603,16 +1637,16 @@ class HandlerDialog(QDialog):
                         metadata["description"] = f"Keywords: {keywords}"
 
                 metadata["publisher"] = pdf_info.get("creator", None)
-                
+
                 # Try to extract publication date from PDF metadata
                 if "creationDate" in pdf_info:
                     date_str = pdf_info["creationDate"]
-                    year_match = re.search(r'D:(\d{4})', date_str)
+                    year_match = re.search(r"D:(\d{4})", date_str)
                     if year_match:
                         metadata["publication_year"] = year_match.group(1)
                 elif "modDate" in pdf_info:
                     date_str = pdf_info["modDate"]
-                    year_match = re.search(r'D:(\d{4})', date_str)
+                    year_match = re.search(r"D:(\d{4})", date_str)
                     if year_match:
                         metadata["publication_year"] = year_match.group(1)
 
@@ -1634,22 +1668,26 @@ class HandlerDialog(QDialog):
     def _format_metadata_tags(self):
         """Format metadata tags for insertion at the beginning of the text"""
         import datetime
-        
+
         metadata = self.book_metadata
         filename = os.path.splitext(os.path.basename(self.book_path))[0]
         current_year = str(datetime.datetime.now().year)
-        
+
         # Get values with fallbacks
         title = metadata.get("title") or filename
         authors = metadata.get("authors") or ["Unknown"]
         authors_text = ", ".join(authors)
         album_artist = authors_text or "Unknown"
-        year = metadata.get("publication_year") or current_year  # Use publication year if available
-        
+        year = (
+            metadata.get("publication_year") or current_year
+        )  # Use publication year if available
+
         # Count chapters/pages
         total_chapters = len(self.checked_chapters)
-        chapter_text = f"{total_chapters} {'Chapters' if self.file_type == 'epub' else 'Pages'}"
-        
+        chapter_text = (
+            f"{total_chapters} {'Chapters' if self.file_type == 'epub' else 'Pages'}"
+        )
+
         # Format metadata tags
         metadata_tags = [
             f"<<METADATA_TITLE:{title}>>",
@@ -1658,9 +1696,9 @@ class HandlerDialog(QDialog):
             f"<<METADATA_YEAR:{year}>>",
             f"<<METADATA_ALBUM_ARTIST:{album_artist}>>",
             f"<<METADATA_COMPOSER:Narrator>>",
-            f"<<METADATA_GENRE:Audiobook>>"
+            f"<<METADATA_GENRE:Audiobook>>",
         ]
-        
+
         return "\n".join(metadata_tags)
 
     def _get_epub_selected_text(self):
@@ -1669,7 +1707,7 @@ class HandlerDialog(QDialog):
 
         # Add metadata tags at the beginning
         metadata_tags = self._format_metadata_tags()
-        
+
         item_order_counter = 0
         ordered_checked_items = []
 
@@ -1730,7 +1768,10 @@ class HandlerDialog(QDialog):
                     if text:
                         all_content.append(text)
                         included_text_ids.add(page_id)
-            return metadata_tags + "\n\n" + "\n\n".join(all_content), all_checked_identifiers
+            return (
+                metadata_tags + "\n\n" + "\n\n".join(all_content),
+                all_checked_identifiers,
+            )
 
         iterator = QTreeWidgetItemIterator(self.treeWidget)
         while iterator.value():
@@ -1788,7 +1829,10 @@ class HandlerDialog(QDialog):
                         included_text_ids.add(identifier)
             iterator += 1
 
-        return metadata_tags + "\n\n" + "\n\n".join([t[1] for t in section_titles]), all_checked_identifiers
+        return (
+            metadata_tags + "\n\n" + "\n\n".join([t[1] for t in section_titles]),
+            all_checked_identifiers,
+        )
 
     def on_save_chapters_changed(self, state):
         self.save_chapters_separately = bool(state)
@@ -1815,21 +1859,21 @@ class HandlerDialog(QDialog):
 
     def get_save_as_project(self):
         return self.save_as_project
-    
+
     def check_selected_items(self):
         self.set_selected_items_checked(True)
-        
+
     def uncheck_selected_items(self):
         self.set_selected_items_checked(False)
-        
+
     def set_selected_items_checked(self, state: bool):
         print(f"Checking selected items: {state}")
         self.treeWidget.blockSignals(True)
         for item in self.treeWidget.selectedItems():
-                if item.flags() & Qt.ItemIsUserCheckable:
-                    item.setCheckState(0, Qt.Checked if state else Qt.Unchecked)
+            if item.flags() & Qt.ItemIsUserCheckable:
+                item.setCheckState(0, Qt.Checked if state else Qt.Unchecked)
         self.treeWidget.blockSignals(False)
-        self._update_checked_set_from_tree()        
+        self._update_checked_set_from_tree()
 
     def on_tree_context_menu(self, pos):
         item = self.treeWidget.itemAt(pos)
@@ -1842,7 +1886,7 @@ class HandlerDialog(QDialog):
             action.triggered.connect(self.uncheck_selected_items)
             menu.exec_(self.treeWidget.mapToGlobal(pos))
             return
-        
+
         if (
             not item
             or item.childCount() == 0
