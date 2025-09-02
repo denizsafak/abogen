@@ -158,7 +158,7 @@ class InputBox(QLabel):
         self.setAlignment(Qt.AlignCenter)
         self.setAcceptDrops(True)
         self.setText(
-            "Drag and drop your file here or click to browse.\n(.txt, .epub, .pdf)"
+            "Drag and drop your file here or click to browse.\n(.txt, .epub, .pdf, .md)"
         )
         self.setStyleSheet(
             f"QLabel {{ {self.STYLE_DEFAULT} }} QLabel:hover {{ {self.STYLE_DEFAULT_HOVER} }}"
@@ -251,9 +251,11 @@ class InputBox(QLabel):
                 return str(n)
 
         if (
-            file_path.lower().endswith(".epub") or file_path.lower().endswith(".pdf")
+            file_path.lower().endswith(".epub") 
+            or file_path.lower().endswith(".pdf")
+            or file_path.lower().endswith((".md", ".markdown"))
         ) and hasattr(self.window(), "selected_chapters"):
-            # EPUB or PDF: sum character counts for selected chapters
+            # EPUB, PDF, or Markdown: sum character counts for selected chapters
             try:
 
                 book_path = file_path
@@ -345,7 +347,7 @@ class InputBox(QLabel):
             None  # Reset the displayed file path when clearing input
         )
         self.setText(
-            "Drag and drop your file here or click to browse.\n(.txt, .epub, .pdf)"
+            "Drag and drop your file here or click to browse.\n(.txt, .epub, .pdf, .md)"
         )
         self.setStyleSheet(
             f"QLabel {{ {self.STYLE_DEFAULT} }} QLabel:hover {{ {self.STYLE_DEFAULT_HOVER} }}"
@@ -384,6 +386,7 @@ class InputBox(QLabel):
                     ext.endswith(".txt")
                     or ext.endswith(".epub")
                     or ext.endswith(".pdf")
+                    or ext.endswith((".md", ".markdown"))
                 ):
                     event.acceptProposedAction()
                     # Set hover style based on current state
@@ -433,20 +436,26 @@ class InputBox(QLabel):
                 )
                 self.set_file_info(file_path)
                 event.acceptProposedAction()
-            elif file_path.lower().endswith(".epub") or file_path.lower().endswith(
-                ".pdf"
-            ):
+            elif (file_path.lower().endswith(".epub") 
+                  or file_path.lower().endswith(".pdf")
+                  or file_path.lower().endswith((".md", ".markdown"))):
+                # Determine file type
+                if file_path.lower().endswith(".epub"):
+                    file_type = "epub"
+                elif file_path.lower().endswith(".pdf"):
+                    file_type = "pdf"
+                else:
+                    file_type = "markdown"
+                
                 # Just store the file path but don't set the file info yet
-                win.selected_file_type = (
-                    "epub" if file_path.lower().endswith(".epub") else "pdf"
-                )
+                win.selected_file_type = file_type
                 win.selected_book_path = file_path
                 win.open_book_file(
                     file_path  # This will handle the dialog and setting file info
                 )
                 event.acceptProposedAction()
             else:
-                self.set_error("Please drop a .txt, .epub, or .pdf file.")
+                self.set_error("Please drop a .txt, .epub, .pdf, or .md file.")
                 event.ignore()
         else:
             event.ignore()
@@ -1155,16 +1164,21 @@ class abogen(QWidget):
             return
         try:
             file_path, _ = QFileDialog.getOpenFileName(
-                self, "Select File", "", "Supported Files (*.txt *.epub *.pdf)"
+                self, "Select File", "", "Supported Files (*.txt *.epub *.pdf *.md)"
             )
             if not file_path:
                 return
-            if file_path.lower().endswith(".epub") or file_path.lower().endswith(
-                ".pdf"
-            ):
-                self.selected_file_type = (
-                    "epub" if file_path.lower().endswith(".epub") else "pdf"
-                )
+            if (file_path.lower().endswith(".epub") 
+                or file_path.lower().endswith(".pdf")
+                or file_path.lower().endswith((".md", ".markdown"))):
+                # Determine file type
+                if file_path.lower().endswith(".epub"):
+                    self.selected_file_type = "epub"
+                elif file_path.lower().endswith(".pdf"):
+                    self.selected_file_type = "pdf"
+                else:
+                    self.selected_file_type = "markdown"
+                    
                 self.selected_book_path = file_path
                 # Don't set file info immediately, open_book_file will handle it after dialog is accepted
                 if not self.open_book_file(file_path):
@@ -1190,7 +1204,10 @@ class abogen(QWidget):
             self.last_opened_book_path = book_path
 
         dialog = HandlerDialog(
-            book_path, checked_chapters=self.selected_chapters, parent=self
+            book_path, 
+            file_type=getattr(self, 'selected_file_type', None),
+            checked_chapters=self.selected_chapters, 
+            parent=self
         )
         dialog.setWindowModality(Qt.NonModal)
         dialog.setModal(False)
@@ -1201,10 +1218,18 @@ class abogen(QWidget):
                 return False
             chapters_text, all_checked_hrefs = dialog.get_selected_text()
             if not all_checked_hrefs:
-                file_type = "pdf" if book_path.lower().endswith(".pdf") else "epub"
-                error_msg = (
-                    f"No {'pages' if file_type == 'pdf' else 'chapters'} selected."
-                )
+                # Determine file type for error message
+                if book_path.lower().endswith(".pdf"):
+                    file_type = "pdf"
+                    item_type = "pages"
+                elif book_path.lower().endswith((".md", ".markdown")):
+                    file_type = "markdown"
+                    item_type = "chapters"
+                else:
+                    file_type = "epub"
+                    item_type = "chapters"
+                    
+                error_msg = f"No {item_type} selected."
                 self._show_error_message_box(f"{file_type.upper()} Error", error_msg)
                 return False
             self.selected_chapters = all_checked_hrefs
