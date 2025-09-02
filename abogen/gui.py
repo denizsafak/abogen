@@ -158,7 +158,7 @@ class InputBox(QLabel):
         self.setAlignment(Qt.AlignCenter)
         self.setAcceptDrops(True)
         self.setText(
-            "Drag and drop your file here or click to browse.\n(.txt, .epub, .pdf)"
+            "Drag and drop your file here or click to browse.\n(.txt, .epub, .pdf, .md)"
         )
         self.setStyleSheet(
             f"QLabel {{ {self.STYLE_DEFAULT} }} QLabel:hover {{ {self.STYLE_DEFAULT_HOVER} }}"
@@ -251,9 +251,11 @@ class InputBox(QLabel):
                 return str(n)
 
         if (
-            file_path.lower().endswith(".epub") or file_path.lower().endswith(".pdf")
+                file_path.lower().endswith(".epub")
+                or file_path.lower().endswith(".pdf")
+                or file_path.lower().endswith((".md", ".markdown"))
         ) and hasattr(self.window(), "selected_chapters"):
-            # EPUB or PDF: sum character counts for selected chapters
+            # EPUB, PDF, or Markdown: sum character counts for selected chapters
             try:
 
                 book_path = file_path
@@ -311,8 +313,8 @@ class InputBox(QLabel):
 
         # For epub/pdf files, show edit if we have a selected_file (temp txt)
         if (
-            self.window().selected_file_type in ["epub", "pdf"]
-            and self.window().selected_file
+                self.window().selected_file_type in ["epub", "pdf"]
+                and self.window().selected_file
         ):
             should_show_edit = True
 
@@ -345,7 +347,7 @@ class InputBox(QLabel):
             None  # Reset the displayed file path when clearing input
         )
         self.setText(
-            "Drag and drop your file here or click to browse.\n(.txt, .epub, .pdf)"
+            "Drag and drop your file here or click to browse.\n(.txt, .epub, .pdf, .md)"
         )
         self.setStyleSheet(
             f"QLabel {{ {self.STYLE_DEFAULT} }} QLabel:hover {{ {self.STYLE_DEFAULT_HOVER} }}"
@@ -381,9 +383,10 @@ class InputBox(QLabel):
             if urls:
                 ext = urls[0].toLocalFile().lower()
                 if (
-                    ext.endswith(".txt")
-                    or ext.endswith(".epub")
-                    or ext.endswith(".pdf")
+                        ext.endswith(".txt")
+                        or ext.endswith(".epub")
+                        or ext.endswith(".pdf")
+                        or ext.endswith((".md", ".markdown"))
                 ):
                     event.acceptProposedAction()
                     # Set hover style based on current state
@@ -433,20 +436,26 @@ class InputBox(QLabel):
                 )
                 self.set_file_info(file_path)
                 event.acceptProposedAction()
-            elif file_path.lower().endswith(".epub") or file_path.lower().endswith(
-                ".pdf"
-            ):
+            elif (file_path.lower().endswith(".epub")
+                  or file_path.lower().endswith(".pdf")
+                  or file_path.lower().endswith((".md", ".markdown"))):
+                # Determine file type
+                if file_path.lower().endswith(".epub"):
+                    file_type = "epub"
+                elif file_path.lower().endswith(".pdf"):
+                    file_type = "pdf"
+                else:
+                    file_type = "markdown"
+
                 # Just store the file path but don't set the file info yet
-                win.selected_file_type = (
-                    "epub" if file_path.lower().endswith(".epub") else "pdf"
-                )
+                win.selected_file_type = file_type
                 win.selected_book_path = file_path
                 win.open_book_file(
                     file_path  # This will handle the dialog and setting file info
                 )
                 event.acceptProposedAction()
             else:
-                self.set_error("Please drop a .txt, .epub, or .pdf file.")
+                self.set_error("Please drop a .txt, .epub, .pdf, or .md file.")
                 event.ignore()
         else:
             event.ignore()
@@ -478,9 +487,9 @@ class InputBox(QLabel):
         file_to_check = win.selected_file
 
         if (
-            file_to_check
-            and os.path.exists(file_to_check)
-            and os.path.isfile(file_to_check)
+                file_to_check
+                and os.path.exists(file_to_check)
+                and os.path.isfile(file_to_check)
         ):
             folder_path = os.path.dirname(file_to_check)
             QDesktopServices.openUrl(QUrl.fromLocalFile(folder_path))
@@ -599,8 +608,8 @@ class TextboxDialog(QDialog):
             # This gives a better filename instead of the cache file path
             main_window = self.parent()
             if (
-                hasattr(main_window, "displayed_file_path")
-                and main_window.displayed_file_path
+                    hasattr(main_window, "displayed_file_path")
+                    and main_window.displayed_file_path
             ):
                 if main_window.selected_file_type in ["epub", "pdf"]:
                     # Use the base name of the displayed file but change extension to .txt
@@ -1155,16 +1164,21 @@ class abogen(QWidget):
             return
         try:
             file_path, _ = QFileDialog.getOpenFileName(
-                self, "Select File", "", "Supported Files (*.txt *.epub *.pdf)"
+                self, "Select File", "", "Supported Files (*.txt *.epub *.pdf *.md)"
             )
             if not file_path:
                 return
-            if file_path.lower().endswith(".epub") or file_path.lower().endswith(
-                ".pdf"
-            ):
-                self.selected_file_type = (
-                    "epub" if file_path.lower().endswith(".epub") else "pdf"
-                )
+            if (file_path.lower().endswith(".epub")
+                    or file_path.lower().endswith(".pdf")
+                    or file_path.lower().endswith((".md", ".markdown"))):
+                # Determine file type
+                if file_path.lower().endswith(".epub"):
+                    self.selected_file_type = "epub"
+                elif file_path.lower().endswith(".pdf"):
+                    self.selected_file_type = "pdf"
+                else:
+                    self.selected_file_type = "markdown"
+
                 self.selected_book_path = file_path
                 # Don't set file info immediately, open_book_file will handle it after dialog is accepted
                 if not self.open_book_file(file_path):
@@ -1183,14 +1197,17 @@ class abogen(QWidget):
     def open_book_file(self, book_path):
         # Clear selected chapters if this is a different book than the last one
         if (
-            not hasattr(self, "last_opened_book_path")
-            or self.last_opened_book_path != book_path
+                not hasattr(self, "last_opened_book_path")
+                or self.last_opened_book_path != book_path
         ):
             self.selected_chapters = set()
             self.last_opened_book_path = book_path
 
         dialog = HandlerDialog(
-            book_path, checked_chapters=self.selected_chapters, parent=self
+            book_path,
+            file_type=getattr(self, 'selected_file_type', None),
+            checked_chapters=self.selected_chapters,
+            parent=self
         )
         dialog.setWindowModality(Qt.NonModal)
         dialog.setModal(False)
@@ -1201,10 +1218,18 @@ class abogen(QWidget):
                 return False
             chapters_text, all_checked_hrefs = dialog.get_selected_text()
             if not all_checked_hrefs:
-                file_type = "pdf" if book_path.lower().endswith(".pdf") else "epub"
-                error_msg = (
-                    f"No {'pages' if file_type == 'pdf' else 'chapters'} selected."
-                )
+                # Determine file type for error message
+                if book_path.lower().endswith(".pdf"):
+                    file_type = "pdf"
+                    item_type = "pages"
+                elif book_path.lower().endswith((".md", ".markdown")):
+                    file_type = "markdown"
+                    item_type = "chapters"
+                else:
+                    file_type = "epub"
+                    item_type = "chapters"
+
+                error_msg = f"No {item_type} selected."
                 self._show_error_message_box(f"{file_type.upper()} Error", error_msg)
                 return False
             self.selected_chapters = all_checked_hrefs
@@ -1322,9 +1347,9 @@ class abogen(QWidget):
             is_cache_file = get_user_cache_path() in file_path
         # Otherwise use selected_file if it's a txt file
         elif (
-            self.selected_file_type == "txt"
-            and self.selected_file
-            and os.path.exists(self.selected_file)
+                self.selected_file_type == "txt"
+                and self.selected_file
+                and os.path.exists(self.selected_file)
         ):
             editing = True
             edit_file = self.selected_file
@@ -1535,9 +1560,9 @@ class abogen(QWidget):
     def _get_queue_progress_format(self, value=None):
         """Return the progress bar format string for queue mode."""
         if (
-            hasattr(self, "queued_items")
-            and self.queued_items
-            and hasattr(self, "current_queue_index")
+                hasattr(self, "queued_items")
+                and self.queued_items
+                and hasattr(self, "current_queue_index")
         ):
             N = self.current_queue_index + 1
             M = len(self.queued_items)
@@ -1554,9 +1579,9 @@ class abogen(QWidget):
         self.progress_bar.setValue(value)
         # Show queue progress if in queue mode
         if (
-            hasattr(self, "queued_items")
-            and self.queued_items
-            and hasattr(self, "current_queue_index")
+                hasattr(self, "queued_items")
+                and self.queued_items
+                and hasattr(self, "current_queue_index")
         ):
             N = self.current_queue_index + 1
             M = len(self.queued_items)
@@ -1646,16 +1671,16 @@ class abogen(QWidget):
         # Prevent adding duplicate items to the queue
         for queued_item in self.queued_items:
             if (
-                queued_item.file_name == item_queue.file_name
-                and queued_item.lang_code == item_queue.lang_code
-                and queued_item.speed == item_queue.speed
-                and queued_item.voice == item_queue.voice
-                and queued_item.save_option == item_queue.save_option
-                and queued_item.output_folder == item_queue.output_folder
-                and queued_item.subtitle_mode == item_queue.subtitle_mode
-                and queued_item.output_format == item_queue.output_format
-                and getattr(queued_item, "replace_single_newlines", False)
-                == item_queue.replace_single_newlines
+                    queued_item.file_name == item_queue.file_name
+                    and queued_item.lang_code == item_queue.lang_code
+                    and queued_item.speed == item_queue.speed
+                    and queued_item.voice == item_queue.voice
+                    and queued_item.save_option == item_queue.save_option
+                    and queued_item.output_folder == item_queue.output_folder
+                    and queued_item.subtitle_mode == item_queue.subtitle_mode
+                    and queued_item.output_format == item_queue.output_format
+                    and getattr(queued_item, "replace_single_newlines", False)
+                    == item_queue.replace_single_newlines
             ):
                 QMessageBox.warning(
                     self, "Duplicate Item", "This item is already in the queue."
@@ -1764,10 +1789,10 @@ class abogen(QWidget):
         self.progress_bar.setValue(0)
         # Show queue progress if in queue mode
         if (
-            from_queue
-            and hasattr(self, "queued_items")
-            and self.queued_items
-            and hasattr(self, "current_queue_index")
+                from_queue
+                and hasattr(self, "queued_items")
+                and self.queued_items
+                and hasattr(self, "current_queue_index")
         ):
             N = self.current_queue_index + 1
             M = len(self.queued_items)
@@ -1851,7 +1876,7 @@ class abogen(QWidget):
             )
             # Pass chapter count for EPUB or PDF files
             if self.selected_file_type in ["epub", "pdf"] and hasattr(
-                self, "selected_chapters"
+                    self, "selected_chapters"
             ):
                 self.conversion_thread.chapter_count = len(self.selected_chapters)
                 # Pass save_chapters_separately flag if available
@@ -1994,8 +2019,8 @@ class abogen(QWidget):
 
         # Only show finish_widget if queue is done
         if (
-            self.current_queue_index + 1 >= len(self.queued_items)
-            or not self.queued_items
+                self.current_queue_index + 1 >= len(self.queued_items)
+                or not self.queued_items
         ):
             # Queue finished, show finish screen
             self.controls_widget.hide()
@@ -2360,14 +2385,14 @@ class abogen(QWidget):
         def cleanup():
             # Only remove if not from cache AND it's a temp file from VoicePreviewThread
             if (
-                not from_cache
-                and hasattr(self, "preview_thread")
-                and hasattr(self.preview_thread, "temp_wav")
-                and self.preview_thread.temp_wav == temp_wav
+                    not from_cache
+                    and hasattr(self, "preview_thread")
+                    and hasattr(self.preview_thread, "temp_wav")
+                    and self.preview_thread.temp_wav == temp_wav
             ):
                 try:
                     if os.path.exists(
-                        temp_wav
+                            temp_wav
                     ):  # Ensure it exists before trying to remove
                         os.remove(temp_wav)
                 except Exception:
@@ -2441,8 +2466,8 @@ class abogen(QWidget):
                 return
         try:
             if (
-                hasattr(self, "conversion_thread")
-                and self.conversion_thread.isRunning()
+                    hasattr(self, "conversion_thread")
+                    and self.conversion_thread.isRunning()
             ):
                 if not hasattr(self, "_conversion_lock"):
                     self._conversion_lock = threading.Lock()
@@ -2529,9 +2554,9 @@ class abogen(QWidget):
     def cleanup_conversion_thread(self):
         # Stop conversion thread
         if (
-            hasattr(self, "conversion_thread")
-            and self.conversion_thread is not None
-            and self.conversion_thread.isRunning()
+                hasattr(self, "conversion_thread")
+                and self.conversion_thread is not None
+                and self.conversion_thread.isRunning()
         ):
             self.conversion_thread.cancel()
             self.conversion_thread.wait()
@@ -2566,8 +2591,8 @@ class abogen(QWidget):
         if dialog.exec_() == QDialog.Accepted:
             options = dialog.get_options()
             if (
-                hasattr(self, "conversion_thread")
-                and self.conversion_thread.isRunning()
+                    hasattr(self, "conversion_thread")
+                    and self.conversion_thread.isRunning()
             ):
                 self.conversion_thread.set_chapter_options(options)
         else:
@@ -2587,8 +2612,8 @@ class abogen(QWidget):
                 import winreg
 
                 with winreg.OpenKey(
-                    winreg.HKEY_CURRENT_USER,
-                    r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+                        winreg.HKEY_CURRENT_USER,
+                        r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
                 ) as key:
                     value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
                     return value == 0
@@ -2684,7 +2709,7 @@ class abogen(QWidget):
 
         # Main logic
         dark_mode = theme == "dark" or (
-            theme == "system" and is_windows and is_windows_dark_mode()
+                theme == "system" and is_windows and is_windows_dark_mode()
         )
         if dark_mode:
             app.setStyle("Fusion")
@@ -2720,7 +2745,7 @@ class abogen(QWidget):
 
         def get_dark_mode():
             return theme == "dark" or (
-                theme == "system" and is_windows and is_windows_dark_mode()
+                    theme == "system" and is_windows and is_windows_dark_mode()
             )
 
         app._dark_titlebar_event_filter = DarkTitleBarEventFilter(
@@ -3255,8 +3280,8 @@ Categories=AudioVideo;Audio;Utility;
 
         # Reset flag to track if we should show "no updates" message
         show_result = (
-            hasattr(self, "_show_update_check_result")
-            and self._show_update_check_result
+                hasattr(self, "_show_update_check_result")
+                and self._show_update_check_result
         )
         self._show_update_check_result = False
 
@@ -3383,9 +3408,9 @@ Categories=AudioVideo;Audio;Utility;
 
             # If currently selected file is in the cache directory, clear the UI
             if (
-                self.selected_file
-                and os.path.dirname(self.selected_file) == cache_dir
-                and self.selected_file.endswith(".txt")
+                    self.selected_file
+                    and os.path.dirname(self.selected_file) == cache_dir
+                    and self.selected_file.endswith(".txt")
             ):
                 self.input_box.clear_input()
 
