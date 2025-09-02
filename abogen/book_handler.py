@@ -43,18 +43,22 @@ class HandlerDialog(QDialog):
         super().__init__(parent)
 
         # Determine file type if not explicitly provided
-        self.file_type = file_type or (
-            "pdf" if book_path.lower().endswith(".pdf") else "epub"
-        )
+        if file_type:
+            self.file_type = file_type
+        elif book_path.lower().endswith(".pdf"):
+            self.file_type = "pdf"
+        elif book_path.lower().endswith((".md", ".markdown")):
+            self.file_type = "markdown"
+        else:
+            self.file_type = "epub"
         self.book_path = book_path
 
         # Extract book name from file path
         book_name = os.path.splitext(os.path.basename(book_path))[0]
 
         # Set window title based on file type and book name
-        self.setWindowTitle(
-            f'Select {"Chapters" if self.file_type == "epub" else "Pages"} - {book_name}'
-        )
+        item_type = "Chapters" if self.file_type in ["epub", "markdown"] else "Pages"
+        self.setWindowTitle(f'Select {item_type} - {book_name}')
         self.resize(1200, 900)
         self._block_signals = False  # Flag to prevent recursive signals
         # Configure window: remove help button and allow resizing
@@ -69,7 +73,12 @@ class HandlerDialog(QDialog):
 
         # Load the book based on file type
         try:
-            self.book = epub.read_epub(book_path) if self.file_type == "epub" else None
+            if self.file_type == "epub":
+                self.book = epub.read_epub(book_path)
+            elif self.file_type == "markdown":
+                self.book = None  # Markdown doesn't use ebooklib
+            else:
+                self.book = None
         except KeyError as e:
             logging.error(
                 f"EPUB file is missing a referenced file: {e}. Skipping missing file."
@@ -100,6 +109,15 @@ class HandlerDialog(QDialog):
                 logging.error(f"Failed to patch ebooklib for missing files: {patch_e}")
                 raise e
         self.pdf_doc = fitz.open(book_path) if self.file_type == "pdf" else None
+        self.markdown_text = None
+        if self.file_type == "markdown":
+            try:
+                encoding = self._detect_encoding(book_path)
+                with open(book_path, "r", encoding=encoding, errors="replace") as f:
+                    self.markdown_text = f.read()
+            except Exception as e:
+                logging.error(f"Error reading markdown file: {e}")
+                self.markdown_text = ""
 
         # Extract book metadata
         self.book_metadata = self._extract_book_metadata()
@@ -166,6 +184,17 @@ class HandlerDialog(QDialog):
         # Update checkbox states
         self._update_checkbox_states()
 
+    def _detect_encoding(self, file_path):
+        """Detect encoding of a text file"""
+        with open(file_path, "rb") as f:
+            raw_data = f.read()
+        try:
+            import chardet
+            result = chardet.detect(raw_data)
+            return result.get("encoding", "utf-8")
+        except ImportError:
+            return "utf-8"
+
     def _preprocess_content(self):
         """Pre-process content from the document"""
         if self.file_type == "epub":
@@ -178,6 +207,8 @@ class HandlerDialog(QDialog):
                 )
                 # Fallback to a simpler spine-based processing if nav fails
                 self._process_epub_content_spine_fallback()
+        elif self.file_type == "markdown":
+            self._preprocess_markdown_content()
         else:
             self._preprocess_pdf_content()
 
@@ -202,6 +233,66 @@ class HandlerDialog(QDialog):
             page_id = f"page_{page_num+1}"
             self.content_texts[page_id] = text
             self.content_lengths[page_id] = calculate_text_length(text)
+
+    def _preprocess_markdown_content(self):
+        """Pre-process markdown content and extract chapters/sections"""
+        if not self.markdown_text:
+            return
+
+        # Split markdown by headers to create chapters
+        import re
+        
+        # Clean the text first
+        text = clean_text(self.markdown_text)
+        
+        # Find all markdown headers (# ## ### etc.)
+        header_pattern = r'^(#{1,6})\s+(.+)$'
+        headers = list(re.finditer(header_pattern, text, re.MULTILINE))
+        
+        self.content_texts = {}
+        self.content_lengths = {}
+        
+        if not headers:
+            # No headers found, treat entire content as single chapter
+            chapter_id = "markdown_content"
+            self.content_texts[chapter_id] = text
+            self.content_lengths[chapter_id] = calculate_text_length(text)
+            return
+        
+        # Process headers and extract content between them
+        for i, header_match in enumerate(headers):
+            header_level = len(header_match.group(1))  # Number of # symbols
+            header_text = header_match.group(2).strip()
+            header_start = header_match.start()
+            
+            # Find content between this header and the next one of same or higher level
+            content_start = header_match.end()
+            content_end = len(text)
+            
+            # Look for next header of same or higher level (fewer # symbols)
+            for j in range(i + 1, len(headers)):
+                next_header = headers[j]
+                next_level = len(next_header.group(1))
+                if next_level <= header_level:
+                    content_end = next_header.start()
+                    break
+            
+            # Extract content for this chapter
+            chapter_content = text[content_start:content_end].strip()
+            
+            # Create unique identifier for this chapter
+            chapter_id = f"markdown_chapter_{i+1}"
+            
+            # Store the chapter content
+            if chapter_content:
+                # Include the header in the content
+                full_content = f"{header_text}\n\n{chapter_content}"
+                self.content_texts[chapter_id] = full_content
+                self.content_lengths[chapter_id] = calculate_text_length(full_content)
+            else:
+                # Even if no content, store the header
+                self.content_texts[chapter_id] = header_text
+                self.content_lengths[chapter_id] = calculate_text_length(header_text)
 
     def _process_epub_content_spine_fallback(self):
         """Fallback EPUB processing based purely on spine order."""
@@ -847,6 +938,8 @@ class HandlerDialog(QDialog):
             else:
                 logging.warning("Building EPUB tree using fallback book.toc.")
                 self._build_epub_tree_fallback(self.book.toc, self.treeWidget)
+        elif self.file_type == "markdown":
+            self._build_markdown_tree()
         else:
             self._build_pdf_tree()
 
@@ -1095,6 +1188,63 @@ class HandlerDialog(QDialog):
             else:
                 page_item.setFlags(page_item.flags() & ~Qt.ItemIsUserCheckable)
 
+    def _build_markdown_tree(self):
+        """Build tree structure for markdown file based on headers"""
+        if not self.content_texts:
+            return
+            
+        # If only one content item (no headers), create simple structure
+        if len(self.content_texts) == 1:
+            chapter_id = list(self.content_texts.keys())[0]
+            title = "Content"
+            
+            item = QTreeWidgetItem(self.treeWidget, [title])
+            item.setData(0, Qt.UserRole, chapter_id)
+            
+            if self.content_lengths.get(chapter_id, 0) > 0:
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                is_checked = chapter_id in self.checked_chapters
+                item.setCheckState(0, Qt.Checked if is_checked else Qt.Unchecked)
+            else:
+                item.setFlags(item.flags() & ~Qt.ItemIsUserCheckable)
+            return
+        
+        # Build hierarchical tree based on markdown headers
+        # First, parse the original markdown to get header structure
+        import re
+        header_pattern = r'^(#{1,6})\s+(.+)$'
+        headers = list(re.finditer(header_pattern, self.markdown_text, re.MULTILINE))
+        
+        # Create tree items for each header
+        stack = []  # Stack to track parent items at different levels
+        
+        for i, header_match in enumerate(headers):
+            header_level = len(header_match.group(1))
+            header_text = header_match.group(2).strip()
+            chapter_id = f"markdown_chapter_{i+1}"
+            
+            # Pop stack until we find appropriate parent level
+            while stack and stack[-1][0] >= header_level:
+                stack.pop()
+            
+            # Determine parent item
+            parent_item = stack[-1][1] if stack else self.treeWidget
+            
+            # Create tree item
+            item = QTreeWidgetItem(parent_item, [header_text])
+            item.setData(0, Qt.UserRole, chapter_id)
+            
+            # Set checkable state based on content
+            if self.content_lengths.get(chapter_id, 0) > 0:
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                is_checked = chapter_id in self.checked_chapters
+                item.setCheckState(0, Qt.Checked if is_checked else Qt.Unchecked)
+            else:
+                item.setFlags(item.flags() & ~Qt.ItemIsUserCheckable)
+            
+            # Add to stack for potential children
+            stack.append((header_level, item))
+
     def _build_pdf_pages_tree(self):
         pages_item = QTreeWidgetItem(self.treeWidget, ["Pages"])
         pages_item.setFlags(pages_item.flags() & ~Qt.ItemIsUserCheckable)
@@ -1166,7 +1316,7 @@ class HandlerDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
-        item_type = "chapters" if self.file_type == "epub" else "pages"
+        item_type = "chapters" if self.file_type in ["epub", "markdown"] else "pages"
 
         self.auto_select_btn = QPushButton(f"Auto-select {item_type}", self)
         self.auto_select_btn.clicked.connect(self.auto_select_chapters)
@@ -1214,7 +1364,7 @@ class HandlerDialog(QDialog):
 
         checkbox_text = (
             "Save each chapter separately"
-            if self.file_type == "epub"
+            if self.file_type in ["epub", "markdown"]
             else "Save each page separately"
         )
         self.save_chapters_checkbox = QCheckBox(checkbox_text, self)
@@ -1275,7 +1425,7 @@ class HandlerDialog(QDialog):
 
         checked_count = 0
 
-        if self.file_type == "epub":
+        if self.file_type in ["epub", "markdown"]:
             iterator = QTreeWidgetItemIterator(self.treeWidget)
             while iterator.value():
                 item = iterator.value()
@@ -1367,6 +1517,8 @@ class HandlerDialog(QDialog):
 
         if self.file_type == "epub":
             self._run_epub_auto_check()
+        elif self.file_type == "markdown":
+            self._run_markdown_auto_check()
         else:
             self._run_pdf_auto_check()
 
@@ -1395,6 +1547,40 @@ class HandlerDialog(QDialog):
                             child_src = child.data(0, Qt.UserRole)
                             child_has_content = (
                                 child_src and self.content_lengths.get(child_src, 0) > 0
+                            )
+                            child_is_parent = child.childCount() > 0
+                            if child_has_content or child_is_parent:
+                                child.setCheckState(0, Qt.Checked)
+            else:
+                item.setCheckState(0, Qt.Unchecked)
+
+            iterator += 1
+
+    def _run_markdown_auto_check(self):
+        """Auto-select markdown chapters with significant content"""
+        iterator = QTreeWidgetItemIterator(self.treeWidget)
+        while iterator.value():
+            item = iterator.value()
+            if not (item.flags() & Qt.ItemIsUserCheckable):
+                iterator += 1
+                continue
+
+            identifier = item.data(0, Qt.UserRole)
+            
+            # Select chapters with content > 500 characters or parent items
+            has_significant_content = identifier and self.content_lengths.get(identifier, 0) > 500
+            is_parent = item.childCount() > 0
+
+            if has_significant_content or is_parent:
+                item.setCheckState(0, Qt.Checked)
+                # Also check children if this is a parent
+                if is_parent:
+                    for i in range(item.childCount()):
+                        child = item.child(i)
+                        if child.flags() & Qt.ItemIsUserCheckable:
+                            child_identifier = child.data(0, Qt.UserRole)
+                            child_has_content = (
+                                child_identifier and self.content_lengths.get(child_identifier, 0) > 0
                             )
                             child_is_parent = child.childCount() > 0
                             if child_has_content or child_is_parent:
@@ -1626,6 +1812,41 @@ class HandlerDialog(QDialog):
                     if "cover" in item.get_name().lower():
                         metadata["cover_image"] = item.get_content()
                         break
+        elif self.file_type == "markdown":
+            # Extract metadata from markdown frontmatter or first heading
+            if self.markdown_text:
+                # Try to extract YAML frontmatter
+                frontmatter_match = re.match(r'^---\s*\n(.*?)\n---\s*\n', self.markdown_text, re.DOTALL)
+                if frontmatter_match:
+                    try:
+                        frontmatter = frontmatter_match.group(1)
+                        # Simple YAML-like parsing for common fields
+                        title_match = re.search(r'^title:\s*(.+)$', frontmatter, re.MULTILINE | re.IGNORECASE)
+                        if title_match:
+                            metadata["title"] = title_match.group(1).strip().strip('"\'')
+                        
+                        author_match = re.search(r'^author:\s*(.+)$', frontmatter, re.MULTILINE | re.IGNORECASE)
+                        if author_match:
+                            metadata["authors"] = [author_match.group(1).strip().strip('"\'')]
+                        
+                        desc_match = re.search(r'^description:\s*(.+)$', frontmatter, re.MULTILINE | re.IGNORECASE)
+                        if desc_match:
+                            metadata["description"] = desc_match.group(1).strip().strip('"\'')
+                            
+                        date_match = re.search(r'^date:\s*(.+)$', frontmatter, re.MULTILINE | re.IGNORECASE)
+                        if date_match:
+                            date_str = date_match.group(1).strip().strip('"\'')
+                            year_match = re.search(r'\b(19|20)\d{2}\b', date_str)
+                            if year_match:
+                                metadata["publication_year"] = year_match.group(0)
+                    except Exception as e:
+                        logging.warning(f"Error parsing markdown frontmatter: {e}")
+                
+                # Fallback: use first H1 header as title if no frontmatter title
+                if not metadata["title"]:
+                    first_h1_match = re.search(r'^#\s+(.+)$', self.markdown_text, re.MULTILINE)
+                    if first_h1_match:
+                        metadata["title"] = first_h1_match.group(1).strip()
         else:
             pdf_info = self.pdf_doc.metadata
             if pdf_info:
@@ -1670,6 +1891,8 @@ class HandlerDialog(QDialog):
     def get_selected_text(self):
         if self.file_type == "epub":
             return self._get_epub_selected_text()
+        elif self.file_type == "markdown":
+            return self._get_markdown_selected_text()
         else:
             return self._get_pdf_selected_text()
 
@@ -1708,6 +1931,42 @@ class HandlerDialog(QDialog):
         ]
 
         return "\n".join(metadata_tags)
+
+    def _get_markdown_selected_text(self):
+        """Get selected text from markdown chapters"""
+        all_checked_identifiers = set()
+        chapter_texts = []
+
+        # Add metadata tags at the beginning
+        metadata_tags = self._format_metadata_tags()
+
+        item_order_counter = 0
+        ordered_checked_items = []
+
+        iterator = QTreeWidgetItemIterator(self.treeWidget)
+        while iterator.value():
+            item = iterator.value()
+            item_order_counter += 1
+            if item.checkState(0) == Qt.Checked:
+                identifier = item.data(0, Qt.UserRole)
+                if identifier and identifier != "info:bookinfo":
+                    all_checked_identifiers.add(identifier)
+                    ordered_checked_items.append((item_order_counter, item, identifier))
+            iterator += 1
+
+        ordered_checked_items.sort(key=lambda x: x[0])
+
+        for order, item, identifier in ordered_checked_items:
+            text = self.content_texts.get(identifier)
+            if text and text.strip():
+                title = item.text(0)
+                # Remove leading dashes from title
+                title = re.sub(r"^\s*[-–—]\s*", "", title).strip()
+                marker = f"<<CHAPTER_MARKER:{title}>>"
+                chapter_texts.append(marker + "\n" + text)
+
+        full_text = metadata_tags + "\n\n" + "\n\n".join(chapter_texts)
+        return full_text, all_checked_identifiers
 
     def _get_epub_selected_text(self):
         all_checked_identifiers = set()
