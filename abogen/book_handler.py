@@ -1355,6 +1355,15 @@ class HandlerDialog(QDialog):
         select_layout.addWidget(self.deselect_all_btn)
         buttons_layout.addLayout(select_layout)
 
+        enable_disable_layout = QHBoxLayout()
+        self.check_selected_btn = QPushButton("Check selected", self)
+        self.check_selected_btn.clicked.connect(self.check_selected_items)
+        self.uncheck_selected_btn = QPushButton("Uncheck selected", self)
+        self.uncheck_selected_btn.clicked.connect(self.uncheck_selected_items)
+        enable_disable_layout.addWidget(self.check_selected_btn)
+        enable_disable_layout.addWidget(self.uncheck_selected_btn)
+        buttons_layout.addLayout(enable_disable_layout)
+
         parent_layout = QHBoxLayout()
         self.select_parents_btn = QPushButton("Select parents", self)
         self.select_parents_btn.clicked.connect(self.select_parent_chapters)
