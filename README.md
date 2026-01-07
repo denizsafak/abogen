@@ -27,7 +27,7 @@ Abogen supports Python 3.10–3.12.
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
-pip install abogen
+pip install -e .[dev]      # We need to use this until pushing this branch to main
 ```
 
 ### Launch the desktop app (PyQt6)
