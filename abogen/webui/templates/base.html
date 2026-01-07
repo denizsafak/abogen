@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}abogen{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+  <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
+</head>
+<body>
+  <header class="top-bar">
+    <div class="brand">
+      <span class="brand__mark">🔊</span>
+      <span class="brand__name">abogen</span>
+  <span class="brand__tagline">Verba audiuntur</span>
+    </div>
+    <nav class="top-actions">
+      {% set endpoint = request.endpoint or '' %}
+    <a href="{{ url_for('main.index') }}" class="btn{% if endpoint == 'main.index' %} is-active{% endif %}">Dashboard</a>
+    <a href="{{ url_for('voices.voice_profiles') }}" class="btn{% if endpoint == 'voices.voice_profiles' %} is-active{% endif %}">Speaker Studio</a>
+    <a href="{{ url_for('entities.entities_page') }}" class="btn{% if endpoint == 'entities.entities_page' %} is-active{% endif %}">TTS Overrides</a>
+    <a href="{{ url_for('books.find_books_page') }}" class="btn{% if endpoint == 'books.find_books_page' %} is-active{% endif %}">Find Books</a>
+  <a href="{{ url_for('jobs.queue_page') }}" class="btn{% if endpoint in ['jobs.queue_page', 'jobs.job_detail'] %} is-active{% endif %}">Queue</a>
+    <a href="{{ url_for('settings.settings_page') }}" class="btn{% if endpoint == 'settings.settings_page' %} is-active{% endif %}">Settings</a>
+    </nav>
+  </header>
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">
+    <span>Need help?</span>
+    <a href="https://github.com/denizsafak/abogen" target="_blank" rel="noopener">Read the docs</a>
+  </footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

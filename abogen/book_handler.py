@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import re
 import base64
 from bs4 import BeautifulSoup, NavigableString
@@ -13,126 +14,17 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QSplitter,
     QWidget,
-    QCheckBox,
-    QTreeWidgetItemIterator,
-    QLabel,
-    QMenu,
-)
-from PyQt6.QtCore import (
-    Qt,
-    QThread,
-    pyqtSignal,
-    QSize,
-)
-from abogen.utils import (
-    detect_encoding,
-    get_resource_path,
-)
-from abogen.book_parser import get_book_parser
+    """Backwards-compatible re-export of the PyQt book handler.
 
-from abogen.subtitle_utils import (
-    clean_text,
-    calculate_text_length,
-)
+    The actual implementation lives in abogen.pyqt.book_handler.
+    """
 
-import os
-import logging
-import urllib.parse
-import textwrap
+    from __future__ import annotations
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+    from abogen.pyqt.book_handler import *  # noqa: F401, F403
+    from abogen.pyqt.book_handler import HandlerDialog
 
-_HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
-_LEADING_DASH_PATTERN = re.compile(r"^\s*[-–—]\s*")
-_LEADING_SIMPLE_DASH_PATTERN = re.compile(r"^\s*-\s*")
-
-
-class HandlerDialog(QDialog):
-    # Class variables to remember checkbox states between dialog instances
-    _save_chapters_separately = False
-    _merge_chapters_at_end = True
-    _save_as_project = False  # New class variable for save_as_project option
-
-    # Cache for processed book content to avoid reprocessing
-    # Key: (book_path, modification_time, file_type)
-    # Value: dict with content_texts, content_lengths, doc_content (for epub), markdown_toc (for markdown)
-    _content_cache = {}
-
-    class _LoaderThread(QThread):
-        """Minimal QThread that runs a callable and emits an error string on exception."""
-
-        error = pyqtSignal(str)
-
-        def __init__(self, target_callable):
-            super().__init__()
-            self._target = target_callable
-
-        def run(self):
-            try:
-                self._target()
-            except Exception as e:
-                self.error.emit(str(e))
-
-    @classmethod
-    def clear_content_cache(cls, book_path=None):
-        """Clear the content cache. If book_path is provided, only clear that book's cache."""
-        if book_path is None:
-            cls._content_cache.clear()
-            logging.info("Cleared all content cache")
-        else:
-            keys_to_remove = [
-                key for key in cls._content_cache.keys() if key[0] == book_path
-            ]
-            for key in keys_to_remove:
-                del cls._content_cache[key]
-            if keys_to_remove:
-                logging.info(f"Cleared content cache for {os.path.basename(book_path)}")
-
-    def __init__(self, book_path, file_type=None, checked_chapters=None, parent=None):
-        super().__init__(parent)
-
-        # Normalize path
-        book_path = os.path.normpath(os.path.abspath(book_path))
-        self.book_path = book_path
-
-        # Initialize Parser
-        try:
-            # Factory handles file type detection if file_type is None
-            self.parser = get_book_parser(book_path, file_type=file_type)
-            # Parser loads automatically in init now
-        except Exception as e:
-            logging.error(f"Failed to initialize parser for {book_path}: {e}")
-            raise
-
-        # Extract book name from file path
-        book_name = os.path.splitext(os.path.basename(book_path))[0]
-
-        # Set window title based on file type and book name
-        item_type = "Chapters" if self.parser.file_type in ["epub", "markdown"] else "Pages"
-        self.setWindowTitle(f"Select {item_type} - {book_name}")
-        self.resize(1200, 900)
-        self._block_signals = False  # Flag to prevent recursive signals
-        # Configure window: remove help button and allow resizing
-        self.setWindowFlags(
-            Qt.WindowType.Window
-            | Qt.WindowType.WindowCloseButtonHint
-            | Qt.WindowType.WindowMaximizeButtonHint
-        )
-        self.setWindowModality(Qt.WindowModality.NonModal)
-        # Initialize save chapters flags from class variables
-        self.save_chapters_separately = HandlerDialog._save_chapters_separately
-        self.merge_chapters_at_end = HandlerDialog._merge_chapters_at_end
-        self.save_as_project = HandlerDialog._save_as_project
-
-        # Initialize metadata dict; will be populated in _preprocess_content by the background loader
-        self.book_metadata = {}
-
-        # Initialize UI elements that are used in other methods
-        self.save_chapters_checkbox = None
-        self.merge_chapters_checkbox = None
+    __all__ = ["HandlerDialog"]
 
         # Build treeview
         self.treeWidget = QTreeWidget(self)
@@ -1652,3 +1544,6 @@ class HandlerDialog(QDialog):
         menu.exec(self.treeWidget.mapToGlobal(pos))
 
 
+=======
+__all__ = ["HandlerDialog"]
+>>>>>>> main

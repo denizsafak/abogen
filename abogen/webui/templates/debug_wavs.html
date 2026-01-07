@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}abogen · Debug WAVs{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1 class="card__title">Debug WAVs</h1>
+  <p class="tag">Run ID: <code>{{ run_id }}</code></p>
+
+  <p class="hint">Each clip reads: ID, one second pause, then the reference text.</p>
+
+  {% if artifacts %}
+  <div class="field field--wide">
+    <label>Samples</label>
+    <ul>
+      {% for item in artifacts %}
+      <li>
+        <div class="field field--stack" style="margin: 0;">
+          <div>
+            <strong>{{ item.label }}</strong>
+            {% if item.text %}
+              — <span class="muted">{{ item.text }}</span>
+            {% endif %}
+          </div>
+          <audio controls preload="none" src="{{ item.url }}"></audio>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="field field--inline">
+    <a href="{{ url_for('settings.settings_page', _anchor='debug') }}" class="button button--ghost">Back to Settings</a>
+  </div>
+</section>
+{% endblock %}

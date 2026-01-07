@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% macro speaker_row(row_key, speaker, options) %}
+  {% set gender = (speaker.gender or 'unknown') %}
+  <div class="speaker-config-row" data-role="speaker-row" data-row-id="{{ row_key }}">
+    <input type="hidden" name="speaker_rows" value="{{ row_key }}">
+    <input type="hidden" name="speaker-{{ row_key }}-id" value="{{ speaker.id or row_key }}">
+    <div class="speaker-config-row__grid">
+      <label class="field" for="speaker-{{ row_key }}-label">
+        <span>Label</span>
+        <input type="text" id="speaker-{{ row_key }}-label" name="speaker-{{ row_key }}-label" value="{{ speaker.label or '' }}" placeholder="Character name" required>
+      </label>
+      <label class="field" for="speaker-{{ row_key }}-gender">
+        <span>Gender</span>
+        <select id="speaker-{{ row_key }}-gender" name="speaker-{{ row_key }}-gender">
+          <option value="unknown" {% if gender == 'unknown' %}selected{% endif %}>Unknown</option>
+          <option value="female" {% if gender == 'female' %}selected{% endif %}>Female</option>
+          <option value="male" {% if gender == 'male' %}selected{% endif %}>Male</option>
+        </select>
+      </label>
+      <label class="field" for="speaker-{{ row_key }}-voice">
+        <span>Preferred voice</span>
+        <select id="speaker-{{ row_key }}-voice" name="speaker-{{ row_key }}-voice">
+          <option value="" {% if not speaker.voice %}selected{% endif %}>Random compatible voice</option>
+          {% for voice in options.voice_catalog %}
+          <option value="{{ voice.id }}" {% if speaker.voice == voice.id %}selected{% endif %}>{{ voice.display_name }} · {{ voice.language_label }} · {{ voice.gender }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="speaker-config-row__footer">
+      <button type="button" class="button button--ghost button--small" data-action="remove-speaker">
+        Remove
+      </button>
+    </div>
+  </div>
+{% endmacro %}
+
+{% block title %}Speaker presets{% endblock %}
+
+{% block content %}
+<section class="card speaker-configs">
+  <div class="step-indicator" aria-label="Audiobook workflow">
+    <span class="step-indicator__item is-complete">
+      <span class="step-indicator__index">1</span>
+      <span class="step-indicator__label">Upload</span>
+    </span>
+    <span class="step-indicator__item is-active">
+      <span class="step-indicator__index">2</span>
+      <span class="step-indicator__label">Speakers</span>
+    </span>
+    <span class="step-indicator__item">
+      <span class="step-indicator__index">3</span>
+      <span class="step-indicator__label">Queue</span>
+    </span>
+  </div>
+  <div class="card__title">Speaker presets</div>
+  <p class="card__subtitle">Store recurring casts and keep voices consistent between books.</p>
+
+  {% if message %}
+  <div class="alert alert--success">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+  <div class="alert alert--error">{{ error }}</div>
+  {% endif %}
+
+  <div class="speaker-configs__layout">
+    <aside class="speaker-configs__sidebar">
+      <div class="speaker-configs__sidebar-header">
+        <h2>Saved presets</h2>
+        <a class="button button--ghost button--small" href="{{ url_for('voices.speaker_configs_page') }}">New preset</a>
+      </div>
+      <ul class="speaker-configs__list">
+        {% for config in configs %}
+        <li class="speaker-configs__entry {% if editing_name == config.name %}is-active{% endif %}">
+          <a href="{{ url_for('voices.speaker_configs_page', config=config.name) }}">{{ config.name }}</a>
+          <span class="speaker-configs__meta">{{ config.speakers|length }} speaker{% if config.speakers|length != 1 %}s{% endif %}</span>
+          <form method="post" action="{{ url_for('voices.delete_speaker_config_named', name=config.name) }}" class="speaker-configs__delete" onsubmit="return confirm('Delete preset {{ config.name }}?');">
+            <button type="submit" class="link-button">Delete</button>
+          </form>
+        </li>
+        {% else %}
+        <li class="speaker-configs__empty">No presets yet. Create your first configuration on the right.</li>
+        {% endfor %}
+      </ul>
+    </aside>
+    <div class="speaker-configs__editor">
+      <form method="post" class="speaker-config-form" id="speaker-config-form">
+        <input type="hidden" name="config_version" value="{{ editing.version or 1 }}">
+        <div class="speaker-config-form__grid">
+          <label class="field" for="config_name">
+            <span>Preset name</span>
+            <input type="text" id="config_name" name="config_name" value="{{ editing_name }}" placeholder="Mystery duo" required>
+          </label>
+          <label class="field" for="config_language">
+            <span>Primary language</span>
+            <select id="config_language" name="config_language">
+              {% for code, label in options.languages.items() %}
+              <option value="{{ code }}" {% if editing.language == code %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="field" for="config_default_voice">
+            <span>Fallback voice</span>
+            <select id="config_default_voice" name="config_default_voice">
+              <option value="" {% if not editing.default_voice %}selected{% endif %}>Use narrator voice</option>
+              {% for voice in options.voice_catalog %}
+              <option value="{{ voice.id }}" {% if editing.default_voice == voice.id %}selected{% endif %}>{{ voice.display_name }} · {{ voice.language_label }} · {{ voice.gender }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="field field--full" for="config_notes">
+            <span>Notes</span>
+            <textarea id="config_notes" name="config_notes" rows="3" placeholder="Pronunciation reminders, references, or character context...">{{ editing.notes or '' }}</textarea>
+          </label>
+        </div>
+
+        <section class="speaker-config-rows">
+          <div class="speaker-config-rows__header">
+            <h3>Speakers</h3>
+            <button type="button" class="button button--ghost button--small" data-action="add-speaker">Add speaker</button>
+          </div>
+          <p class="hint">Add each recurring character, set their gender, and choose a preferred voice.</p>
+          <div class="speaker-config-rows__list" data-role="speaker-rows">
+            {% set speakers_map = editing.speakers or {} %}
+            {% if speakers_map %}
+              {% for speaker_id, speaker in speakers_map|dictsort(attribute='1.label') %}
+                {{ speaker_row(speaker_id, speaker, options) }}
+              {% endfor %}
+            {% else %}
+              <div class="speaker-config-rows__empty" data-role="empty-state">No speakers yet. Add your first character.</div>
+            {% endif %}
+          </div>
+        </section>
+
+        <div class="speaker-configs__actions">
+          <button type="submit" class="button">Save configuration</button>
+                  <div class="speaker-configs__actions-right">
+          <a class="button button--ghost" href="{{ url_for('main.index') }}">Back to dashboard</a>
+        </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <template id="speaker-row-template">
+  {{ speaker_row('__ROW__', {'id': '', 'label': '', 'gender': 'unknown', 'voice': ''}, options) | safe }}
+  </template>
+</section>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script type="module" src="{{ url_for('static', filename='speaker-configs.js') }}"></script>
+{% endblock %}

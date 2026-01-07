@@ -19,6 +19,7 @@ __pycache__/
 env/
 venv/
 .env/
+.env
 .venv/
 test/
 
@@ -30,6 +31,10 @@ python_embedded/
 
 # abogen
 *config.json
+config/
+storage/
 build/
 dist/
 .old/
+test_assets/
+dev_notes/

@@ -1,0 +1,134 @@
+<div class="card__title">Queue</div>
+
+<section class="queue-section">
+  <header class="queue-section__header">
+    <h3>Active jobs</h3>
+  </header>
+  {% if active_jobs %}
+    <ul class="job-cards">
+      {% for job in active_jobs %}
+        {% set progress_value = ((job.progress or 0) * 100)|round(1) %}
+        <li class="job-card" data-status="{{ job.status.value }}">
+          <div class="job-card__header">
+            <div>
+              <a class="job-card__title" href="{{ url_for('jobs.job_detail', job_id=job.id) }}">{{ job.original_filename }}</a>
+              <div class="job-card__meta">
+                {% if job.queue_position %}Position #{{ job.queue_position }} · {% endif %}
+                {% if job.voice_profile %}Profile: {{ job.voice_profile }}{% else %}Voice: {{ job.voice }}{% endif %} · {{ job.language }}
+              </div>
+              {% if job.pause_requested and job.status == JobStatus.RUNNING %}
+              <div class="job-card__meta job-card__meta--warning">Pause requested — waiting for a safe point…</div>
+              {% endif %}
+            </div>
+            <span class="badge badge--{{ job.status.value }}">{{ job.status.value|title }}</span>
+          </div>
+          <div class="job-card__progress">
+            <div class="progress-bar" style="--progress: {{ progress_value }}%">
+              <div class="progress-bar__fill"></div>
+            </div>
+            <div class="job-card__progress-meta">
+              <small>{{ progress_value }}% · {{ job.processed_characters }} / {{ job.total_characters or '—' }}</small>
+              {% if job.estimated_time_remaining %}
+                <small class="job-card__eta">~{{ job.estimated_time_remaining | durationformat }} remaining</small>
+              {% endif %}
+            </div>
+          </div>
+          <div class="job-card__footer">
+            <a class="button button--ghost" href="{{ url_for('jobs.job_detail', job_id=job.id) }}">Details</a>
+            {% if job.status == JobStatus.RUNNING %}
+              <button type="button" class="button button--ghost" hx-post="{{ url_for('jobs.pause_job', job_id=job.id) }}" hx-target="#jobs-panel" hx-swap="innerHTML">Pause</button>
+            {% elif job.status == JobStatus.PAUSED %}
+              <button type="button" class="button button--ghost" hx-post="{{ url_for('jobs.resume_job', job_id=job.id) }}" hx-target="#jobs-panel" hx-swap="innerHTML">Resume</button>
+            {% elif job.status == JobStatus.PENDING %}
+              <button type="button" class="button button--ghost" hx-post="{{ url_for('jobs.pause_job', job_id=job.id) }}" hx-target="#jobs-panel" hx-swap="innerHTML">Pause</button>
+            {% endif %}
+            {% if job.status in [JobStatus.PENDING, JobStatus.RUNNING, JobStatus.PAUSED] %}
+              <button type="button" class="button button--ghost" hx-post="{{ url_for('jobs.cancel_job', job_id=job.id) }}" hx-target="#jobs-panel" hx-swap="innerHTML" hx-confirm="Cancel this conversion?">Cancel</button>
+            {% endif %}
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="queue-empty">No active jobs. Drop a file or paste text to get started.</p>
+  {% endif %}
+</section>
+
+<section class="queue-section">
+  <header class="queue-section__header">
+    <h3>Recent results</h3>
+    {% if total_finished > 0 %}
+      <button type="button" class="button button--ghost" hx-post="{{ url_for('jobs.clear_finished_jobs') }}" hx-target="#jobs-panel" hx-swap="innerHTML" hx-confirm="Remove completed jobs from this list?">Clear finished</button>
+    {% endif %}
+  </header>
+  {% if finished_jobs %}
+    <ul class="job-cards job-cards--compact">
+      {% for job in finished_jobs %}
+        <li class="job-card">
+          <div class="job-card__header">
+            <div>
+              <a class="job-card__title" href="{{ url_for('jobs.job_detail', job_id=job.id) }}">{{ job.original_filename }}</a>
+              <div class="job-card__meta">Finished {{ job.finished_at|datetimeformat }}</div>
+            </div>
+            <span class="badge badge--{{ job.status.value }}">{{ job.status.value|title }}</span>
+          </div>
+          <div class="job-card__footer">
+            <a class="button button--ghost" href="{{ url_for('jobs.job_detail', job_id=job.id) }}">Inspect</a>
+            {% if job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED] %}
+              <button type="button" class="button button--ghost" hx-post="{{ url_for('jobs.retry_job', job_id=job.id) }}" hx-target="#jobs-panel" hx-swap="innerHTML">Retry</button>
+            {% endif %}
+            {% set flags = download_flags.get(job.id, {}) %}
+            {% if job.status == JobStatus.COMPLETED %}
+              {% if flags.get('m4b') %}
+                <a class="button button--ghost" href="{{ url_for('jobs.download_file', job_id=job.id, file_type='audio') }}">Download M4B</a>
+              {% elif flags.get('audio') %}
+                <a class="button button--ghost" href="{{ url_for('jobs.download_file', job_id=job.id, file_type='audio') }}">Download Audio</a>
+              {% endif %}
+              {% if flags.get('epub3') %}
+                <a class="button button--ghost" href="{{ url_for('jobs.job_epub', job_id=job.id) }}">Download EPUB 3</a>
+              {% endif %}
+              {% if audiobookshelf_manual_available %}
+                <button type="button"
+                        class="button button--ghost"
+                        hx-post="{{ url_for('jobs.send_job_to_audiobookshelf', job_id=job.id) }}"
+                        hx-target="#jobs-panel"
+                        hx-swap="innerHTML">
+                  Send to Audiobookshelf
+                </button>
+              {% endif %}
+            {% endif %}
+            {% set reader_source = None %}
+            {% if job.status == JobStatus.COMPLETED and job.result %}
+              {% if job.result.epub_path %}
+                {% set reader_source = job.result.epub_path %}
+              {% elif job.result.artifacts and job.result.artifacts.get('epub3') %}
+                {% set reader_source = job.result.artifacts.get('epub3') %}
+              {% endif %}
+            {% endif %}
+            {% if reader_source %}
+              {% set metadata = job.metadata_tags if job.metadata_tags is mapping else {} %}
+              {% set job_display_title = metadata.get('title') or metadata.get('book_title') or metadata.get('name') or job.original_filename %}
+              <button type="button"
+                      class="icon-button"
+                      data-role="open-reader"
+                      data-reader-url="{{ url_for('jobs.job_reader', job_id=job.id) }}"
+                      data-book-title="{{ job_display_title }}"
+                      title="Open reader"
+                      aria-label="Open EPUB reader for {{ job_display_title }}">
+                📖
+              </button>
+            {% endif %}
+            <button type="button" class="button button--ghost" hx-post="{{ url_for('jobs.delete_job', job_id=job.id) }}" hx-target="#jobs-panel" hx-swap="innerHTML" hx-confirm="Remove this job from the list?">Remove</button>
+          </div>
+        </li>
+      {% endfor %}
+      {% if total_finished > finished_jobs|length %}
+        <li class="job-card job-card--info">
+          <div class="job-card__meta">{{ total_finished - finished_jobs|length }} more finished job{{ 's' if (total_finished - finished_jobs|length) != 1 else '' }} hidden. Clear finished to remove them.</div>
+        </li>
+      {% endif %}
+    </ul>
+  {% else %}
+    <p class="queue-empty">Completed jobs will appear here.</p>
+  {% endif %}
+</section>

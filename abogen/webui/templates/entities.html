@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}abogen · TTS Overrides{% endblock %}
+
+{% block content %}
+<section
+  class="card card--panel"
+  data-override-root
+  data-preview-url="{{ url_for('api.api_entity_pronunciation_preview') }}"
+  data-language="{{ language }}"
+>
+  <h1 class="card__title">TTS Overrides &amp; Pronunciation</h1>
+  <p class="card__subtitle">Review and refine stored pronunciations so recurring names sound right in every project.</p>
+  <form class="entity-filter" method="get">
+    <div class="entity-filter__row">
+      <label class="field">
+        <span>Language</span>
+        <select name="lang">
+          {% for code, label in languages %}
+          <option value="{{ code }}" {% if code == language %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span>Voice filter</span>
+        <select name="voice">
+          {% for option in voice_filter_options %}
+          <option value="{{ option.value }}" {% if option.value == voice_filter %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span>Pronunciations</span>
+        <select name="pronunciation">
+          {% for option in pronunciation_filter_options %}
+          <option value="{{ option.value }}" {% if option.value == pronunciation_filter %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span>Limit</span>
+        <input type="number" name="limit" min="10" max="500" value="{{ limit }}">
+      </label>
+    </div>
+    <div class="entity-filter__row entity-filter__row--actions">
+      <label class="field field--grow">
+        <span>Search overrides</span>
+        <input type="search" name="q" value="{{ query }}" placeholder="Search by token, pronunciation, or notes">
+      </label>
+      <div class="entity-filter__actions">
+        <button type="submit" class="button">Apply filters</button>
+        <a href="{{ url_for('entities.entities_page') }}" class="button button--ghost">Reset</a>
+      </div>
+    </div>
+  </form>
+  <p class="hint">Looking for saved speaker rosters instead? <a href="{{ url_for('voices.speaker_configs_page') }}">Manage speaker presets</a>.</p>
+</section>
+
+<section class="card card--panel">
+  <header class="entity-summary">
+    <h2 class="card__title">Overrides for {{ language_label }}</h2>
+    <p class="card__subtitle">
+      Showing {{ stats.filtered }} of {{ stats.total }} stored overrides ·
+      {{ stats.with_pronunciation }} with pronunciations · {{ stats.with_voice }} with assigned voices
+    </p>
+  </header>
+  {% if status_message or status_error %}
+  <div class="notice {% if status_error %}notice--error{% else %}notice--success{% endif %}">
+    {{ status_error or status_message }}
+  </div>
+  {% endif %}
+  <div class="entity-table-tools">
+    <label class="field entity-table-tools__filter">
+      <span>Filter visible overrides</span>
+      <input
+        type="search"
+        data-role="override-filter"
+        placeholder="Type a name or voice to filter"
+        autocomplete="off"
+      >
+    </label>
+    <button type="button" class="button button--ghost" data-role="override-filter-clear">Clear</button>
+  </div>
+  <form
+    id="override-create-form"
+    class="form-section entity-create"
+    method="post"
+    action="{{ url_for('entities.upsert_global_override') }}"
+  >
+    <h3 class="form-section__title">Add manual override</h3>
+    <p class="entity-create__description">Create pronunciations or assign default voices without preparing a job.</p>
+    <input type="hidden" name="lang" value="{{ language }}">
+    <input type="hidden" name="action" value="save">
+    <input type="hidden" name="state_voice" value="{{ voice_filter }}">
+    <input type="hidden" name="state_pronunciation" value="{{ pronunciation_filter }}">
+    <input type="hidden" name="state_limit" value="{{ limit }}">
+    <input type="hidden" name="state_query" value="{{ query }}">
+    <div class="field-grid field-grid--compact">
+      <label class="field">
+        <span>Token</span>
+        <input type="text" name="token" placeholder="e.g. Arrakis" required>
+      </label>
+      <label class="field">
+        <span>Pronunciation</span>
+        <input type="text" name="pronunciation" placeholder="Optional phonetic spelling">
+      </label>
+      <label class="field">
+        <span>Voice override</span>
+        <select name="voice">
+          <option value="" selected>No override</option>
+          {% if options.voice_profile_options %}
+          <optgroup label="Saved mixes">
+            {% for profile in options.voice_profile_options %}
+            {% set profile_value = 'profile:' ~ profile.name %}
+            <option value="{{ profile_value }}">{{ profile.name }}{% if profile.language %} · {{ profile.language|upper }}{% endif %}</option>
+            {% endfor %}
+          </optgroup>
+          {% endif %}
+          <optgroup label="Stock voices">
+            {% for voice in options.voice_catalog %}
+            <option value="{{ voice.id }}">{{ voice.display_name }} - {{ voice.language_label }} - {{ voice.gender }}</option>
+            {% endfor %}
+          </optgroup>
+        </select>
+      </label>
+    </div>
+    <div class="entity-create__actions">
+      <button
+        type="button"
+        class="button button--ghost"
+        data-role="preview-button"
+        data-form-id="override-create-form"
+      >Preview</button>
+      <button type="submit" class="button">Add override</button>
+    </div>
+    <div class="entity-preview" data-role="preview-container">
+      <div class="entity-preview__status" data-role="preview-message"></div>
+      <audio
+        class="entity-preview__audio"
+        data-role="preview-audio"
+        controls
+        hidden
+      ></audio>
+    </div>
+  </form>
+  {% if overrides %}
+  <div class="table-wrapper">
+    <table class="jobs-table overrides-table" data-role="override-table">
+      <thead>
+        <tr>
+          <th scope="col">Token</th>
+          <th scope="col">Pronunciation</th>
+          <th scope="col">Voice</th>
+          <th scope="col">Usage</th>
+          <th scope="col">Last updated</th>
+          <th scope="col">Preview</th>
+          <th scope="col" class="overrides-table__actions-heading">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for override in overrides %}
+        {% set form_id = "override-form-" ~ loop.index %}
+        <tr
+          data-role="override-row"
+          data-token="{{ override.token | lower }}"
+        >
+          <td data-label="Token"><span class="overrides-table__token">{{ override.token }}</span></td>
+          <td data-label="Pronunciation">
+            <input
+              class="overrides-table__input"
+              type="text"
+              name="pronunciation"
+              form="{{ form_id }}"
+              value="{{ override.pronunciation or '' }}"
+              placeholder="Add pronunciation"
+            >
+          </td>
+          <td data-label="Voice">
+            {% set current_voice = override.voice or '' %}
+            {% set known_voice = namespace(value=False) %}
+            {% if current_voice %}
+              {% if current_voice in options.voice_catalog_map %}
+                {% set known_voice.value = True %}
+              {% else %}
+                {% for profile in options.voice_profile_options %}
+                  {% if current_voice == 'profile:' ~ profile.name %}
+                    {% set known_voice.value = True %}
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
+            {% endif %}
+            <select
+              class="overrides-table__select"
+              name="voice"
+              form="{{ form_id }}"
+            >
+              <option value="" {% if not current_voice %}selected{% endif %}>No override</option>
+              {% if options.voice_profile_options %}
+              <optgroup label="Saved mixes">
+                {% for profile in options.voice_profile_options %}
+                {% set profile_value = 'profile:' ~ profile.name %}
+                <option value="{{ profile_value }}" {% if current_voice == profile_value %}selected{% endif %}>
+                  {{ profile.name }}{% if profile.language %} · {{ profile.language|upper }}{% endif %}
+                </option>
+                {% endfor %}
+              </optgroup>
+              {% endif %}
+              <optgroup label="Stock voices">
+                {% for voice in options.voice_catalog %}
+                <option value="{{ voice.id }}" {% if current_voice == voice.id %}selected{% endif %}>
+                  {{ voice.display_name }} - {{ voice.language_label }} - {{ voice.gender }}
+                </option>
+                {% endfor %}
+              </optgroup>
+              {% if current_voice and not known_voice.value %}
+              <option value="{{ current_voice }}" selected>{{ current_voice }}</option>
+              {% endif %}
+            </select>
+          </td>
+          <td data-label="Usage">{{ override.usage_count }}</td>
+          <td data-label="Last updated">{{ override.updated_at_label }}</td>
+          <td data-label="Preview">
+            <div class="entity-preview" data-role="preview-container">
+              <div class="entity-preview__controls">
+                <button
+                  type="button"
+                  class="button button--ghost button--small"
+                  data-role="preview-button"
+                  data-form-id="{{ form_id }}"
+                >Preview</button>
+                <span class="entity-preview__status" data-role="preview-message"></span>
+              </div>
+              <audio
+                class="entity-preview__audio"
+                data-role="preview-audio"
+                controls
+                hidden
+              ></audio>
+            </div>
+          </td>
+          <td data-label="Actions">
+            <form
+              id="{{ form_id }}"
+              class="overrides-table__form"
+              method="post"
+              action="{{ url_for('entities.upsert_global_override') }}"
+            >
+              <input type="hidden" name="lang" value="{{ language }}">
+              <input type="hidden" name="token" value="{{ override.token }}">
+              <input type="hidden" name="state_voice" value="{{ voice_filter }}">
+              <input type="hidden" name="state_pronunciation" value="{{ pronunciation_filter }}">
+              <input type="hidden" name="state_limit" value="{{ limit }}">
+              <input type="hidden" name="state_query" value="{{ query }}">
+              <div class="overrides-table__actions">
+                <button type="submit" class="button button--small" name="action" value="save">Save</button>
+                <button type="submit" class="button button--ghost button--small button--danger" name="action" value="delete">Delete</button>
+              </div>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint" data-role="filter-empty" hidden>No overrides match your current filter.</p>
+  {% else %}
+  <p class="hint">No overrides matched your filters. Try adjusting the search or create overrides from the Entities step while preparing a job.</p>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='entities.js') }}" defer></script>
+{% endblock %}
