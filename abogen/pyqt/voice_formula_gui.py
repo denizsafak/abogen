@@ -557,9 +557,6 @@ class VoiceFormulaDialog(QDialog):
         # Connect buttons
         clear_all_button.clicked.connect(self.clear_all_voices)
         ok_button.clicked.connect(self.accept)
-        # Connect buttons
-        clear_all_button.clicked.connect(self.clear_all_voices)
-        ok_button.clicked.connect(self.accept)
         cancel_button.clicked.connect(self.reject)
 
         button_layout.addStretch()
@@ -590,6 +587,9 @@ class VoiceFormulaDialog(QDialog):
         for vm in self.voice_mixers:
             vm.spin_box.valueChanged.connect(self.mark_profile_modified)
             vm.checkbox.stateChanged.connect(lambda *_: self.mark_profile_modified())
+        
+        # Update profile colors on initialization to show status
+        self.update_profile_list_colors()
 
     def keyPressEvent(self, event):
         # Bind Delete key to delete_profile when a profile is selected
@@ -877,6 +877,8 @@ class VoiceFormulaDialog(QDialog):
         else:
             state = profiles.get(name, {})
         voices = state.get("voices") if isinstance(state, dict) else state
+        if voices is None:
+            voices = []
         lang = state.get("language") if isinstance(state, dict) else None
         # apply language selection
         if lang:
