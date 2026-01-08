@@ -245,11 +245,12 @@ class VoiceMixer(QWidget):
         # Apply slider styling after widget is added to window (see showEvent)
         self._slider_style_applied = False
 
-        # Connect controls
-        self.slider.valueChanged.connect(lambda val: self.spin_box.setValue(val / 100))
-        self.spin_box.valueChanged.connect(
-            lambda val: self.slider.setValue(int(val * 100))
-        )
+        # Connect controls with internal sync only (no external updates)
+        self.slider.valueChanged.connect(self._on_slider_changed)
+        self.spin_box.valueChanged.connect(self._on_spinbox_changed)
+        
+        # Flag to prevent recursive updates
+        self._syncing = False
 
         # Layout for slider and labels
         slider_layout = QVBoxLayout()
@@ -319,6 +320,22 @@ class VoiceMixer(QWidget):
         is_enabled = self.checkbox.isChecked()
         self.spin_box.setEnabled(is_enabled)
         self.slider.setEnabled(is_enabled)
+
+    def _on_slider_changed(self, val):
+        """Handle slider value change - sync to spinbox without triggering external updates."""
+        if self._syncing:
+            return
+        self._syncing = True
+        self.spin_box.setValue(val / 100)
+        self._syncing = False
+    
+    def _on_spinbox_changed(self, val):
+        """Handle spinbox value change - sync to slider without triggering external updates."""
+        if self._syncing:
+            return
+        self._syncing = True
+        self.slider.setValue(int(val * 100))
+        self._syncing = False
 
     def get_voice_weight(self):
         if self.checkbox.isChecked():
@@ -403,6 +420,20 @@ class VoiceFormulaDialog(QDialog):
             self._profile_dirty = {name: False for name in profiles}
         # Track unsaved states per profile
         self._profile_states = {}
+        # Cache for loaded profiles to avoid repeated disk reads
+        self._cached_profiles = profiles.copy()
+        
+        # Debounce timer for slider updates (prevents lag during rapid slider movement)
+        self._update_timer = QTimer(self)
+        self._update_timer.setSingleShot(True)
+        self._update_timer.setInterval(30)  # 30ms debounce
+        self._update_timer.timeout.connect(self._do_debounced_update)
+        self._pending_weighted_update = False
+        self._pending_profile_modified = False
+        
+        # Cache for voice weight labels to enable in-place updates
+        self._voice_labels = {}  # voice_name -> HoverLabel widget
+        
         # Add subtitle_combo reference if parent has it
         self.subtitle_combo = None
         if parent is not None and hasattr(parent, "subtitle_combo"):
@@ -583,10 +614,8 @@ class VoiceFormulaDialog(QDialog):
         self.btn_new_profile.clicked.connect(self.new_profile)
         self.btn_export_profiles.clicked.connect(self.export_all_profiles)
         self.btn_import_profiles.clicked.connect(self.import_profiles_dialog)
-        # Detect modifications in voice mixers
-        for vm in self.voice_mixers:
-            vm.spin_box.valueChanged.connect(self.mark_profile_modified)
-            vm.checkbox.stateChanged.connect(lambda *_: self.mark_profile_modified())
+        # Note: Signal connections for voice mixers are already set up in add_voice()
+        # with debouncing for slider updates to prevent lag
         
         # Update profile colors on initialization to show status
         self.update_profile_list_colors()
@@ -772,9 +801,11 @@ class VoiceFormulaDialog(QDialog):
         voice_mixer.checkbox.stateChanged.connect(
             lambda state, vm=voice_mixer: self.handle_voice_checkbox(vm, state)
         )
-        voice_mixer.spin_box.valueChanged.connect(self.update_weighted_sums)
+        # Use debounced updates for slider changes to prevent lag
+        voice_mixer.spin_box.valueChanged.connect(self._schedule_weighted_update)
+        voice_mixer.spin_box.valueChanged.connect(self._schedule_profile_modified)
+        # Checkbox changes are immediate since they're not high-frequency
         voice_mixer.checkbox.stateChanged.connect(self.update_weighted_sums)
-        voice_mixer.spin_box.valueChanged.connect(self.mark_profile_modified)
         voice_mixer.checkbox.stateChanged.connect(
             lambda *_: self.mark_profile_modified()
         )
@@ -783,6 +814,7 @@ class VoiceFormulaDialog(QDialog):
     def handle_voice_checkbox(self, voice_mixer, state):
         if state == Qt.CheckState.Checked.value:
             self.last_enabled_voice = voice_mixer.voice_name
+        # Checkbox changes are infrequent, so update immediately
         self.update_weighted_sums()
 
     def get_selected_voices(self):
@@ -792,13 +824,27 @@ class VoiceFormulaDialog(QDialog):
             if v and v[1] > 0
         ]
 
-    def update_weighted_sums(self):
-        # Clear previous labels
-        while self.weighted_sums_layout.count():
-            item = self.weighted_sums_layout.takeAt(0)
-            if item and item.widget():
-                item.widget().deleteLater()
+    def _schedule_weighted_update(self):
+        """Schedule a debounced weighted sums update."""
+        self._pending_weighted_update = True
+        self._update_timer.start()  # Restart the timer
+    
+    def _schedule_profile_modified(self):
+        """Schedule a debounced profile modified update."""
+        self._pending_profile_modified = True
+        self._update_timer.start()  # Restart the timer
+    
+    def _do_debounced_update(self):
+        """Execute pending debounced updates."""
+        if self._pending_weighted_update:
+            self._pending_weighted_update = False
+            self.update_weighted_sums()
+        if self._pending_profile_modified:
+            self._pending_profile_modified = False
+            self.mark_profile_modified()
 
+    def update_weighted_sums(self):
+        """Update the voice weights display. Optimized for in-place updates during slider movement."""
         # Get selected voices
         selected = [
             (m.voice_name, m.spin_box.value())
@@ -823,22 +869,41 @@ class VoiceFormulaDialog(QDialog):
                 last = [(n, w) for n, w in selected if n == self.last_enabled_voice]
                 selected = others + last
 
-            # Add voice labels
+            # Get current voice names in display
+            current_names = set(self._voice_labels.keys())
+            new_names = set(name for name, _ in selected)
+            
+            # Remove labels for voices no longer selected
+            for name in current_names - new_names:
+                label = self._voice_labels.pop(name)
+                self.weighted_sums_layout.removeWidget(label)
+                label.deleteLater()
+            
+            # Update or create labels
             for name, weight in selected:
                 percentage = weight / total * 100
-                # Make the voice name bold and include percentage
-                voice_label = HoverLabel(
-                    f'<b><span style="color:{COLORS.get("BLUE")}">{name}: {percentage:.1f}%</span></b>',
-                    name,
-                )
-                voice_label.setSizePolicy(
-                    QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred
-                )
-                voice_label.delete_button.clicked.connect(
-                    lambda _, vn=name: self.disable_voice_by_name(vn)
-                )
-                self.weighted_sums_layout.addWidget(voice_label)
+                label_text = f'<b><span style="color:{COLORS.get("BLUE")}">{name}: {percentage:.1f}%</span></b>'
+                
+                if name in self._voice_labels:
+                    # Update existing label in-place (fast path)
+                    self._voice_labels[name].setText(label_text)
+                else:
+                    # Create new label only for newly added voices
+                    voice_label = HoverLabel(label_text, name)
+                    voice_label.setSizePolicy(
+                        QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred
+                    )
+                    voice_label.delete_button.clicked.connect(
+                        lambda _, vn=name: self.disable_voice_by_name(vn)
+                    )
+                    self._voice_labels[name] = voice_label
+                    self.weighted_sums_layout.addWidget(voice_label)
         else:
+            # Clear all labels when no voices selected
+            for label in self._voice_labels.values():
+                self.weighted_sums_layout.removeWidget(label)
+                label.deleteLater()
+            self._voice_labels.clear()
             self.error_label.show()
             self.weighted_sums_container.hide()
 
@@ -871,6 +936,8 @@ class VoiceFormulaDialog(QDialog):
     def load_profile_state(self, profile_name):
         name = profile_name.lstrip("*")
         profiles = load_profiles()
+        # Update cache when loading profiles
+        self._cached_profiles = profiles.copy()
         # load voices and language from state or JSON
         if name in self._profile_states:
             state = self._profile_states[name]
@@ -905,6 +972,11 @@ class VoiceFormulaDialog(QDialog):
             vm.slider.blockSignals(False)
             # sync enabled state
             vm.toggle_inputs()
+        # Clear voice labels cache for clean update
+        for label in self._voice_labels.values():
+            self.weighted_sums_layout.removeWidget(label)
+            label.deleteLater()
+        self._voice_labels.clear()
         self.update_weighted_sums()
 
     def save_profile_by_name(self, name):
@@ -918,6 +990,8 @@ class VoiceFormulaDialog(QDialog):
                 entry = {"voices": state, "language": self.language_combo.currentData()}
             profiles[name] = entry
             save_profiles(profiles)
+            # Update cache to stay in sync
+            self._cached_profiles = profiles.copy()
             self._profile_dirty[name] = False
             del self._profile_states[name]
             self._virtual_new_profile = False
@@ -1454,7 +1528,8 @@ class VoiceFormulaDialog(QDialog):
     def update_profile_list_colors(self):
         from PyQt6.QtCore import Qt
 
-        profiles = load_profiles()
+        # Use cached profiles to avoid disk reads during slider updates
+        profiles = self._cached_profiles
         for i in range(self.profile_list.count()):
             item = self.profile_list.item(i)
             name = item.text().lstrip("*")
