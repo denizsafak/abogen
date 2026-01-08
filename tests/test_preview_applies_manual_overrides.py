@@ -13,7 +13,9 @@ def test_preview_applies_manual_override_before_normalization(monkeypatch):
         def normalize_for_pipeline(text):
             return text
 
-    monkeypatch.setitem(__import__("sys").modules, "abogen.kokoro_text_normalization", _Norm)
+    monkeypatch.setitem(
+        __import__("sys").modules, "abogen.kokoro_text_normalization", _Norm
+    )
 
     # And stub the kokoro pipeline path so generate_preview_audio won't proceed.
     # We'll instead validate by calling the override logic through generate_preview_audio
@@ -28,7 +30,11 @@ def test_preview_applies_manual_override_before_normalization(monkeypatch):
             captured["text"] = text
             return iter(())
 
-    monkeypatch.setitem(__import__("sys").modules, "abogen.tts_supertonic", type("M", (), {"SupertonicPipeline": DummyPipeline}))
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "abogen.tts_supertonic",
+        type("M", (), {"SupertonicPipeline": DummyPipeline}),
+    )
 
     try:
         preview.generate_preview_audio(

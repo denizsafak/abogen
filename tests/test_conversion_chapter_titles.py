@@ -74,7 +74,9 @@ def test_format_spoken_chapter_title_adds_prefix() -> None:
 
 
 def test_format_spoken_chapter_title_respects_existing_prefix() -> None:
-    assert _format_spoken_chapter_title("Chapter 2: Story", 2, True) == "Chapter 2: Story"
+    assert (
+        _format_spoken_chapter_title("Chapter 2: Story", 2, True) == "Chapter 2: Story"
+    )
 
 
 def test_format_spoken_chapter_title_handles_empty_title() -> None:
@@ -82,7 +84,10 @@ def test_format_spoken_chapter_title_handles_empty_title() -> None:
 
 
 def test_format_spoken_chapter_title_trims_delimiters() -> None:
-    assert _format_spoken_chapter_title("7 - Into the Wild", 7, True) == "Chapter 7. Into the Wild"
+    assert (
+        _format_spoken_chapter_title("7 - Into the Wild", 7, True)
+        == "Chapter 7. Into the Wild"
+    )
 
 
 def test_headings_equivalent_ignores_case_and_prefix() -> None:
@@ -90,7 +95,9 @@ def test_headings_equivalent_ignores_case_and_prefix() -> None:
 
 
 def test_strip_duplicate_heading_line_removes_first_match() -> None:
-    text, removed = _strip_duplicate_heading_line("Chapter 3: Intro\nBody text", "Chapter 3: Intro")
+    text, removed = _strip_duplicate_heading_line(
+        "Chapter 3: Intro\nBody text", "Chapter 3: Intro"
+    )
     assert removed is True
     assert text.strip() == "Body text"
 

@@ -152,7 +152,9 @@ def _word_boundary_pattern(token: str) -> re.Pattern[str]:
     if cached is not None:
         return cached
     escaped = re.escape(token)
-    pattern = re.compile(rf"(?i)(?<!\w){escaped}(?P<possessive>'s|\u2019s|\u2019)?(?!\w)")
+    pattern = re.compile(
+        rf"(?i)(?<!\w){escaped}(?P<possessive>'s|\u2019s|\u2019)?(?!\w)"
+    )
     _WORD_BOUNDARY_CACHE[key] = pattern
     return pattern
 
@@ -167,7 +169,9 @@ def _preserve_case(replacement: str, original: str) -> str:
     return replacement
 
 
-def _build_replacement_sentence(sentence: str, token: str, replacement_token: str) -> str:
+def _build_replacement_sentence(
+    sentence: str, token: str, replacement_token: str
+) -> str:
     pattern = _word_boundary_pattern(token)
 
     def _repl(match: re.Match[str]) -> str:
@@ -271,7 +275,9 @@ def extract_heteronym_overrides(
                 options: List[Dict[str, Any]] = []
                 for variant in spec.variants:
                     replacement_sentence = _build_replacement_sentence(
-                        sentence, token=spec.token, replacement_token=variant.replacement_token
+                        sentence,
+                        token=spec.token,
+                        replacement_token=variant.replacement_token,
                     )
                     options.append(
                         {

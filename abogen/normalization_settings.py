@@ -5,7 +5,10 @@ from dataclasses import replace
 from functools import lru_cache
 from typing import Any, Dict, Mapping, Optional
 
-from abogen.kokoro_text_normalization import ApostropheConfig, CONTRACTION_CATEGORY_DEFAULTS
+from abogen.kokoro_text_normalization import (
+    ApostropheConfig,
+    CONTRACTION_CATEGORY_DEFAULTS,
+)
 from abogen.llm_client import LLMConfiguration
 from abogen.utils import load_config
 
@@ -149,7 +152,9 @@ def _extract_settings(source: Mapping[str, Any]) -> Dict[str, Any]:
         elif isinstance(default, float):
             extracted[key] = _coerce_float(raw_value, default)
         else:
-            extracted[key] = str(raw_value or "") if isinstance(default, str) else raw_value
+            extracted[key] = (
+                str(raw_value or "") if isinstance(default, str) else raw_value
+            )
     _apply_llm_migrations(extracted)
     return extracted
 
@@ -177,20 +182,38 @@ def build_apostrophe_config(
     config.convert_numbers = bool(settings.get("normalization_numbers", True))
     config.convert_currency = bool(settings.get("normalization_currency", True))
     config.remove_footnotes = bool(settings.get("normalization_footnotes", True))
-    config.year_pronunciation_mode = str(settings.get("normalization_numbers_year_style", "american") or "").strip().lower()
+    config.year_pronunciation_mode = (
+        str(settings.get("normalization_numbers_year_style", "american") or "")
+        .strip()
+        .lower()
+    )
     config.add_phoneme_hints = bool(settings.get("normalization_phoneme_hints", True))
-    config.contraction_mode = "expand" if settings.get("normalization_apostrophes_contractions", True) else "keep"
+    config.contraction_mode = (
+        "expand"
+        if settings.get("normalization_apostrophes_contractions", True)
+        else "keep"
+    )
     config.plural_possessive_mode = (
-        "collapse" if settings.get("normalization_apostrophes_plural_possessives", True) else "keep"
+        "collapse"
+        if settings.get("normalization_apostrophes_plural_possessives", True)
+        else "keep"
     )
     config.sibilant_possessive_mode = (
-        "mark" if settings.get("normalization_apostrophes_sibilant_possessives", True) else "keep"
+        "mark"
+        if settings.get("normalization_apostrophes_sibilant_possessives", True)
+        else "keep"
     )
-    config.decades_mode = "expand" if settings.get("normalization_apostrophes_decades", True) else "keep"
+    config.decades_mode = (
+        "expand" if settings.get("normalization_apostrophes_decades", True) else "keep"
+    )
     config.leading_elision_mode = (
-        "expand" if settings.get("normalization_apostrophes_leading_elisions", True) else "keep"
+        "expand"
+        if settings.get("normalization_apostrophes_leading_elisions", True)
+        else "keep"
     )
-    config.ambiguous_past_modal_mode = "contextual" if config.contraction_mode == "expand" else "keep"
+    config.ambiguous_past_modal_mode = (
+        "contextual" if config.contraction_mode == "expand" else "keep"
+    )
     category_flags = dict(CONTRACTION_CATEGORY_DEFAULTS)
     for setting_key, category in _CONTRACTION_SETTING_MAP.items():
         default_value = bool(_SETTINGS_DEFAULTS.get(setting_key, True))
@@ -205,11 +228,15 @@ def build_llm_configuration(settings: Mapping[str, Any]) -> LLMConfiguration:
         base_url=str(settings.get("llm_base_url") or ""),
         api_key=str(settings.get("llm_api_key") or ""),
         model=str(settings.get("llm_model") or ""),
-        timeout=_coerce_float(settings.get("llm_timeout"), float(_SETTINGS_DEFAULTS["llm_timeout"])),
+        timeout=_coerce_float(
+            settings.get("llm_timeout"), float(_SETTINGS_DEFAULTS["llm_timeout"])
+        ),
     )
 
 
-def apply_overrides(base: Mapping[str, Any], overrides: Mapping[str, Any]) -> Dict[str, Any]:
+def apply_overrides(
+    base: Mapping[str, Any], overrides: Mapping[str, Any]
+) -> Dict[str, Any]:
     merged: Dict[str, Any] = dict(base)
     for key, value in overrides.items():
         if key not in _SETTINGS_DEFAULTS:

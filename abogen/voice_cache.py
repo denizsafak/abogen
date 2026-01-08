@@ -12,8 +12,10 @@ except Exception:  # pragma: no cover - import fallback
     LocalEntryNotFoundError = None  # type: ignore[assignment]
 
 if LocalEntryNotFoundError is None:  # pragma: no cover - fallback for tests
+
     class LocalEntryNotFoundError(Exception):
         pass
+
 
 from abogen.constants import VOICES_INTERNAL
 

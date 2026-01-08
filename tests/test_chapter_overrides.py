@@ -43,7 +43,11 @@ def _install_dependency_stubs() -> None:
         setattr(numpy_stub, "float32", "float32")
         setattr(numpy_stub, "array", lambda data, dtype=None: data)
         setattr(numpy_stub, "asarray", lambda data, dtype=None: data)
-        setattr(numpy_stub, "concatenate", lambda seq, axis=0: sum((list(item) for item in seq), []))
+        setattr(
+            numpy_stub,
+            "concatenate",
+            lambda seq, axis=0: sum((list(item) for item in seq), []),
+        )
         sys.modules["numpy"] = numpy_stub
 
     if "soundfile" not in sys.modules:
@@ -117,7 +121,9 @@ def test_apply_chapter_overrides_with_custom_text() -> None:
         {"index": 1, "enabled": False},
     ]
 
-    selected, metadata, diagnostics = _apply_chapter_overrides(_sample_chapters(), overrides)
+    selected, metadata, diagnostics = _apply_chapter_overrides(
+        _sample_chapters(), overrides
+    )
 
     assert len(selected) == 1
     assert selected[0].title == "Intro"
@@ -132,7 +138,9 @@ def test_apply_chapter_overrides_uses_original_content_when_text_missing() -> No
         {"index": 1, "enabled": True},
     ]
 
-    selected, metadata, diagnostics = _apply_chapter_overrides(_sample_chapters(), overrides)
+    selected, metadata, diagnostics = _apply_chapter_overrides(
+        _sample_chapters(), overrides
+    )
 
     assert len(selected) == 1
     assert selected[0].title == "Chapter 2"
@@ -152,7 +160,9 @@ def test_apply_chapter_overrides_collects_metadata_updates() -> None:
         }
     ]
 
-    selected, metadata, diagnostics = _apply_chapter_overrides(_sample_chapters(), overrides)
+    selected, metadata, diagnostics = _apply_chapter_overrides(
+        _sample_chapters(), overrides
+    )
 
     assert len(selected) == 1
     assert metadata == {"artist": "Test Author", "year": "2024"}
@@ -164,7 +174,9 @@ def test_apply_chapter_overrides_reports_diagnostics_for_invalid_payload() -> No
         {"enabled": True, "title": "Missing"},
     ]
 
-    selected, metadata, diagnostics = _apply_chapter_overrides(_sample_chapters(), overrides)
+    selected, metadata, diagnostics = _apply_chapter_overrides(
+        _sample_chapters(), overrides
+    )
 
     assert selected == []
     assert metadata == {}

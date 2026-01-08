@@ -27,7 +27,9 @@ def test_chunk_voice_spec_prefers_chunk_overrides() -> None:
 
 
 def test_chunk_voice_spec_falls_back_to_speaker_voice() -> None:
-    job = SimpleNamespace(voice="base_voice", speakers={"narrator": {"voice": "speaker_voice"}})
+    job = SimpleNamespace(
+        voice="base_voice", speakers={"narrator": {"voice": "speaker_voice"}}
+    )
     chunk = {"speaker_id": "narrator"}
 
     assert _chunk_voice_spec(job, chunk, "fallback") == "speaker_voice"

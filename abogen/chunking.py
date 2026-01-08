@@ -80,7 +80,9 @@ def _normalize_whitespace(value: str) -> str:
 
 def _normalize_chunk_text(value: str) -> str:
     settings = get_runtime_settings()
-    config = build_apostrophe_config(settings=settings, base=_PIPELINE_APOSTROPHE_CONFIG)
+    config = build_apostrophe_config(
+        settings=settings, base=_PIPELINE_APOSTROPHE_CONFIG
+    )
     normalized = normalize_for_pipeline(value, config=config, settings=settings)
     return _normalize_whitespace(normalized)
 
@@ -158,12 +160,16 @@ def chunk_text(
 
     # Sentence level – flatten paragraphs into individual sentences
     sentence_index = 0
-    for para_index, paragraph in enumerate(list(_iter_paragraphs(text)) or [text.strip()]):
+    for para_index, paragraph in enumerate(
+        list(_iter_paragraphs(text)) or [text.strip()]
+    ):
         normalized_para = _normalize_whitespace(paragraph)
         if not normalized_para:
             continue
         sentence_pairs = _split_sentences(paragraph) or [(normalized_para, paragraph)]
-        for sent_local_index, (normalized_sentence, raw_sentence) in enumerate(sentence_pairs):
+        for sent_local_index, (normalized_sentence, raw_sentence) in enumerate(
+            sentence_pairs
+        ):
             normalized_sentence = _normalize_whitespace(normalized_sentence)
             if not normalized_sentence:
                 continue
@@ -203,7 +209,9 @@ def _build_display_pattern(text: str) -> Pattern[str]:
     return pattern
 
 
-def _search_source_span(source: str, normalized: str, start: int) -> Optional[Tuple[int, int]]:
+def _search_source_span(
+    source: str, normalized: str, start: int
+) -> Optional[Tuple[int, int]]:
     if not normalized:
         return None
     pattern = _build_display_pattern(normalized)

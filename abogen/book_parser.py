@@ -18,7 +18,9 @@ from abogen.subtitle_utils import clean_text, calculate_text_length
 _BRACKETED_NUMBERS_PATTERN = re.compile(r"\[\s*\d+\s*\]")
 _STANDALONE_PAGE_NUMBERS_PATTERN = re.compile(r"^\s*\d+\s*$", re.MULTILINE)
 _PAGE_NUMBERS_AT_END_PATTERN = re.compile(r"\s+\d+\s*$", re.MULTILINE)
-_PAGE_NUMBERS_WITH_DASH_PATTERN = re.compile(r"\s+[-–—]\s*\d+\s*[-–—]?\s*$", re.MULTILINE)
+_PAGE_NUMBERS_WITH_DASH_PATTERN = re.compile(
+    r"\s+[-–—]\s*\d+\s*[-–—]?\s*$", re.MULTILINE
+)
 
 
 class BaseBookParser(ABC):
@@ -114,7 +116,7 @@ class PdfParser(BaseBookParser):
 
         for page_num in range(len(self.pdf_doc)):
             text = clean_text(self.pdf_doc[page_num].get_text())
-            
+
             # Clean up common PDF artifacts:
             # - Remove bracketed numbers often used for citations [1]
             text = _BRACKETED_NUMBERS_PATTERN.sub("", text)
@@ -128,7 +130,7 @@ class PdfParser(BaseBookParser):
             page_id = f"page_{page_num + 1}"
             self.content_texts[page_id] = text
             self.content_lengths[page_id] = calculate_text_length(text)
-        
+
         return self.content_texts, self.content_lengths
 
     def _extract_book_metadata(self):
@@ -166,7 +168,7 @@ class MarkdownParser(BaseBookParser):
     def process_content(self, replace_single_newlines=True):
         if self.markdown_text is None:
             self.load()
-            
+
         self._process_markdown_content()
         return self.content_texts, self.content_lengths
 
@@ -255,11 +257,11 @@ class MarkdownParser(BaseBookParser):
             else:
                 self.content_texts[chapter_id] = header_name
                 self.content_lengths[chapter_id] = calculate_text_length(header_name)
-                
+
     def get_chapters(self):
         chapters = super().get_chapters()
         if not chapters and "markdown_content" in self.content_texts:
-             chapters.append(("markdown_content", "Content"))
+            chapters.append(("markdown_content", "Content"))
         return chapters
 
 
@@ -282,17 +284,19 @@ class EpubParser(BaseBookParser):
             # Patch ebooklib to skip missing files
             import types
             from ebooklib import epub as _epub_module
-            
+
             reader_class = _epub_module.EpubReader
             orig_read_file = reader_class.read_file
-            
+
             def safe_read_file(self, name):
                 try:
                     return orig_read_file(self, name)
                 except KeyError:
-                    logging.warning(f"Missing file in EPUB: {name}. Returning empty bytes.")
+                    logging.warning(
+                        f"Missing file in EPUB: {name}. Returning empty bytes."
+                    )
                     return b""
-            
+
             reader_class.read_file = safe_read_file
             try:
                 self.book = epub.read_epub(self.book_path)
@@ -302,7 +306,7 @@ class EpubParser(BaseBookParser):
     def process_content(self, replace_single_newlines=True):
         if not self.book:
             self.load()
-            
+
         self.book_metadata = self._extract_book_metadata()
         try:
             nav_item, nav_type = self._identify_nav_item()
@@ -310,7 +314,7 @@ class EpubParser(BaseBookParser):
         except Exception as e:
             logging.warning(f"EPUB nav processing failed: {e}. Falling back to spine.")
             self._process_epub_content_spine_fallback()
-            
+
         return self.content_texts, self.content_lengths
 
     def _extract_book_metadata(self):
@@ -412,7 +416,7 @@ class EpubParser(BaseBookParser):
     ):
         """
         Recursive parsing of NCX navigation nodes.
-        
+
         Logic tested by: tests/test_epub_ncx_parsing.py
         """
         nav_label = nav_point.find("navLabel")
@@ -428,7 +432,9 @@ class EpubParser(BaseBookParser):
 
         if src:
             base_href, fragment = src.split("#", 1) if "#" in src else (src, None)
-            doc_key, doc_idx = self._find_doc_key(base_href, doc_order, doc_order_decoded)
+            doc_key, doc_idx = self._find_doc_key(
+                base_href, doc_order, doc_order_decoded
+            )
             if not doc_key:
                 current_entry_node["has_content"] = False
             else:
@@ -458,19 +464,20 @@ class EpubParser(BaseBookParser):
                 )
 
         if title and (
-            current_entry_node.get("has_content", False) or current_entry_node["children"]
+            current_entry_node.get("has_content", False)
+            or current_entry_node["children"]
         ):
             tree_structure_list.append(current_entry_node)
 
     def _extract_nav_li_title(self, li_element, link_element=None, span_element=None):
         """Helper to extract title from a nav <li> element, handling various structures."""
         title = "Untitled Section"
-        
+
         if link_element:
             title = link_element.get_text(strip=True) or title
         elif span_element:
             title = span_element.get_text(strip=True) or title
-            
+
         # Fallback to direct text if title is empty or default
         # If we used link/span but got empty string, we try fallback.
         # If we didn't use link/span, we try fallback.
@@ -480,11 +487,11 @@ class EpubParser(BaseBookParser):
             ).strip()
             if li_text:
                 title = li_text
-                
-        # Second fallback: if we have a span but title is still empty, try span text again 
+
+        # Second fallback: if we have a span but title is still empty, try span text again
         # (covered by logic above mostly, but mirroring original logic's intense fallback)
         if (not title.strip() or title == "Untitled Section") and span_text:
-             title = span_text.get_text(strip=True) or title
+            title = span_text.get_text(strip=True) or title
 
         return title
 
@@ -499,7 +506,7 @@ class EpubParser(BaseBookParser):
     ):
         """
         Recursive parsing of HTML5 Navigation (li) nodes.
-        
+
         Logic tested by: tests/test_epub_html_nav_parsing.py
         """
         link = li_element.find("a", recursive=False)
@@ -509,7 +516,7 @@ class EpubParser(BaseBookParser):
 
         if link and "href" in link.attrs:
             src = link["href"]
-            
+
         title = self._extract_nav_li_title(li_element, link, span_text)
 
         current_entry_node["title"] = title
@@ -521,7 +528,9 @@ class EpubParser(BaseBookParser):
         fragment = None
         if src:
             base_href, fragment = src.split("#", 1) if "#" in src else (src, None)
-            doc_key, doc_idx = self._find_doc_key(base_href, doc_order, doc_order_decoded)
+            doc_key, doc_idx = self._find_doc_key(
+                base_href, doc_order, doc_order_decoded
+            )
             if doc_key is not None:
                 position = find_position_func(doc_key, fragment)
                 entry_data = {
@@ -557,18 +566,21 @@ class EpubParser(BaseBookParser):
 
         # 1. Check ITEM_NAVIGATION
         nav_items = list(self.book.get_items_of_type(ebooklib.ITEM_NAVIGATION))
-        
+
         # 1.1 Support for EPUB 3 EpubNav which might be ITEM_DOCUMENT (9) but with properties=['nav']
         if not nav_items:
-             # Look in ITEM_DOCUMENT for items with 'nav' property
-             for item in self.book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
-                 if hasattr(item, 'get_type') and item.get_type() == ebooklib.ITEM_DOCUMENT:
-                     # Check properties - ebooklib stores opf properties in list
-                     # Some versions use item.properties, some need checking
-                     props = getattr(item, 'properties', [])
-                     if 'nav' in props:
-                         nav_items.append(item)
-        
+            # Look in ITEM_DOCUMENT for items with 'nav' property
+            for item in self.book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
+                if (
+                    hasattr(item, "get_type")
+                    and item.get_type() == ebooklib.ITEM_DOCUMENT
+                ):
+                    # Check properties - ebooklib stores opf properties in list
+                    # Some versions use item.properties, some need checking
+                    props = getattr(item, "properties", [])
+                    if "nav" in props:
+                        nav_items.append(item)
+
         if nav_items:
             nav_item = next(
                 (
@@ -592,7 +604,11 @@ class EpubParser(BaseBookParser):
         # 2. NCX in NAV
         if not nav_item and nav_items:
             ncx_in_nav = next(
-                (item for item in nav_items if item.get_name().lower().endswith(".ncx")),
+                (
+                    item
+                    for item in nav_items
+                    if item.get_name().lower().endswith(".ncx")
+                ),
                 None,
             )
             if ncx_in_nav:
@@ -624,9 +640,8 @@ class EpubParser(BaseBookParser):
 
         if not nav_item or not nav_type:
             raise ValueError("No navigation document found")
-            
-        return nav_item, nav_type
 
+        return nav_item, nav_type
 
     def _execute_nav_parsing_logic(self, nav_item, nav_type):
         """Parse the identified navigation item and slice content accordingly."""
@@ -826,10 +841,10 @@ class EpubParser(BaseBookParser):
                             "has_content": True,
                         },
                     )
-    
+
     def _process_epub_content_spine_fallback(self):
         """
-        Process EPUB content using the spine (linear reading order) 
+        Process EPUB content using the spine (linear reading order)
         when navigation processing fails.
         """
         logging.info("Using spine fallback for EPUB processing.")
@@ -877,7 +892,7 @@ class EpubParser(BaseBookParser):
                 if text:
                     self.content_texts[doc_href] = text
                     self.content_lengths[doc_href] = calculate_text_length(text)
-    
+
     def get_chapters(self):
         chapters = super().get_chapters()
         if not chapters:
@@ -898,7 +913,7 @@ def get_book_parser(book_path, file_type=None):
     Factory function to get the appropriate parser instance.
     """
     book_path = os.path.normpath(os.path.abspath(book_path))
-    
+
     if not file_type:
         if book_path.lower().endswith(".pdf"):
             file_type = "pdf"

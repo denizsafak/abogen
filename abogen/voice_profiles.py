@@ -110,9 +110,17 @@ def normalize_profile_entry(entry: Any) -> Dict[str, Any]:
         return {
             "provider": "supertonic",
             "language": language,
-            "voice": _normalize_supertonic_voice(entry.get("voice") or entry.get("voice_name") or entry.get("name")),
-            "total_steps": _coerce_supertonic_steps(entry.get("total_steps") or entry.get("supertonic_total_steps") or entry.get("quality")),
-            "speed": _coerce_supertonic_speed(entry.get("speed") or entry.get("supertonic_speed")),
+            "voice": _normalize_supertonic_voice(
+                entry.get("voice") or entry.get("voice_name") or entry.get("name")
+            ),
+            "total_steps": _coerce_supertonic_steps(
+                entry.get("total_steps")
+                or entry.get("supertonic_total_steps")
+                or entry.get("quality")
+            ),
+            "speed": _coerce_supertonic_speed(
+                entry.get("speed") or entry.get("supertonic_speed")
+            ),
         }
 
     voices = _normalize_voice_entries(entry.get("voices", []))

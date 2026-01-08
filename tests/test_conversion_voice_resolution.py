@@ -14,14 +14,14 @@ def _sample_job(formula: str) -> Job:
     return cast(
         Job,
         SimpleNamespace(
-        voice="__custom_mix",
-        speakers={
-            "narrator": {
-                "resolved_voice": formula,
-            }
-        },
-        chapters=[],
-        chunks=[{}],
+            voice="__custom_mix",
+            speakers={
+                "narrator": {
+                    "resolved_voice": formula,
+                }
+            },
+            chapters=[],
+            chunks=[{}],
         ),
     )
 

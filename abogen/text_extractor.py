@@ -110,13 +110,19 @@ def _extract_from_string(raw: str, default_title: str) -> ExtractionResult:
     normalized_tags = _normalize_metadata_keys(raw_metadata)
     chapter_count = len(chapters)
     artist_value = normalized_tags.get("artist")
-    authors = [name.strip() for name in artist_value.split(",") if name.strip()] if artist_value else []
+    authors = (
+        [name.strip() for name in artist_value.split(",") if name.strip()]
+        if artist_value
+        else []
+    )
     metadata_source = MetadataSource(
         title=normalized_tags.get("title") or default_title,
         authors=authors,
         publication_year=normalized_tags.get("year"),
     )
-    metadata = _build_metadata_payload(metadata_source, chapter_count, "text", default_title)
+    metadata = _build_metadata_payload(
+        metadata_source, chapter_count, "text", default_title
+    )
     metadata.update(normalized_tags)
     if not chapters:
         chapters = [ExtractedChapter(title=default_title, text="")]
@@ -148,9 +154,11 @@ def _split_chapters(content: str, default_title: str) -> List[ExtractedChapter]:
     current_title = default_title
 
     for match in matches:
-        segment = content[last_index:match.start()]
+        segment = content[last_index : match.start()]
         if segment.strip():
-            chapters.append(ExtractedChapter(title=current_title, text=clean_text(segment)))
+            chapters.append(
+                ExtractedChapter(title=current_title, text=clean_text(segment))
+            )
         current_title = match.group(1).strip() or default_title
         last_index = match.end()
 
@@ -271,19 +279,27 @@ def _extract_markdown(path: Path) -> ExtractionResult:
     raw = path.read_text(encoding=encoding, errors="replace")
     metadata_source, chapters = _parse_markdown(raw, path.stem)
     if not chapters:
-        chapters = [ExtractedChapter(title=metadata_source.title or path.stem, text=clean_text(raw))]
-    metadata = _build_metadata_payload(metadata_source, len(chapters), "markdown", path.stem)
+        chapters = [
+            ExtractedChapter(
+                title=metadata_source.title or path.stem, text=clean_text(raw)
+            )
+        ]
+    metadata = _build_metadata_payload(
+        metadata_source, len(chapters), "markdown", path.stem
+    )
     return ExtractionResult(chapters=chapters, metadata=metadata)
 
 
-def _parse_markdown(raw: str, default_title: str) -> Tuple[MetadataSource, List[ExtractedChapter]]:
+def _parse_markdown(
+    raw: str, default_title: str
+) -> Tuple[MetadataSource, List[ExtractedChapter]]:
     metadata = MetadataSource()
     text = textwrap.dedent(raw)
     frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.DOTALL)
     if frontmatter_match:
         frontmatter = frontmatter_match.group(1)
         _parse_markdown_frontmatter(frontmatter, metadata)
-        text_body = text[frontmatter_match.end():]
+        text_body = text[frontmatter_match.end() :]
     else:
         text_body = text
 
@@ -324,7 +340,11 @@ def _parse_markdown(raw: str, default_title: str) -> Tuple[MetadataSource, List[
 
     chapters: List[ExtractedChapter] = []
     for index, (header_id, start, name) in enumerate(header_positions):
-        end = header_positions[index + 1][1] if index + 1 < len(header_positions) else len(html)
+        end = (
+            header_positions[index + 1][1]
+            if index + 1 < len(header_positions)
+            else len(html)
+        )
         section_html = html[start:end]
         section_soup = BeautifulSoup(section_html, "html.parser")
         header_tag = section_soup.find(attrs={"id": header_id})
@@ -336,7 +356,14 @@ def _parse_markdown(raw: str, default_title: str) -> Tuple[MetadataSource, List[
         chapters.append(ExtractedChapter(title=name.strip(), text=section_text))
 
     if not metadata.title:
-        first_h1 = next((header for header in headers if header.get("level") == 1 and header.get("name")), None)
+        first_h1 = next(
+            (
+                header
+                for header in headers
+                if header.get("level") == 1 and header.get("name")
+            ),
+            None,
+        )
         if first_h1:
             metadata.title = str(first_h1["name"])
 
@@ -344,21 +371,27 @@ def _parse_markdown(raw: str, default_title: str) -> Tuple[MetadataSource, List[
 
 
 def _parse_markdown_frontmatter(frontmatter: str, metadata: MetadataSource) -> None:
-    title_match = re.search(r"^title:\s*(.+)$", frontmatter, re.MULTILINE | re.IGNORECASE)
+    title_match = re.search(
+        r"^title:\s*(.+)$", frontmatter, re.MULTILINE | re.IGNORECASE
+    )
     if title_match:
-        metadata.title = title_match.group(1).strip().strip('"\'')
+        metadata.title = title_match.group(1).strip().strip("\"'")
 
-    author_match = re.search(r"^author:\s*(.+)$", frontmatter, re.MULTILINE | re.IGNORECASE)
+    author_match = re.search(
+        r"^author:\s*(.+)$", frontmatter, re.MULTILINE | re.IGNORECASE
+    )
     if author_match:
-        metadata.authors = [author_match.group(1).strip().strip('"\'')]
+        metadata.authors = [author_match.group(1).strip().strip("\"'")]
 
-    desc_match = re.search(r"^description:\s*(.+)$", frontmatter, re.MULTILINE | re.IGNORECASE)
+    desc_match = re.search(
+        r"^description:\s*(.+)$", frontmatter, re.MULTILINE | re.IGNORECASE
+    )
     if desc_match:
-        metadata.description = desc_match.group(1).strip().strip('"\'')
+        metadata.description = desc_match.group(1).strip().strip("\"'")
 
     date_match = re.search(r"^date:\s*(.+)$", frontmatter, re.MULTILINE | re.IGNORECASE)
     if date_match:
-        date_str = date_match.group(1).strip().strip('\"\'')
+        date_str = date_match.group(1).strip().strip("\"'")
         year_match = re.search(r"\b(19|20)\d{2}\b", date_str)
         if year_match:
             metadata.publication_year = year_match.group(0)
@@ -390,7 +423,9 @@ class EpubExtractor:
             chapters = self._process_spine_fallback()
         if not chapters:
             chapters = [ExtractedChapter(title=self.path.stem, text="")]
-        metadata = _build_metadata_payload(metadata_source, len(chapters), "epub", self.path.stem)
+        metadata = _build_metadata_payload(
+            metadata_source, len(chapters), "epub", self.path.stem
+        )
         metadata.setdefault("chapter_count", str(len(chapters)))
         if metadata_source.series:
             series_text = str(metadata_source.series).strip()
@@ -424,7 +459,9 @@ class EpubExtractor:
         try:
             author_items = self.book.get_metadata("DC", "creator")
             if author_items:
-                metadata.authors = [author[0] for author in author_items if author and author[0]]
+                metadata.authors = [
+                    author[0] for author in author_items if author and author[0]
+                ]
         except Exception as exc:
             logger.debug("Failed to extract EPUB author metadata: %s", exc)
 
@@ -447,7 +484,9 @@ class EpubExtractor:
             if date_items:
                 date_str = date_items[0][0]
                 year_match = re.search(r"\b(19|20)\d{2}\b", date_str)
-                metadata.publication_year = year_match.group(0) if year_match else date_str
+                metadata.publication_year = (
+                    year_match.group(0) if year_match else date_str
+                )
         except Exception as exc:
             logger.debug("Failed to extract EPUB publication year metadata: %s", exc)
 
@@ -482,7 +521,16 @@ class EpubExtractor:
             if name in {"calibre:series", "series"} and series_name is None:
                 series_name = candidate_text
                 continue
-            if name in {"calibre:series_index", "calibre:seriesindex", "series_index", "seriesindex"} and series_index is None:
+            if (
+                name
+                in {
+                    "calibre:series_index",
+                    "calibre:seriesindex",
+                    "series_index",
+                    "seriesindex",
+                }
+                and series_index is None
+            ):
                 series_index = candidate_text
                 continue
 
@@ -533,7 +581,9 @@ class EpubExtractor:
 
         self.spine_docs = self._build_spine_docs()
         doc_order = {href: index for index, href in enumerate(self.spine_docs)}
-        doc_order_decoded = {urllib.parse.unquote(href): index for href, index in doc_order.items()}
+        doc_order_decoded = {
+            urllib.parse.unquote(href): index for href, index in doc_order.items()
+        }
 
         nav_targets = self._collect_nav_targets(nav_soup, nav_type)
         self._cache_relevant_documents(doc_order, nav_targets)
@@ -544,7 +594,9 @@ class EpubExtractor:
             if not nav_map:
                 raise ValueError("NCX navigation missing <navMap>")
             for nav_point in nav_map.find_all("navPoint", recursive=False):
-                self._parse_ncx_navpoint(nav_point, ordered_entries, doc_order, doc_order_decoded)
+                self._parse_ncx_navpoint(
+                    nav_point, ordered_entries, doc_order, doc_order_decoded
+                )
         else:
             toc_nav = nav_soup.find("nav", attrs={"epub:type": "toc"})
             if toc_nav is None:
@@ -558,7 +610,9 @@ class EpubExtractor:
             if top_ol is None:
                 raise ValueError("TOC navigation missing <ol>")
             for li in top_ol.find_all("li", recursive=False):
-                self._parse_html_nav_li(li, ordered_entries, doc_order, doc_order_decoded)
+                self._parse_html_nav_li(
+                    li, ordered_entries, doc_order, doc_order_decoded
+                )
 
         if not ordered_entries:
             raise ValueError("No navigation entries found")
@@ -591,7 +645,9 @@ class EpubExtractor:
             text = self._html_to_text(html_content)
             if not text:
                 continue
-            title = self._resolve_document_title(html_content, fallback=f"Untitled Chapter {index + 1}")
+            title = self._resolve_document_title(
+                html_content, fallback=f"Untitled Chapter {index + 1}"
+            )
             chapters.append(ExtractedChapter(title=title, text=text))
         return chapters
 
@@ -605,7 +661,8 @@ class EpubExtractor:
                 (
                     item
                     for item in nav_items
-                    if "nav" in item.get_name().lower() and item.get_name().lower().endswith((".xhtml", ".html"))
+                    if "nav" in item.get_name().lower()
+                    and item.get_name().lower().endswith((".xhtml", ".html"))
                 ),
                 None,
             )
@@ -627,7 +684,11 @@ class EpubExtractor:
 
         if not nav_item and nav_items:
             ncx_candidate = next(
-                (item for item in nav_items if item.get_name().lower().endswith(".ncx")),
+                (
+                    item
+                    for item in nav_items
+                    if item.get_name().lower().endswith(".ncx")
+                ),
                 None,
             )
             if ncx_candidate:
@@ -682,7 +743,9 @@ class EpubExtractor:
                     targets.append(href_value.split("#", 1)[0])
         return targets
 
-    def _cache_relevant_documents(self, doc_order: Dict[str, int], nav_targets: List[str]) -> None:
+    def _cache_relevant_documents(
+        self, doc_order: Dict[str, int], nav_targets: List[str]
+    ) -> None:
         needed: set[str] = set(doc_order.keys())
         for target in nav_targets:
             needed.add(target)
@@ -718,7 +781,9 @@ class EpubExtractor:
 
         if src:
             base_href, fragment = src.split("#", 1) if "#" in src else (src, None)
-            doc_key, doc_idx = self._find_doc_key(base_href, doc_order, doc_order_decoded)
+            doc_key, doc_idx = self._find_doc_key(
+                base_href, doc_order, doc_order_decoded
+            )
             if doc_key is not None and doc_idx is not None:
                 position = self._find_position_robust(doc_key, fragment)
                 ordered_entries.append(
@@ -738,7 +803,9 @@ class EpubExtractor:
                 )
 
         for child_navpoint in nav_point.find_all("navPoint", recursive=False):
-            self._parse_ncx_navpoint(child_navpoint, ordered_entries, doc_order, doc_order_decoded)
+            self._parse_ncx_navpoint(
+                child_navpoint, ordered_entries, doc_order, doc_order_decoded
+            )
 
     def _parse_html_nav_li(
         self,
@@ -767,7 +834,9 @@ class EpubExtractor:
 
         if src:
             base_href, fragment = src.split("#", 1) if "#" in src else (src, None)
-            doc_key, doc_idx = self._find_doc_key(base_href, doc_order, doc_order_decoded)
+            doc_key, doc_idx = self._find_doc_key(
+                base_href, doc_order, doc_order_decoded
+            )
             if doc_key is not None and doc_idx is not None:
                 position = self._find_position_robust(doc_key, fragment)
                 ordered_entries.append(
@@ -788,7 +857,9 @@ class EpubExtractor:
 
         for child_ol in li_element.find_all("ol", recursive=False):
             for child_li in child_ol.find_all("li", recursive=False):
-                self._parse_html_nav_li(child_li, ordered_entries, doc_order, doc_order_decoded)
+                self._parse_html_nav_li(
+                    child_li, ordered_entries, doc_order, doc_order_decoded
+                )
 
     def _find_doc_key(
         self,
@@ -825,7 +896,9 @@ class EpubExtractor:
                 if pos != -1:
                     return pos
         except Exception:
-            logger.debug("BeautifulSoup failed to locate id '%s' in %s", fragment_id, doc_href)
+            logger.debug(
+                "BeautifulSoup failed to locate id '%s' in %s", fragment_id, doc_href
+            )
 
         safe_fragment_id = re.escape(fragment_id)
         id_name_pattern = re.compile(
@@ -844,13 +917,17 @@ class EpubExtractor:
             tag_start = html_content.rfind("<", 0, pos)
             return tag_start if tag_start != -1 else pos
 
-        logger.warning("Anchor '%s' not found in %s. Defaulting to start.", fragment_id, doc_href)
+        logger.warning(
+            "Anchor '%s' not found in %s. Defaulting to start.", fragment_id, doc_href
+        )
         return 0
 
     def _slice_entries(self, ordered_entries: List[NavEntry]) -> List[ExtractedChapter]:
         chapters: List[ExtractedChapter] = []
         for index, entry in enumerate(ordered_entries):
-            next_entry = ordered_entries[index + 1] if index + 1 < len(ordered_entries) else None
+            next_entry = (
+                ordered_entries[index + 1] if index + 1 < len(ordered_entries) else None
+            )
             slice_html = self._slice_entry(entry, next_entry)
             text = self._html_to_text(slice_html)
             if not text:

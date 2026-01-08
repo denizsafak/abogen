@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 
-from abogen.integrations.audiobookshelf import AudiobookshelfClient, AudiobookshelfConfig
+from abogen.integrations.audiobookshelf import (
+    AudiobookshelfClient,
+    AudiobookshelfConfig,
+)
 
 
 def test_upload_fields_include_series_sequence(tmp_path):

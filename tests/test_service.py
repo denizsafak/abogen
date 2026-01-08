@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import io
 import time
-from abogen.webui.service import Job, JobStatus, build_service, _JOB_LOGGER, build_audiobookshelf_metadata
+from abogen.webui.service import (
+    Job,
+    JobStatus,
+    build_service,
+    _JOB_LOGGER,
+    build_audiobookshelf_metadata,
+)
 
 
 def test_service_processes_job(tmp_path):
@@ -47,7 +53,11 @@ def test_service_processes_job(tmp_path):
     )
 
     deadline = time.time() + 5
-    while time.time() < deadline and job.status not in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
+    while time.time() < deadline and job.status not in {
+        JobStatus.COMPLETED,
+        JobStatus.FAILED,
+        JobStatus.CANCELLED,
+    }:
         time.sleep(0.05)
 
     service.shutdown()

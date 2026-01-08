@@ -10,7 +10,9 @@ import sys
 from types import ModuleType
 
 
-def _soundfile_write_stub(file_obj, data, samplerate, format="WAV", **_kwargs):  # pragma: no cover - stub
+def _soundfile_write_stub(
+    file_obj, data, samplerate, format="WAV", **_kwargs
+):  # pragma: no cover - stub
     """Minimal stand-in for soundfile.write used in tests.
 
     The real library streams waveform data to disk. Our tests don't exercise

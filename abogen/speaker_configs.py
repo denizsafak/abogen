@@ -135,7 +135,11 @@ def _sanitize_speaker(entry: Dict[str, Any]) -> Dict[str, Any]:
             normalized_langs.append(code.lower())
     resolved_voice = entry.get("resolved_voice") or voice_formula or voice
     resolved_label = label or entry.get("id") or ""
-    slug = entry.get("id") if isinstance(entry.get("id"), str) else slugify_label(resolved_label)
+    slug = (
+        entry.get("id")
+        if isinstance(entry.get("id"), str)
+        else slugify_label(resolved_label)
+    )
     return {
         "id": slug,
         "label": resolved_label,

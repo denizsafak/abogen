@@ -164,10 +164,16 @@ class SpeakerGuess:
         sample_excerpt: Optional[str] = None,
     ) -> None:
         self.count += 1
-        if _CONFIDENCE_RANK.get(confidence, 0) > _CONFIDENCE_RANK.get(self.confidence, 0):
+        if _CONFIDENCE_RANK.get(confidence, 0) > _CONFIDENCE_RANK.get(
+            self.confidence, 0
+        ):
             self.confidence = confidence
 
-        excerpt = sample_excerpt if sample_excerpt is not None else _build_excerpt(text, quote)
+        excerpt = (
+            sample_excerpt
+            if sample_excerpt is not None
+            else _build_excerpt(text, quote)
+        )
         gender_hint = _format_gender_hint(male_votes, female_votes)
         if excerpt:
             payload = {"excerpt": excerpt, "gender_hint": gender_hint}
@@ -180,9 +186,13 @@ class SpeakerGuess:
             self.male_votes += male_votes
         if female_votes:
             self.female_votes += female_votes
-        self.detected_gender = _derive_gender(self.male_votes, self.female_votes, self.detected_gender)
+        self.detected_gender = _derive_gender(
+            self.male_votes, self.female_votes, self.detected_gender
+        )
         if self.gender in {"unknown", "male", "female"}:
-            self.gender = _derive_gender(self.male_votes, self.female_votes, self.gender)
+            self.gender = _derive_gender(
+                self.male_votes, self.female_votes, self.gender
+            )
 
     def as_dict(self) -> Dict[str, Any]:
         return {
@@ -211,7 +221,10 @@ class SpeakerAnalysis:
             "version": self.version,
             "narrator": self.narrator,
             "assignments": dict(self.assignments),
-            "speakers": {speaker_id: guess.as_dict() for speaker_id, guess in self.speakers.items()},
+            "speakers": {
+                speaker_id: guess.as_dict()
+                for speaker_id, guess in self.speakers.items()
+            },
             "suppressed": list(self.suppressed),
             "stats": dict(self.stats),
         }
@@ -226,7 +239,9 @@ def analyze_speakers(
 ) -> SpeakerAnalysis:
     narrator_id = "narrator"
     speaker_guesses: Dict[str, SpeakerGuess] = {
-        narrator_id: SpeakerGuess(speaker_id=narrator_id, label="Narrator", confidence="low")
+        narrator_id: SpeakerGuess(
+            speaker_id=narrator_id, label="Narrator", confidence="low"
+        )
     }
     label_index: Dict[str, str] = {"Narrator": narrator_id}
     assignments: Dict[str, str] = {}
@@ -265,21 +280,31 @@ def analyze_speakers(
             if record_id is None:
                 record_id = _dedupe_slug(_slugify(label), speaker_guesses)
                 label_index[label] = record_id
-                speaker_guesses[record_id] = SpeakerGuess(speaker_id=record_id, label=label)
+                speaker_guesses[record_id] = SpeakerGuess(
+                    speaker_id=record_id, label=label
+                )
             guess = speaker_guesses[record_id]
         assignments[chunk_id] = record_id
         unique_speakers.add(record_id)
 
-        if record_id != narrator_id and record_id != speaker_id and speaker_id == last_explicit:
+        if (
+            record_id != narrator_id
+            and record_id != speaker_id
+            and speaker_id == last_explicit
+        ):
             last_explicit = record_id
 
         sample_excerpt = None
         if record_id != narrator_id:
-            sample_excerpt = _select_sample_excerpt(ordered_chunks, index, guess.label, quote, confidence)
+            sample_excerpt = _select_sample_excerpt(
+                ordered_chunks, index, guess.label, quote, confidence
+            )
 
         male_votes, female_votes = _count_gender_votes(text, guess.label)
 
-        guess.register_occurrence(confidence, text, quote, male_votes, female_votes, sample_excerpt)
+        guess.register_occurrence(
+            confidence, text, quote, male_votes, female_votes, sample_excerpt
+        )
 
     active_speakers = [sid for sid in speaker_guesses if sid != narrator_id]
     # Apply minimum occurrence threshold.
@@ -302,7 +327,9 @@ def analyze_speakers(
         active_speakers = active_speakers[:max_speakers]
 
     narrator_guess = speaker_guesses[narrator_id]
-    narrator_guess.count = sum(1 for value in assignments.values() if value == narrator_id)
+    narrator_guess.count = sum(
+        1 for value in assignments.values() if value == narrator_id
+    )
     narrator_guess.confidence = "low"
 
     stats = {
@@ -322,7 +349,9 @@ def analyze_speakers(
     )
 
 
-def _infer_chunk_speaker(text: str, last_explicit: Optional[str]) -> Tuple[Optional[str], str, Optional[str]]:
+def _infer_chunk_speaker(
+    text: str, last_explicit: Optional[str]
+) -> Tuple[Optional[str], str, Optional[str]]:
     normalized = text.strip()
     if not normalized:
         return None, "low", None
@@ -376,7 +405,9 @@ def _match_name_near_quote(before: str, after: str) -> Optional[str]:
         if _looks_like_name(name):
             return name
 
-    match = re.search(rf"({_NAME_PATTERN})\s*,?\s*{_VERB_PATTERN}", leading, flags=re.IGNORECASE)
+    match = re.search(
+        rf"({_NAME_PATTERN})\s*,?\s*{_VERB_PATTERN}", leading, flags=re.IGNORECASE
+    )
     if match:
         name = match.group(1)
         if _looks_like_name(name):
@@ -466,8 +497,14 @@ def _count_gender_votes(text: str, label: Optional[str]) -> Tuple[int, int]:
                 if windows:
                     mapped: List[Tuple[int, int]] = []
                     for start, end in windows:
-                        start_idx = min(len(search_text) - 1, int(start * len(search_text) / max(len(ascii_text), 1)))
-                        end_idx = min(len(search_text), int(end * len(search_text) / max(len(ascii_text), 1)))
+                        start_idx = min(
+                            len(search_text) - 1,
+                            int(start * len(search_text) / max(len(ascii_text), 1)),
+                        )
+                        end_idx = min(
+                            len(search_text),
+                            int(end * len(search_text) / max(len(ascii_text), 1)),
+                        )
                         mapped.append((start_idx, end_idx))
                     windows = mapped
         else:
@@ -485,7 +522,9 @@ def _count_gender_votes(text: str, label: Optional[str]) -> Tuple[int, int]:
         except IndexError:
             content_start, content_end = match.span()
         if content_start < content_end:
-            quote_spans.append((content_start, content_end, search_text[content_start:content_end]))
+            quote_spans.append(
+                (content_start, content_end, search_text[content_start:content_end])
+            )
 
     normalized_label = _normalize_candidate_name(label) if label else None
     normalized_label_lower = normalized_label.lower() if normalized_label else None
@@ -511,7 +550,11 @@ def _count_gender_votes(text: str, label: Optional[str]) -> Tuple[int, int]:
             name_matches = list(re.finditer(_NAME_PATTERN, tail))
             if name_matches:
                 last_name = _normalize_candidate_name(name_matches[-1].group(0))
-                if normalized_label_lower and last_name and last_name.lower() == normalized_label_lower:
+                if (
+                    normalized_label_lower
+                    and last_name
+                    and last_name.lower() == normalized_label_lower
+                ):
                     return 0.6
                 return 0.05
             if re.search(r"[.!?]\s", prefix):
@@ -607,8 +650,12 @@ def _contains_dialogue_attribution(label: str, text: str, quote: Optional[str]) 
     if not label or not text:
         return False
     escaped_label = re.escape(label)
-    direct_pattern = re.compile(rf"\b{escaped_label}\b\s+(?:{_VERB_PATTERN})\b", re.IGNORECASE)
-    reverse_pattern = re.compile(rf"(?:{_VERB_PATTERN})\s+\b{escaped_label}\b", re.IGNORECASE)
+    direct_pattern = re.compile(
+        rf"\b{escaped_label}\b\s+(?:{_VERB_PATTERN})\b", re.IGNORECASE
+    )
+    reverse_pattern = re.compile(
+        rf"(?:{_VERB_PATTERN})\s+\b{escaped_label}\b", re.IGNORECASE
+    )
     colon_pattern = re.compile(rf"^\s*{escaped_label}\s*:\s*", re.IGNORECASE)
 
     if colon_pattern.search(text):
@@ -679,7 +726,7 @@ def _format_gender_hint(male_votes: int, female_votes: int) -> str:
 def _normalize_candidate_name(raw: str) -> Optional[str]:
     if not raw:
         return None
-    cleaned = raw.strip().strip('"“”\'’.,:;!')
+    cleaned = raw.strip().strip("\"“”'’.,:;!")
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     if not cleaned:
         return None

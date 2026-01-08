@@ -37,6 +37,7 @@ def clean_subtitle_text(text):
     text = _CHAPTER_MARKER_PATTERN.sub("", text)
     return text.strip()
 
+
 def calculate_text_length(text):
     # Use pre-compiled patterns for better performance
     # Ignore chapter markers and metadata patterns in a single pass
@@ -47,6 +48,7 @@ def calculate_text_length(text):
     # Calculate character count
     char_count = len(text)
     return char_count
+
 
 def clean_text(text, *args, **kwargs):
     # Remove metadata tags first

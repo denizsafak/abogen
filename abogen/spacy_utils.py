@@ -83,12 +83,12 @@ def get_spacy_model(lang_code, log_callback=None):
             model_name,
             disable=["ner", "tagger", "lemmatizer", "attribute_ruler"],
         )
-        
+
         # Ensure a sentence segmentation strategy is in place
         # The parser provides sents, but if it's missing (unlikely for core models), fallback to sentencizer
         if "parser" not in nlp.pipe_names and "sentencizer" not in nlp.pipe_names:
             nlp.add_pipe("sentencizer")
-            
+
         _nlp_cache[lang_code] = nlp
         return nlp
     except OSError:
@@ -105,7 +105,7 @@ def get_spacy_model(lang_code, log_callback=None):
             )
             if "parser" not in nlp.pipe_names and "sentencizer" not in nlp.pipe_names:
                 nlp.add_pipe("sentencizer")
-                
+
             _nlp_cache[lang_code] = nlp
             log(f"spaCy model '{model_name}' downloaded and loaded")
             return nlp

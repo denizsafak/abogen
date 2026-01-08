@@ -14,6 +14,7 @@ from functools import lru_cache
 
 from dotenv import load_dotenv, find_dotenv
 
+
 def _load_environment() -> None:
     explicit_path = os.environ.get("ABOGEN_ENV_FILE")
     if explicit_path:
@@ -55,6 +56,7 @@ def detect_encoding(file_path):
             break
     encoding = detected_encoding if detected_encoding else "utf-8"
     return encoding.lower()
+
 
 def get_resource_path(package, resource):
     """
@@ -146,7 +148,9 @@ def get_user_settings_dir():
         if os.path.exists(legacy_dir):
             return ensure_directory(legacy_dir)
 
-    config_dir = user_config_dir("abogen", appauthor=False, roaming=True, ensure_exists=True)
+    config_dir = user_config_dir(
+        "abogen", appauthor=False, roaming=True, ensure_exists=True
+    )
     return ensure_directory(config_dir)
 
 
@@ -250,7 +254,9 @@ def get_user_cache_root():
 
 
 def get_internal_cache_root():
-    root = os.environ.get("ABOGEN_INTERNAL_CACHE_ROOT") or os.environ.get("XDG_CACHE_HOME")
+    root = os.environ.get("ABOGEN_INTERNAL_CACHE_ROOT") or os.environ.get(
+        "XDG_CACHE_HOME"
+    )
     if root:
         return ensure_directory(root)
     home_dir = os.environ.get("HOME") or os.path.join("/tmp", "abogen-home")
@@ -274,9 +280,8 @@ def get_user_cache_path(folder=None):
 
 @lru_cache(maxsize=1)
 def get_user_output_root():
-    override = (
-        os.environ.get("ABOGEN_OUTPUT_DIR")
-        or os.environ.get("ABOGEN_OUTPUT_ROOT")
+    override = os.environ.get("ABOGEN_OUTPUT_DIR") or os.environ.get(
+        "ABOGEN_OUTPUT_ROOT"
     )
     if override:
         return ensure_directory(override)
@@ -290,7 +295,10 @@ def get_user_output_path(folder=None):
     return base
 
 
-_sleep_procs: Dict[str, Optional[subprocess.Popen[str]]] = {"Darwin": None, "Linux": None}  # Store sleep prevention processes
+_sleep_procs: Dict[str, Optional[subprocess.Popen[str]]] = {
+    "Darwin": None,
+    "Linux": None,
+}  # Store sleep prevention processes
 
 
 def clean_text(text, *args, **kwargs):
@@ -328,7 +336,9 @@ def create_process(cmd, stdin=None, text=True, capture_output=False):
     # Determine shell usage: use shell only for string commands
     use_shell = isinstance(cmd, str)
     if use_shell:
-        logger.warning("Security Warning: create_process called with string command. Prefer using a list of arguments to avoid shell injection risks.")
+        logger.warning(
+            "Security Warning: create_process called with string command. Prefer using a list of arguments to avoid shell injection risks."
+        )
 
     kwargs = {
         "shell": use_shell,
@@ -439,18 +449,18 @@ def get_gpu_acceleration(enabled):
 
         if not enabled:
             return "GPU available but using CPU.", False
-        
+
         # Check for Apple Silicon MPS
         if platform.system() == "Darwin" and platform.processor() == "arm":
             if torch.backends.mps.is_available():
                 return "MPS GPU available and enabled.", True
             else:
                 return "MPS GPU not available on Apple Silicon. Using CPU.", False
-        
+
         # Check for CUDA
         if cuda_available():
             return "CUDA GPU available and enabled.", True
-        
+
         # Gather CUDA diagnostic info if not available
         try:
             cuda_devices = torch.cuda.device_count()

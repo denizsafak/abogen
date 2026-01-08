@@ -49,7 +49,9 @@ def _load_spacy_model(model: str = _DEFAULT_MODEL) -> Optional[Language]:
     return nlp
 
 
-def resolve_ambiguous_contractions(text: str, *, model: Optional[str] = None) -> Dict[Tuple[int, int], ContractionResolution]:
+def resolve_ambiguous_contractions(
+    text: str, *, model: Optional[str] = None
+) -> Dict[Tuple[int, int], ContractionResolution]:
     """Use spaCy to disambiguate ambiguous contractions in *text*.
 
     Returns a mapping from (start, end) spans to their resolved expansion.
@@ -80,7 +82,9 @@ def resolve_ambiguous_contractions(text: str, *, model: Optional[str] = None) ->
     return resolutions
 
 
-def _resolution(prev: Token, token: Token, expansion_word: str, category: str, lemma_hint: str) -> Optional[ContractionResolution]:
+def _resolution(
+    prev: Token, token: Token, expansion_word: str, category: str, lemma_hint: str
+) -> Optional[ContractionResolution]:
     if token is None or prev is None:
         return None
 
@@ -186,10 +190,14 @@ def _resolve_apostrophe_d(token: Token) -> Optional[ContractionResolution]:
         next_lemma = ""
 
     if next_tag == "VB":
-        return _resolution(prev, token, "would", "contraction_modal_would", lemma or "will")
+        return _resolution(
+            prev, token, "would", "contraction_modal_would", lemma or "will"
+        )
 
     if token.tag_ == "MD" or lemma in {"will", "would", "shall"}:
-        return _resolution(prev, token, "would", "contraction_modal_would", lemma or "will")
+        return _resolution(
+            prev, token, "would", "contraction_modal_would", lemma or "will"
+        )
 
     if next_lemma in {"been", "gone", "had", "better"} or next_tag in {"VBN", "VBD"}:
         return _resolution(prev, token, "had", "contraction_aux_have", "have")
@@ -255,4 +263,3 @@ def _context_prefers_had(token: Token) -> bool:
     if next_lemma == "better":
         return True
     return False
-

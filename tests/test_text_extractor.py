@@ -6,7 +6,9 @@ from abogen.text_extractor import extract_from_path
 from abogen.utils import calculate_text_length
 
 
-ASSET = Path("test_assets/alexandre-dumas_the-count-of-monte-cristo_chapman-and-hall.epub")
+ASSET = Path(
+    "test_assets/alexandre-dumas_the-count-of-monte-cristo_chapman-and-hall.epub"
+)
 
 
 def test_epub_character_counts_align_with_calculated_total():
@@ -37,8 +39,12 @@ def test_epub_series_metadata_extracted_from_opf_meta(tmp_path):
     book.add_author("Example Author")
 
     # Calibre-style series metadata
-    book.add_metadata("OPF", "meta", "", {"name": "calibre:series", "content": "Example Saga"})
-    book.add_metadata("OPF", "meta", "", {"name": "calibre:series_index", "content": "2"})
+    book.add_metadata(
+        "OPF", "meta", "", {"name": "calibre:series", "content": "Example Saga"}
+    )
+    book.add_metadata(
+        "OPF", "meta", "", {"name": "calibre:series_index", "content": "2"}
+    )
 
     chapter = epub.EpubHtml(title="Chapter 1", file_name="chap_01.xhtml", lang="en")
     chapter.content = "<h1>Chapter 1</h1><p>Hello</p>"

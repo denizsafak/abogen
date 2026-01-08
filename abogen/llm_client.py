@@ -52,8 +52,10 @@ def _build_url(base_url: str, path: str) -> str:
     normalized = _normalized_base_url(base_url)
     trimmed_path = path.lstrip("/")
     parsed = parse.urlparse(normalized)
-    if parsed.path.rstrip("/").lower().endswith("/v1") and trimmed_path.startswith("v1/"):
-        trimmed_path = trimmed_path[len("v1/"):]
+    if parsed.path.rstrip("/").lower().endswith("/v1") and trimmed_path.startswith(
+        "v1/"
+    ):
+        trimmed_path = trimmed_path[len("v1/") :]
     return parse.urljoin(normalized, trimmed_path)
 
 
@@ -77,7 +79,9 @@ def _perform_request(
     if payload is not None:
         data_bytes = json.dumps(payload).encode("utf-8")
     request_headers = dict(headers or {})
-    req = request.Request(url, data=data_bytes, headers=request_headers, method=method.upper())
+    req = request.Request(
+        url, data=data_bytes, headers=request_headers, method=method.upper()
+    )
     try:
         with request.urlopen(req, timeout=timeout) as response:
             body = response.read()
@@ -102,7 +106,9 @@ def list_models(configuration: LLMConfiguration) -> List[Dict[str, str]]:
         raise LLMClientError("LLM configuration is incomplete")
     url = _build_url(configuration.base_url, "v1/models")
     headers = _build_headers(configuration.api_key)
-    payload = _perform_request("GET", url, headers=headers, timeout=configuration.timeout)
+    payload = _perform_request(
+        "GET", url, headers=headers, timeout=configuration.timeout
+    )
     if not isinstance(payload, Mapping):
         raise LLMClientError("Unexpected response when listing models")
     data = payload.get("data")
@@ -153,7 +159,9 @@ def generate_completion(
     if response_format:
         payload["response_format"] = dict(response_format)
 
-    response = _perform_request("POST", url, headers=headers, payload=payload, timeout=configuration.timeout)
+    response = _perform_request(
+        "POST", url, headers=headers, payload=payload, timeout=configuration.timeout
+    )
     if not isinstance(response, Mapping):
         raise LLMClientError("Unexpected response from LLM")
     choices = response.get("choices")

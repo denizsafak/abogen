@@ -24,9 +24,12 @@ def _chunk(text: str, idx: int) -> dict:
 
 def test_analyze_speakers_infers_gender_from_pronouns():
     chunks = [
-        _chunk("\"Greetings,\" said John. He adjusted his hat as he smiled.", 0),
-        _chunk("\"Hello,\" said Mary. She straightened her dress as she introduced herself.", 1),
-        _chunk("\"Nice to meet you,\" said Alex.", 2),
+        _chunk('"Greetings," said John. He adjusted his hat as he smiled.', 0),
+        _chunk(
+            '"Hello," said Mary. She straightened her dress as she introduced herself.',
+            1,
+        ),
+        _chunk('"Nice to meet you," said Alex.', 2),
     ]
 
     analysis = analyze_speakers(_chapters(), chunks, threshold=1, max_speakers=0)
@@ -63,8 +66,8 @@ def test_analyze_speakers_ignores_leading_stopwords():
 
 def test_analyze_speakers_applies_threshold_suppression():
     chunks = [
-        _chunk("\"Hello there,\" said Narrator.", 0),
-        _chunk("\"It is lying,\" said Green.", 1),
+        _chunk('"Hello there," said Narrator.', 0),
+        _chunk('"It is lying," said Green.', 1),
     ]
 
     analysis = analyze_speakers(_chapters(), chunks, threshold=3, max_speakers=0)
@@ -78,7 +81,7 @@ def test_analyze_speakers_applies_threshold_suppression():
 def test_sample_excerpt_includes_context_paragraphs():
     chunks = [
         _chunk("The hallway was quiet as footsteps approached.", 0),
-        _chunk('\"Open the door,\" said John as he reached for the handle.', 1),
+        _chunk('"Open the door," said John as he reached for the handle.', 1),
         _chunk("Mary watched him closely, unsure of his intent.", 2),
     ]
 
@@ -89,5 +92,5 @@ def test_sample_excerpt_includes_context_paragraphs():
     assert john.sample_quotes, "Expected John to have at least one sample quote"
     excerpt = john.sample_quotes[0]["excerpt"]
     assert "The hallway was quiet" in excerpt
-    assert "\"Open the door,\" said John" in excerpt
+    assert '"Open the door," said John' in excerpt
     assert "Mary watched him closely" in excerpt

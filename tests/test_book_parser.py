@@ -6,9 +6,10 @@ import fitz  # PyMuPDF
 from ebooklib import epub
 
 # Ensure we can import the module
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from abogen.book_parser import get_book_parser, PdfParser, EpubParser, MarkdownParser
+
 
 class TestBookParser(unittest.TestCase):
 
@@ -32,18 +33,18 @@ class TestBookParser(unittest.TestCase):
 
     def _create_sample_pdf(self):
         doc = fitz.open()
-        
+
         # Page 1
         page1 = doc.new_page()
         page1.insert_text((50, 50), "Page 1 content")
         # Add pattern to be cleaned
-        page1.insert_text((50, 100), "[12]") 
-        page1.insert_text((50, 200), "1") # Page number at bottom
-        
+        page1.insert_text((50, 100), "[12]")
+        page1.insert_text((50, 200), "1")  # Page number at bottom
+
         # Page 2
         page2 = doc.new_page()
         page2.insert_text((50, 50), "Page 2 content")
-        
+
         doc.save(self.sample_pdf_path)
         doc.close()
 
@@ -65,7 +66,7 @@ class TestBookParser(unittest.TestCase):
 
         # Basic spine and nav
         book.spine = ["nav", c1, c2]
-        
+
         # Add NCX and NAV for compatibility
         book.add_item(epub.EpubNcx())
         book.add_item(epub.EpubNav())
@@ -93,11 +94,11 @@ class TestBookParser(unittest.TestCase):
         # 1. Copy sample epub to something.pdf
         wrong_ext_path = os.path.join(self.test_dir, "actually_epub.pdf")
         shutil.copy(self.sample_epub_path, wrong_ext_path)
-        
+
         # 2. Open it telling parser it IS epub
         parser = get_book_parser(wrong_ext_path, file_type="epub")
         self.assertIsInstance(parser, EpubParser)
-        
+
         # Should load successfully
         parser.load()
         self.assertTrue(parser.book is not None)
@@ -109,7 +110,7 @@ class TestBookParser(unittest.TestCase):
 
         self.assertIn("page_1", parser.content_texts)
         self.assertIn("page_2", parser.content_texts)
-        
+
         text1 = parser.content_texts["page_1"]
         self.assertIn("Page 1 content", text1)
         self.assertNotIn("[12]", text1)
@@ -118,7 +119,7 @@ class TestBookParser(unittest.TestCase):
         """Test MarkdownParser splitting logic."""
         parser = get_book_parser(self.sample_md_path)
         parser.process_content()
-        
+
         # Should have Chapter 1 and Chapter 2 keys (actual keys depend on ID generation)
         # Markdown extensions might slugify IDs: "chapter-1"
         self.assertIn("chapter-1", parser.content_texts)
@@ -130,7 +131,7 @@ class TestBookParser(unittest.TestCase):
         """Test EpubParser processing."""
         parser = get_book_parser(self.sample_epub_path)
         parser.process_content()
-        
+
         self.assertIn("intro.xhtml", parser.content_texts)
         self.assertIn("chap1.xhtml", parser.content_texts)
         self.assertIn("Welcome to the book", parser.content_texts["intro.xhtml"])
@@ -140,7 +141,7 @@ class TestBookParser(unittest.TestCase):
         parser = get_book_parser(self.sample_epub_path)
         # Processing content triggers metadata extraction in current implementation
         parser.process_content()
-        
+
         metadata = parser.get_metadata()
         self.assertEqual(metadata.get("title"), "Sample Book")
         self.assertEqual(metadata.get("author"), "Test Author")
@@ -149,23 +150,23 @@ class TestBookParser(unittest.TestCase):
         """Test <ol> handling in EpubParser."""
         parser = get_book_parser(self.sample_epub_path)
         parser.process_content()
-        
+
         text = parser.content_texts.get("chap1.xhtml", "")
         self.assertIn("1) Item One", text)
         self.assertIn("2) Item Two", text)
 
     def test_find_position_robust_logic(self):
         """Unit test for _find_position_robust on EpubParser."""
-        parser = EpubParser(self.sample_epub_path) # Instantiate directly
-        
+        parser = EpubParser(self.sample_epub_path)  # Instantiate directly
+
         html = '<html><body><p>Start</p><h1 id="target">Heading</h1><p>End</p></body></html>'
         parser.doc_content["dummy.html"] = html
-        
+
         # Test finding ID
         pos = parser._find_position_robust("dummy.html", "target")
         self.assertGreater(pos, 0)
         self.assertTrue(html[pos:].startswith('<h1 id="target"'))
-        
+
         # Test missing ID
         pos_missing = parser._find_position_robust("dummy.html", "missing")
         self.assertEqual(pos_missing, 0)
@@ -177,7 +178,7 @@ class TestBookParser(unittest.TestCase):
         chapters = parser_pdf.get_chapters()
         self.assertEqual(len(chapters), 2)
         self.assertEqual(chapters[0], ("page_1", "Page 1"))
-        
+
         # MD
         parser_md = get_book_parser(self.sample_md_path)
         parser_md.process_content()  # Must process to get structure
@@ -191,7 +192,7 @@ class TestBookParser(unittest.TestCase):
         parser = get_book_parser(self.sample_md_path)
         parser.process_content()
         text = parser.get_formatted_text()
-        
+
         self.assertIn("<<CHAPTER_MARKER:Chapter 1>>", text)
         self.assertIn("Some text", text)
 
@@ -205,6 +206,7 @@ class TestBookParser(unittest.TestCase):
 
         md_parser = MarkdownParser(self.sample_md_path)
         self.assertEqual(md_parser.file_type, "markdown")
+
 
 if __name__ == "__main__":
     unittest.main()

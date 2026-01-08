@@ -37,8 +37,20 @@ def test_build_epub3_package_creates_expected_structure(tmp_path) -> None:
         },
     ]
     chunk_markers = [
-        {"id": "chap0000_p0000", "chapter_index": 0, "chunk_index": 0, "start": 0.0, "end": 1.2},
-        {"id": "chap0001_p0000", "chapter_index": 1, "chunk_index": 0, "start": 1.2, "end": 2.4},
+        {
+            "id": "chap0000_p0000",
+            "chapter_index": 0,
+            "chunk_index": 0,
+            "start": 0.0,
+            "end": 1.2,
+        },
+        {
+            "id": "chap0001_p0000",
+            "chapter_index": 1,
+            "chunk_index": 0,
+            "start": 1.2,
+            "end": 2.4,
+        },
     ]
     chapter_markers = [
         {"index": 1, "title": "Chapter 1", "start": 0.0, "end": 1.2},
@@ -76,7 +88,7 @@ def test_build_epub3_package_creates_expected_structure(tmp_path) -> None:
         chapter_doc = archive.read("OEBPS/text/chapter_0001.xhtml").decode("utf-8")
         assert "Hello world." in chapter_doc
         smil_doc = archive.read("OEBPS/smil/chapter_0001.smil").decode("utf-8")
-        assert "clipBegin=\"00:00:00.000\"" in smil_doc
+        assert 'clipBegin="00:00:00.000"' in smil_doc
         opf_doc = archive.read("OEBPS/content.opf").decode("utf-8")
         assert "media-overlay" in opf_doc
         assert "media:duration" in opf_doc
@@ -145,7 +157,13 @@ def test_epub3_preserves_original_whitespace(tmp_path) -> None:
     ]
 
     chunk_markers = [
-        {"id": chunk["id"], "chapter_index": 0, "chunk_index": chunk["chunk_index"], "start": None, "end": None}
+        {
+            "id": chunk["id"],
+            "chapter_index": 0,
+            "chunk_index": chunk["chunk_index"],
+            "start": None,
+            "end": None,
+        }
         for chunk in chunks
     ]
 
@@ -174,7 +192,9 @@ def test_epub3_preserves_original_whitespace(tmp_path) -> None:
     assert "Second line" in chunk_section
     assert "Third paragraph." in chunk_section
 
-    match = re.search(r"<pre class=\"chapter-original\"[^>]*>(.*?)</pre>", chapter_doc, re.DOTALL)
+    match = re.search(
+        r"<pre class=\"chapter-original\"[^>]*>(.*?)</pre>", chapter_doc, re.DOTALL
+    )
     assert match is not None
     original_text = html.unescape(match.group(1))
     assert "Second line\n\nThird paragraph." in original_text
@@ -219,7 +239,13 @@ def test_epub3_sentence_chunks_render_as_paragraphs(tmp_path) -> None:
     ]
 
     chunk_markers = [
-        {"id": chunk["id"], "chapter_index": 0, "chunk_index": chunk["chunk_index"], "start": None, "end": None}
+        {
+            "id": chunk["id"],
+            "chapter_index": 0,
+            "chunk_index": chunk["chunk_index"],
+            "start": None,
+            "end": None,
+        }
         for chunk in chunks
     ]
 
@@ -244,11 +270,11 @@ def test_epub3_sentence_chunks_render_as_paragraphs(tmp_path) -> None:
 
     assert '<div class="chunk"' not in chapter_doc
     assert chapter_doc.count('<p class="chunk-group"') == 2
-    assert 'First sentence.' in chapter_doc
-    assert 'Second sentence in same paragraph.' in chapter_doc
+    assert "First sentence." in chapter_doc
+    assert "Second sentence in same paragraph." in chapter_doc
 
     first_paragraph_start = chapter_doc.find('<p class="chunk-group"')
-    first_paragraph_end = chapter_doc.find('</p>', first_paragraph_start)
+    first_paragraph_end = chapter_doc.find("</p>", first_paragraph_start)
     first_paragraph = chapter_doc[first_paragraph_start:first_paragraph_end]
     assert "First sentence." in first_paragraph
     assert "Second sentence in same paragraph." in first_paragraph

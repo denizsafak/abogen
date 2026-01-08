@@ -47,7 +47,9 @@ def _resample_linear(audio: np.ndarray, src_rate: int, dst_rate: int) -> np.ndar
     return np.interp(x_new, x_old, audio).astype("float32", copy=False)
 
 
-def _split_text(text: str, *, split_pattern: Optional[str], max_chunk_length: int) -> list[str]:
+def _split_text(
+    text: str, *, split_pattern: Optional[str], max_chunk_length: int
+) -> list[str]:
     stripped = (text or "").strip()
     if not stripped:
         return []
@@ -81,13 +83,17 @@ def _split_text(text: str, *, split_pattern: Optional[str], max_chunk_length: in
     return result
 
 
-_UNSUPPORTED_CHARS_RE = re.compile(r"unsupported character\(s\):\s*(\[[^\]]*\])", re.IGNORECASE)
+_UNSUPPORTED_CHARS_RE = re.compile(
+    r"unsupported character\(s\):\s*(\[[^\]]*\])", re.IGNORECASE
+)
 
 
 def _parse_unsupported_characters(error: BaseException) -> list[str]:
     """Best-effort extraction of unsupported characters from SuperTonic errors."""
 
-    message = " ".join(str(part) for part in getattr(error, "args", ()) if part is not None) or str(error)
+    message = " ".join(
+        str(part) for part in getattr(error, "args", ()) if part is not None
+    ) or str(error)
     match = _UNSUPPORTED_CHARS_RE.search(message)
     if not match:
         return []
@@ -127,8 +133,9 @@ def _configure_supertonic_gpu() -> None:
     """Patch supertonic's config to enable GPU acceleration if available."""
     try:
         import onnxruntime as ort
+
         available = ort.get_available_providers()
-        
+
         # Use CUDA if available, skip TensorRT (requires extra libs not always present)
         # TensorrtExecutionProvider may be listed as available but fail at runtime
         # if TensorRT libraries (libnvinfer.so) are not installed
@@ -136,11 +143,12 @@ def _configure_supertonic_gpu() -> None:
         if "CUDAExecutionProvider" in available:
             providers.append("CUDAExecutionProvider")
         providers.append("CPUExecutionProvider")
-        
+
         # Patch supertonic's config and loader before TTS import
         # We must patch both because loader imports the value at module load time
         import supertonic.config as supertonic_config
         import supertonic.loader as supertonic_loader
+
         supertonic_config.DEFAULT_ONNX_PROVIDERS = providers
         supertonic_loader.DEFAULT_ONNX_PROVIDERS = providers
         logger.info("Supertonic ONNX providers configured: %s", providers)
@@ -191,7 +199,9 @@ class SupertonicPipeline:
         speed_value = max(0.7, min(2.0, speed_value))
 
         style = self._tts.get_voice_style(voice_name=voice_name)
-        chunks = _split_text(text, split_pattern=split_pattern, max_chunk_length=self.max_chunk_length)
+        chunks = _split_text(
+            text, split_pattern=split_pattern, max_chunk_length=self.max_chunk_length
+        )
         for chunk in chunks:
             chunk_to_speak = chunk
             removed: set[str] = set()
@@ -217,7 +227,9 @@ class SupertonicPipeline:
                         raise
 
                     removed.update(unsupported)
-                    sanitized = _remove_unsupported_characters(chunk_to_speak, unsupported).strip()
+                    sanitized = _remove_unsupported_characters(
+                        chunk_to_speak, unsupported
+                    ).strip()
 
                     # If we didn't change anything, don't loop forever.
                     if sanitized == chunk_to_speak.strip():

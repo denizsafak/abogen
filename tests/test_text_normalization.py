@@ -16,14 +16,22 @@ from abogen.normalization_settings import (
 from abogen.spacy_contraction_resolver import resolve_ambiguous_contractions
 
 
-SPACY_RESOLVER_AVAILABLE = bool(resolve_ambiguous_contractions("It's been a long time."))
+SPACY_RESOLVER_AVAILABLE = bool(
+    resolve_ambiguous_contractions("It's been a long time.")
+)
 
 
-def _normalize_text(text: str, *, normalization_overrides: dict[str, object] | None = None) -> str:
+def _normalize_text(
+    text: str, *, normalization_overrides: dict[str, object] | None = None
+) -> str:
     runtime_settings = get_runtime_settings()
     if normalization_overrides:
-        runtime_settings = apply_normalization_overrides(runtime_settings, normalization_overrides)
-    config = build_apostrophe_config(settings=runtime_settings, base=DEFAULT_APOSTROPHE_CONFIG)
+        runtime_settings = apply_normalization_overrides(
+            runtime_settings, normalization_overrides
+        )
+    config = build_apostrophe_config(
+        settings=runtime_settings, base=DEFAULT_APOSTROPHE_CONFIG
+    )
     return normalize_for_pipeline(text, config=config, settings=runtime_settings)
 
 
@@ -202,7 +210,9 @@ def test_contractions_can_be_kept_when_override_disabled() -> None:
 def test_sibilant_possessives_remain_when_marking_disabled() -> None:
     normalized = _normalize_text(
         "The boss's chair wobbled.",
-        normalization_overrides={"normalization_apostrophes_sibilant_possessives": False},
+        normalization_overrides={
+            "normalization_apostrophes_sibilant_possessives": False
+        },
     )
     assert "boss's" in normalized
     assert "boss iz" not in normalized.lower()
@@ -276,10 +286,13 @@ def test_spacy_disambiguates_she_would() -> None:
 
 @pytest.mark.skipif(not SPACY_RESOLVER_AVAILABLE, reason="spaCy model unavailable")
 def test_sample_sentence_handles_complex_contractions() -> None:
-    sample = "I've heard the captain'll arrive by dusk, but they'd said the same yesterday."
+    sample = (
+        "I've heard the captain'll arrive by dusk, but they'd said the same yesterday."
+    )
     normalized = _normalize_text(sample)
     assert (
-        "I have heard the captain will arrive by dusk, but they had said the same yesterday." == normalized
+        "I have heard the captain will arrive by dusk, but they had said the same yesterday."
+        == normalized
     )
 
 
@@ -316,8 +329,11 @@ def mock_settings():
         "normalization_footnotes": True,
         "normalization_numbers_year_style": "american",
     }
-    with patch("tests.test_text_normalization.get_runtime_settings", return_value=defaults):
+    with patch(
+        "tests.test_text_normalization.get_runtime_settings", return_value=defaults
+    ):
         yield
+
 
 def test_currency_magnitude():
     cases = [
@@ -331,13 +347,15 @@ def test_currency_magnitude():
         ("$2.50", "two dollars, fifty cents"),
         ("$100", "one hundred dollars"),
     ]
-    
+
     settings = {
         "normalization_numbers": True,
         "normalization_currency": True,
-        "normalization_apostrophe_mode": "spacy"
+        "normalization_apostrophe_mode": "spacy",
     }
-    
+
     for input_text, expected in cases:
         normalized = _normalize_text(input_text, normalization_overrides=settings)
-        assert expected.lower() in normalized.lower(), f"Failed for {input_text}: got '{normalized}'"
+        assert (
+            expected.lower() in normalized.lower()
+        ), f"Failed for {input_text}: got '{normalized}'"
