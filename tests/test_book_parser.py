@@ -175,10 +175,11 @@ class TestBookParser(unittest.TestCase):
         """Test get_chapters returns correct list for different parsers."""
         # PDF
         parser_pdf = get_book_parser(self.sample_pdf_path)
+        parser_pdf.process_content()
         chapters = parser_pdf.get_chapters()
         self.assertEqual(len(chapters), 2)
-        self.assertEqual(chapters[0], ("page_1", "Page 1"))
-
+        self.assertEqual(chapters[0], ("page_1", "Page 1 - Page 1 content"))
+        
         # MD
         parser_md = get_book_parser(self.sample_md_path)
         parser_md.process_content()  # Must process to get structure

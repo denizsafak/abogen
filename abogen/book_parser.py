@@ -110,41 +110,158 @@ class PdfParser(BaseBookParser):
             logging.error(f"Error loading PDF {self.book_path}: {e}")
             raise
 
+    def _extract_book_metadata(self):
+        # PDF metadata extraction can be added here if needed
+        # For now, base class metadata is empty dict
+        pass
+
     def process_content(self, replace_single_newlines=True):
         if not self.pdf_doc:
             self.load()
 
+        # 1. Extract text from all pages first
         for page_num in range(len(self.pdf_doc)):
             text = clean_text(self.pdf_doc[page_num].get_text())
-
+            
             # Clean up common PDF artifacts:
-            # - Remove bracketed numbers often used for citations [1]
             text = _BRACKETED_NUMBERS_PATTERN.sub("", text)
-            # - Remove standalone page numbers often found in headers/footers
             text = _STANDALONE_PAGE_NUMBERS_PATTERN.sub("", text)
-            # - Remove page numbers at end of lines
             text = _PAGE_NUMBERS_AT_END_PATTERN.sub("", text)
-            # - Remove page numbers with dashes - 4 -
             text = _PAGE_NUMBERS_WITH_DASH_PATTERN.sub("", text)
 
             page_id = f"page_{page_num + 1}"
             self.content_texts[page_id] = text
             self.content_lengths[page_id] = calculate_text_length(text)
 
+        # 2. Build Navigation Structure
+        toc = self.pdf_doc.get_toc()
+        
+        if not toc:
+            # Fallback: Flat list of pages if no TOC
+            self.processed_nav_structure = []
+            pages_node = {
+                "title": "Pages",
+                "src": None,
+                "children": [],
+                "has_content": False
+            }
+            # Add all pages as children
+            for page_num in range(len(self.pdf_doc)):
+               page_id = f"page_{page_num + 1}"
+               title = self._get_page_title(page_num, self.content_texts.get(page_id, ""))
+               pages_node["children"].append({
+                   "title": title,
+                   "src": page_id,
+                   "children": [],
+                   "has_content": True
+               })
+            self.processed_nav_structure.append(pages_node)
+        else:
+            self.processed_nav_structure = self._build_structure_from_toc(toc)
+
         return self.content_texts, self.content_lengths
 
-    def _extract_book_metadata(self):
-        # PDF metadata extraction can be added here if needed
-        # For now, base class metadata is empty dict
-        pass
+    def _get_page_title(self, page_num, text):
+        title = f"Page {page_num + 1}"
+        if text:
+            first_line = text.split("\n", 1)[0].strip()
+            if first_line and len(first_line) < 100:
+                title += f" - {first_line}"
+        return title
 
-    def get_chapters(self):
-        # PDF specific implementation because it doesn't use nav structure
-        chapters = []
-        if self.pdf_doc:
-            for i in range(len(self.pdf_doc)):
-                chapters.append((f"page_{i+1}", f"Page {i+1}"))
-        return chapters
+    def _build_structure_from_toc(self, toc):
+        # 1. Flatten TOC to easier list (page_num, title, level)
+        # fitz TOC is [[lvl, title, page, dest], ...]
+        
+        bookmarks = []
+        for entry in toc:
+            lvl, title, page = entry[:3]
+            if isinstance(page, int):
+                page_idx = page - 1
+            else:
+                 # Handle potential complex destinations if necessary, but usually simple int
+                 # PyMuPDF docs say int.
+                 page_idx = -1 
+            
+            if page_idx >= 0:
+                bookmarks.append({"level": lvl, "title": title, "page": page_idx})
+
+        
+        root_children = []
+        stack = [] # Stack of (level, list_to_append_to)
+        stack.append((0, root_children)) 
+
+        # Step 1: Build the Skeleton Tree from TOC
+        # And keep a flat list of these nodes to associate with pages.
+        
+        processed_nodes = [] # List of (page_idx, node_dict)
+        
+        for entry in bookmarks:
+            node = {
+                "title": entry["title"],
+                "src": f"page_{entry['page'] + 1}",
+                "children": [],
+                "has_content": True
+            }
+            
+            # Find parent
+            level = entry["level"]
+            
+            # Adjust stack
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+            
+            parent_list = stack[-1][1]
+            parent_list.append(node)
+            
+            stack.append((level, node["children"]))
+            processed_nodes.append((entry["page"], node))
+            
+        # Step 3: Add gap pages.
+        # Sort processed_nodes by page index to find ranges.
+        sorted_bookmarks = sorted(processed_nodes, key=lambda x: x[0])
+        
+        # Set of pages that are "bookmarks"
+        bookmarked_pages = set(p for p, n in sorted_bookmarks)
+        
+        current_node = None
+        # We need a way to look up bookmarks starting at p
+        bookmarks_by_page = {}
+        for p, node in processed_nodes:
+            if p not in bookmarks_by_page:
+                bookmarks_by_page[p] = []
+            bookmarks_by_page[p].append(node)
+
+        
+        # Let's iterate.
+        for page_num in range(len(self.pdf_doc)):
+            page_id = f"page_{page_num + 1}"
+            
+            # Check if this page STARTS bookmarks
+            if page_num in bookmarks_by_page:
+                
+                starts = bookmarks_by_page[page_num]
+                current_node = starts[-1] 
+                
+                continue
+
+            # If page is NOT a bookmark, it's a "gap page".
+            # Add as child to current_node
+            title = self._get_page_title(page_num, self.content_texts.get(page_id, ""))
+            page_node = {
+                "title": title,
+                "src": page_id,
+                "children": [],
+                "has_content": True
+            }
+            
+            if current_node:
+                current_node["children"].append(page_node)
+            else:
+                # No preceding bookmark. Add to root.
+                root_children.append(page_node)
+                
+        return root_children
 
 
 class MarkdownParser(BaseBookParser):
