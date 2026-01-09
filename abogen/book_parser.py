@@ -607,8 +607,8 @@ class EpubParser(BaseBookParser):
 
         # Second fallback: if we have a span but title is still empty, try span text again
         # (covered by logic above mostly, but mirroring original logic's intense fallback)
-        if (not title.strip() or title == "Untitled Section") and span_text:
-            title = span_text.get_text(strip=True) or title
+        if (not title.strip() or title == "Untitled Section") and span_element:
+            title = span_element.get_text(strip=True) or title
 
         return title
 
