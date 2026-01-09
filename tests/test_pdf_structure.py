@@ -36,30 +36,30 @@ class TestPdfStructure(unittest.TestCase):
         doc.save(self.pdf_path)
         doc.close()
 
-        parser = PdfParser(self.pdf_path)
-        parser.process_content()
-        
-        nav = parser.processed_nav_structure
-        
-        # Expect 2 top level items
-        self.assertEqual(len(nav), 2)
-        self.assertEqual(nav[0]['title'], "Chap 1")
-        self.assertEqual(nav[0]['src'], "page_1")
-        self.assertEqual(nav[1]['title'], "Chap 2")
-        self.assertEqual(nav[1]['src'], "page_3")
-        
-        # Check children of Chap 1 (Page 2 should be there)
-        children_c1 = nav[0]['children']
-        self.assertEqual(len(children_c1), 1)
-        # The child should likely be titled "Page 2 - Page 2 Content" or similar
-        self.assertIn("Page 2", children_c1[0]['title'])
-        self.assertEqual(children_c1[0]['src'], "page_2")
+        with PdfParser(self.pdf_path) as parser:
+            parser.process_content()
+            
+            nav = parser.processed_nav_structure
+            
+            # Expect 2 top level items
+            self.assertEqual(len(nav), 2)
+            self.assertEqual(nav[0]['title'], "Chap 1")
+            self.assertEqual(nav[0]['src'], "page_1")
+            self.assertEqual(nav[1]['title'], "Chap 2")
+            self.assertEqual(nav[1]['src'], "page_3")
+            
+            # Check children of Chap 1 (Page 2 should be there)
+            children_c1 = nav[0]['children']
+            self.assertEqual(len(children_c1), 1)
+            # The child should likely be titled "Page 2 - Page 2 Content" or similar
+            self.assertIn("Page 2", children_c1[0]['title'])
+            self.assertEqual(children_c1[0]['src'], "page_2")
 
-        # Check children of Chap 2 (Page 4 should be there)
-        children_c2 = nav[1]['children']
-        self.assertEqual(len(children_c2), 1)
-        self.assertIn("Page 4", children_c2[0]['title'])
-        self.assertEqual(children_c2[0]['src'], "page_4")
+            # Check children of Chap 2 (Page 4 should be there)
+            children_c2 = nav[1]['children']
+            self.assertEqual(len(children_c2), 1)
+            self.assertIn("Page 4", children_c2[0]['title'])
+            self.assertEqual(children_c2[0]['src'], "page_4")
 
     def test_pdf_structure_without_toc(self):
         # Create PDF without TOC
@@ -71,20 +71,20 @@ class TestPdfStructure(unittest.TestCase):
         doc.save(self.pdf_path)
         doc.close()
 
-        parser = PdfParser(self.pdf_path)
-        parser.process_content()
-        
-        nav = parser.processed_nav_structure
-        
-        # Expect 1 top level item (Pages)
-        self.assertEqual(len(nav), 1)
-        self.assertEqual(nav[0]['title'], "Pages")
-        
-        # Check children (all pages)
-        children = nav[0]['children']
-        self.assertEqual(len(children), 2)
-        self.assertIn("Page 1", children[0]['title'])
-        self.assertIn("Page 2", children[1]['title'])
+        with PdfParser(self.pdf_path) as parser:
+            parser.process_content()
+            
+            nav = parser.processed_nav_structure
+            
+            # Expect 1 top level item (Pages)
+            self.assertEqual(len(nav), 1)
+            self.assertEqual(nav[0]['title'], "Pages")
+            
+            # Check children (all pages)
+            children = nav[0]['children']
+            self.assertEqual(len(children), 2)
+            self.assertIn("Page 1", children[0]['title'])
+            self.assertIn("Page 2", children[1]['title'])
 
     def test_pdf_structure_nested_toc(self):
         # Create PDF
@@ -101,17 +101,17 @@ class TestPdfStructure(unittest.TestCase):
         doc.save(self.pdf_path)
         doc.close()
 
-        parser = PdfParser(self.pdf_path)
-        parser.process_content()
-        nav = parser.processed_nav_structure
+        with PdfParser(self.pdf_path) as parser:
+            parser.process_content()
+            nav = parser.processed_nav_structure
 
-        self.assertEqual(len(nav), 2) # Chap 1, Chap 2
-        self.assertEqual(nav[0]['title'], "Chap 1")
-        
-        # Chap 1 should have child Sec 1.1
-        self.assertEqual(len(nav[0]['children']), 1)
-        self.assertEqual(nav[0]['children'][0]['title'], "Sec 1.1")
-        self.assertEqual(nav[0]['children'][0]['src'], "page_2")
+            self.assertEqual(len(nav), 2) # Chap 1, Chap 2
+            self.assertEqual(nav[0]['title'], "Chap 1")
+            
+            # Chap 1 should have child Sec 1.1
+            self.assertEqual(len(nav[0]['children']), 1)
+            self.assertEqual(nav[0]['children'][0]['title'], "Sec 1.1")
+            self.assertEqual(nav[0]['children'][0]['src'], "page_2")
 
 if __name__ == "__main__":
     unittest.main()

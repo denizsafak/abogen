@@ -93,6 +93,12 @@ include = [
 path = "abogen/VERSION"
 pattern = "^(?P<version>.+)$"
 
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:builtin type .* has no __module__ attribute:DeprecationWarning",
+    "ignore:Importing 'parser.split_arg_string' is deprecated:DeprecationWarning"
+]
+
 # --- OPTIONAL DEPENDENCIES ---
 
 [project.optional-dependencies]
@@ -105,7 +111,7 @@ cuda130 = ["torch"]
 # AMD GPU (Linux) (ROCm 6.4)             # uv tool install abogen[rocm]
 rocm = ["torch", "pytorch-triton-rocm"]
 # Development dependencies               # uv tool install abogen[dev]
-dev = ["build"]
+dev = ["build", "pytest"]
 
 # --- KOKORO CONFIGURATION (for macOS) ---
 

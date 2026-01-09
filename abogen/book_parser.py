@@ -43,6 +43,18 @@ class BaseBookParser(ABC):
         """Load the book file."""
         pass
 
+    def close(self):
+        """Close any open file handles."""
+        pass
+
+    def __enter__(self):
+        # Already loaded in __init__, or lazily.
+        # Just ensure we have resources if needed, or do nothing.
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
     @abstractmethod
     def process_content(self, replace_single_newlines=True):
         """Process the book content to extract text and structure."""
@@ -109,6 +121,11 @@ class PdfParser(BaseBookParser):
         except Exception as e:
             logging.error(f"Error loading PDF {self.book_path}: {e}")
             raise
+
+    def close(self):
+        if self.pdf_doc:
+            self.pdf_doc.close()
+            self.pdf_doc = None
 
     def _extract_book_metadata(self):
         # PDF metadata extraction can be added here if needed

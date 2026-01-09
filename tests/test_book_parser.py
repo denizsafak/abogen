@@ -106,26 +106,32 @@ class TestBookParser(unittest.TestCase):
     def test_pdf_parser_content(self):
         """Test PdfParser content extraction."""
         parser = get_book_parser(self.sample_pdf_path)
-        parser.process_content()
+        try:
+            parser.process_content()
 
-        self.assertIn("page_1", parser.content_texts)
-        self.assertIn("page_2", parser.content_texts)
+            self.assertIn("page_1", parser.content_texts)
+            self.assertIn("page_2", parser.content_texts)
 
-        text1 = parser.content_texts["page_1"]
-        self.assertIn("Page 1 content", text1)
-        self.assertNotIn("[12]", text1)
+            text1 = parser.content_texts["page_1"]
+            self.assertIn("Page 1 content", text1)
+            self.assertNotIn("[12]", text1)
+        finally:
+            parser.close()
 
     def test_markdown_parser_content(self):
         """Test MarkdownParser splitting logic."""
         parser = get_book_parser(self.sample_md_path)
-        parser.process_content()
+        try:
+            parser.process_content()
 
-        # Should have Chapter 1 and Chapter 2 keys (actual keys depend on ID generation)
-        # Markdown extensions might slugify IDs: "chapter-1"
-        self.assertIn("chapter-1", parser.content_texts)
-        self.assertIn("chapter-2", parser.content_texts)
+            # Should have Chapter 1 and Chapter 2 keys (actual keys depend on ID generation)
+            # Markdown extensions might slugify IDs: "chapter-1"
+            self.assertIn("chapter-1", parser.content_texts)
+            self.assertIn("chapter-2", parser.content_texts)
 
-        self.assertIn("Some text", parser.content_texts["chapter-1"])
+            self.assertIn("Some text", parser.content_texts["chapter-1"])
+        finally:
+            parser.close()
 
     def test_epub_parser_content(self):
         """Test EpubParser processing."""
