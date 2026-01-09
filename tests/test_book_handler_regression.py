@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QApplication
 # Ensure we can import the module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from abogen.book_handler import HandlerDialog
+from abogen.pyqt.book_handler import HandlerDialog
 from ebooklib import epub
 
 # We need a QApplication instance for QWriter/QDialog
