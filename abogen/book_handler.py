@@ -574,6 +574,12 @@ class HandlerDialog(QDialog):
                 for tag in soup.find_all(["sup", "sub"]):
                     tag.decompose()
 
+                # Add line breaks after block-level elements to ensure pauses in speech
+                for tag in soup.find_all(
+                    ["p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote"]
+                ):
+                    tag.append("\n\n")
+
                 text = clean_text(soup.get_text()).strip()
                 if text:
                     self.content_texts[doc_href] = text
@@ -877,8 +883,10 @@ class HandlerDialog(QDialog):
                 slice_html = current_doc_html
             if slice_html.strip():
                 slice_soup = BeautifulSoup(slice_html, "html.parser")
-                # Add line breaks after paragraphs and divs
-                for tag in slice_soup.find_all(["p", "div"]):
+                # Add line breaks after block-level elements to ensure pauses in speech
+                for tag in slice_soup.find_all(
+                    ["p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote"]
+                ):
                     tag.append("\n\n")
 
                 # Handle ordered lists by prepending numbers to list items
