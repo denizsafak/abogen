@@ -1,4 +1,6 @@
 # Unreleased
+
+# 1.3.0
 - Added an EPUB 3 packaging pipeline that builds media-overlay EPUBs from generated audio and chunk metadata.
 - Persisted chunk timing metadata in job artifacts and exercised the exporter with automated tests.
 - Added Flask-based Web UI (`abogen-web`) for Docker and headless server deployments.
