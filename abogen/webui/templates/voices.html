@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}abogen · Speaker Studio{% endblock %}
+
+{% block content %}
+<section class="card voice-mixer">
+  <div class="voice-mixer__header">
+    <div>
+      <h1 class="card__title">Speaker Studio</h1>
+      <p class="tag">Create and manage speakers for Kokoro and Supertonic.</p>
+    </div>
+    <div class="voice-mixer__header-actions">
+      <button type="button" class="button button--ghost" data-action="new-profile">New speaker</button>
+      <button type="button" class="button button--ghost" data-action="import-profiles">Import</button>
+      <button type="button" class="button button--ghost" data-action="export-profiles">Export</button>
+    </div>
+  </div>
+  <div id="voice-mixer-app" class="voice-mixer__layout" data-state="loading">
+    <aside class="voice-mixer__profiles" data-role="profile-list">
+      <p class="tag">Loading profiles…</p>
+    </aside>
+    <section class="voice-mixer__editor" data-role="editor">
+      <noscript>
+        <p class="tag">JavaScript is required for the studio. Please enable it to edit speakers.</p>
+      </noscript>
+      <form id="voice-profile-form" class="voice-editor" autocomplete="off">
+        <div class="voice-status" data-role="status"></div>
+        <div class="voice-editor__meta">
+          <div class="voice-editor__identity">
+            <div class="field voice-editor__name-field">
+              <label for="profile-name">Speaker name</label>
+              <input id="profile-name" name="name" type="text" placeholder="Narrator" required>
+            </div>
+            <div class="voice-editor__toolbar" role="group" aria-label="Profile actions">
+              <button type="submit" class="icon-button icon-button--primary" data-role="save-profile" disabled aria-label="Save profile" title="Save profile">
+                <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+                  <path d="M5 3h11l5 5v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm7 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-5 11h10v-5H7v5z" fill="currentColor" />
+                </svg>
+              </button>
+              <button type="button" class="icon-button" data-role="duplicate-profile" aria-label="Duplicate profile" title="Duplicate profile" disabled>
+                <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+                  <path d="M8 4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2V4zm-3 6a2 2 0 0 1 2-2h1v8a3 3 0 0 0 3 3h8v1a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z" fill="currentColor" />
+                </svg>
+              </button>
+              <button type="button" class="icon-button icon-button--danger" data-role="delete-profile" aria-label="Delete profile" title="Delete profile" disabled>
+                <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+                  <path d="M9 3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1h5v2H4V3h5zm1 5h2v10h-2V8zm4 0h2v10h-2V8zM6 8h2v10H6V8z" fill="currentColor" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="field voice-editor__provider">
+            <label for="profile-provider">TTS provider</label>
+            <select id="profile-provider" name="provider" data-role="provider">
+              <option value="kokoro">Kokoro</option>
+              <option value="supertonic">Supertonic</option>
+            </select>
+          </div>
+          <div class="field voice-editor__language">
+            <label for="profile-language">Language</label>
+            <select id="profile-language" name="language">
+              {% for key, label in options.languages.items() %}
+              <option value="{{ key }}">{{ label }} ({{ key|upper }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="voice-editor__provider-panel" data-role="supertonic-panel" hidden>
+            <div class="field">
+              <label for="supertonic-voice">Supertonic voice</label>
+              <select id="supertonic-voice" data-role="supertonic-voice">
+                {% for voice in ['M1','M2','M3','M4','M5','F1','F2','F3','F4','F5'] %}
+                <option value="{{ voice }}">{{ voice }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field field--slider">
+              <label for="supertonic-quality">Supertonic quality (total steps) <span class="tag" data-role="supertonic-steps-display">5</span></label>
+              <input type="range" id="supertonic-quality" data-role="supertonic-steps" min="2" max="15" step="1" value="5">
+              <p class="hint">2 = fastest/lowest quality, 15 = slowest/highest quality.</p>
+            </div>
+            <div class="field field--slider">
+              <label for="supertonic-speaker-speed">Supertonic speed <span class="tag" data-role="supertonic-speed-display">1.00×</span></label>
+              <input type="range" id="supertonic-speaker-speed" data-role="supertonic-speed" min="0.7" max="2.0" step="0.05" value="1.0">
+            </div>
+            <p class="hint">Supertonic voice mixing is not implemented yet. Stub target: <a href="https://github.com/Topping1/Supertonic-Voice-Mixer" target="_blank" rel="noreferrer">Supertonic-Voice-Mixer</a>.</p>
+          </div>
+        </div>
+        <div class="voice-editor__summary">
+          <span data-role="profile-summary">Select or create a profile to begin.</span>
+          <span class="tag" data-role="mix-total">Total weight: 0.00</span>
+        </div>
+        <div class="voice-editor__canvas" data-role="kokoro-mixer">
+          <section class="voice-available">
+            <header class="voice-available__header">
+              <div class="voice-available__title">
+                <h2>Available voices</h2>
+                <p class="tag">Drag into the mixer or click Add.</p>
+              </div>
+              <div class="voice-filter">
+                <label class="voice-filter__label" for="voice-language-filter">Language</label>
+                <div class="voice-filter__controls">
+                  <select id="voice-language-filter" data-role="voice-filter">
+                    <option value="">All languages</option>
+                    {% for key, label in options.languages.items() %}
+                    <option value="{{ key }}">{{ label }} ({{ key|upper }})</option>
+                    {% endfor %}
+                  </select>
+                  <div class="voice-gender-filter" data-role="gender-filter" aria-label="Filter by gender">
+                    <button type="button" class="voice-gender-filter__button" data-value="f" aria-pressed="false" title="Show female voices">♀</button>
+                    <button type="button" class="voice-gender-filter__button" data-value="m" aria-pressed="false" title="Show male voices">♂</button>
+                  </div>
+                </div>
+              </div>
+            </header>
+            <div class="voice-available__list" data-role="available-voices"></div>
+          </section>
+          <section class="voice-mix">
+            <header class="voice-mix__header">
+              <h2>Your mix</h2>
+              <p class="tag">Drop voices below to set levels.</p>
+            </header>
+            <div class="voice-mix__dropzone" data-role="dropzone">
+              <p class="voice-mix__empty" data-role="mix-empty">Drag voices here or tap “Add”.</p>
+              <div class="voice-mix__list" data-role="selected-voices"></div>
+            </div>
+          </section>
+        </div>
+        <div class="voice-editor__actions">
+          <div class="voice-preview">
+            <div class="field">
+              <label for="preview-text">Preview text</label>
+              <textarea id="preview-text" rows="3" data-role="preview-text" placeholder="Paste a short line to audition your mix."></textarea>
+            </div>
+            <div class="field field--slider">
+              <label for="preview-speed">Preview speed <span class="tag" data-role="preview-speed-display">1.00×</span></label>
+              <input id="preview-speed" type="range" min="0.7" max="2.0" step="0.05" value="1.0" data-role="preview-speed">
+            </div>
+            <div class="voice-preview__controls">
+              <button type="button" class="button" data-role="preview-button">Preview speaker</button>
+              <button type="button" class="button button--ghost" data-role="load-sample">Use sample text</button>
+            </div>
+            <audio data-role="preview-audio" controls preload="none"></audio>
+          </div>
+        </div>
+      </form>
+    </section>
+  </div>
+  <input id="voice-import-input" type="file" accept="application/json" hidden>
+
+  <div class="modal" data-role="provider-picker-modal" hidden>
+    <div class="modal__overlay" data-role="provider-picker-overlay" tabindex="-1"></div>
+    <div class="modal__content card card--modal" role="dialog" aria-modal="true" aria-labelledby="provider-picker-title">
+      <header class="modal__header">
+        <p class="modal__eyebrow">Speaker Studio</p>
+        <h2 class="modal__title" id="provider-picker-title">Choose a TTS provider</h2>
+        <button type="button" class="button button--ghost button--small" data-role="provider-picker-close" aria-label="Close provider picker">Close</button>
+      </header>
+      <div class="modal__body">
+        <p class="hint">Select which text-to-speech provider this speaker will use. You can create separate speakers per provider.</p>
+        <div class="field field--choices" data-role="provider-picker-options"></div>
+      </div>
+      <footer class="modal__footer">
+        <button type="button" class="button button--ghost" data-role="provider-picker-cancel">Cancel</button>
+        <button type="button" class="button" data-role="provider-picker-confirm">Continue</button>
+      </footer>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+  <script id="voice-mixer-options" type="application/json">{{ options | tojson | safe }}</script>
+  <script>
+    window.ABOGEN_VOICE_MIXER_DATA = JSON.parse(document.getElementById('voice-mixer-options').textContent);
+  </script>
+  <script type="module" src="{{ url_for('static', filename='voices.js') }}"></script>
+{% endblock %}

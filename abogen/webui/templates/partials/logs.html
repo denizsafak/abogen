@@ -1,0 +1,21 @@
+{% set is_static = static_view if static_view is defined and static_view else False %}
+<div class="card__title-row">
+  <div class="card__title">Live log</div>
+  {% if not is_static %}
+    <a class="button button--ghost button--small" href="{{ url_for('jobs.job_logs', job_id=job.id) }}" target="_blank" rel="noopener">Open static view</a>
+  {% else %}
+    <a class="button button--ghost button--small" href="{{ url_for('jobs.job_detail', job_id=job.id) }}">Back to job</a>
+  {% endif %}
+</div>
+{% if job.logs %}
+  <ul class="log-list">
+  {% for entry in job.logs|reverse %}
+    <li class="log-item log-item--{{ entry.level }}">
+      <small>{{ entry.timestamp|datetimeformat('%H:%M:%S') }}</small>
+      <div>{{ entry.message }}</div>
+    </li>
+  {% endfor %}
+  </ul>
+{% else %}
+  <p>No log entries yet. Check back soon!</p>
+{% endif %}

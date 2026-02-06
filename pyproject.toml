@@ -14,20 +14,29 @@ requires-python = ">=3.10, <3.13"
 keywords = ["audiobook", "epub", "pdf", "text-to-speech", "subtitle", "tts", "kokoro", "accessibility", "book-converter", "voice-synthesis", "multilingual", "chapter-management", "subtitles", "content-creation", "media-generation"]
 dependencies = [
     "pip",
-    "PyQt6>=6.10.0",
     "kokoro>=0.9.4",
     "misaki[zh]>=0.9.4",
+    "supertonic>=0.1.0",
     "ebooklib>=0.19",
     "beautifulsoup4>=4.13.4",
+    "spacy>=3.8.7,<4.0",
+    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
     "PyMuPDF>=1.25.5",
     "platformdirs>=4.3.7",
     "soundfile>=0.13.1",
+    "mutagen>=1.47.0",
     "pygame>=2.6.1",
     "charset_normalizer>=3.4.1",
     "chardet>=5.2.0",
+    "python-dotenv>=1.0.1",
     "static_ffmpeg>=2.13",
     "Markdown>=3.9",
-    "spacy>=3.8.7"
+    "Flask>=3.0.3",
+    "numpy>=1.24.0",
+    "gpustat>=1.1.1",
+    "num2words>=0.5.13",
+    "httpx>=0.27.0",
+    "PyQt6>=6.5.0"
 ]
 
 classifiers = [
@@ -50,11 +59,17 @@ Documentation = "https://github.com/denizsafak/abogen"
 Repository = "https://github.com/denizsafak/abogen"
 Issues = "https://github.com/denizsafak/abogen/issues"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
+
 [project.gui-scripts]
-abogen = "abogen.main:main"
+abogen = "abogen.pyqt.main:main"
 
 [project.scripts]
-abogen-cli = "abogen.main:main"
+abogen-cli = "abogen.webui.app:main"
+abogen-web = "abogen.webui.app:main"
+abogen-pyqt = "abogen.pyqt.main:main"
 
 [tool.hatch.build.targets.sdist]
 exclude = [
@@ -68,9 +83,21 @@ exclude = [
 [tool.hatch.build.targets.wheel]
 packages = ["abogen"]
 
+[tool.hatch.build]
+include = [
+    "abogen/webui/templates/**",
+    "abogen/webui/static/**",
+]
+
 [tool.hatch.version]
 path = "abogen/VERSION"
 pattern = "^(?P<version>.+)$"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:builtin type .* has no __module__ attribute:DeprecationWarning",
+    "ignore:Importing 'parser.split_arg_string' is deprecated:DeprecationWarning"
+]
 
 # --- OPTIONAL DEPENDENCIES ---
 
@@ -84,7 +111,7 @@ cuda130 = ["torch"]
 # AMD GPU (Linux) (ROCm 6.4)             # uv tool install abogen[rocm]
 rocm = ["torch", "pytorch-triton-rocm"]
 # Development dependencies               # uv tool install abogen[dev]
-dev = ["build"]
+dev = ["build", "pytest"]
 
 # --- KOKORO CONFIGURATION (for macOS) ---
 

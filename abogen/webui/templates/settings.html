@@ -1,0 +1,646 @@
+{% extends "base.html" %}
+
+{% block title %}abogen · Settings{% endblock %}
+
+{% block content %}
+<section class="card settings">
+  <h1 class="card__title">Application Settings</h1>
+  <p class="tag">Settings apply to new jobs you queue from the dashboard.</p>
+
+  {% if saved %}
+  <div class="alert alert--success">Settings saved successfully.</div>
+  {% endif %}
+
+  {% with messages = get_flashed_messages(with_categories=True) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert {% if category == 'error' %}alert--error{% else %}alert--success{% endif %}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+  {% endwith %}
+
+  <div class="settings-layout">
+    <nav class="settings-nav" aria-label="Settings sections">
+      <button type="button" class="settings-nav__item is-active" data-section="narration">Narration</button>
+      <button type="button" class="settings-nav__item" data-section="audio">Audio &amp; Delivery</button>
+      <button type="button" class="settings-nav__item" data-section="subtitles">Subtitles &amp; Text</button>
+      <button type="button" class="settings-nav__item" data-section="performance">Performance</button>
+      <button type="button" class="settings-nav__item{% if not llm_ready %} is-disabled{% endif %}" data-section="llm">LLM</button>
+      <button type="button" class="settings-nav__item" data-section="normalization">Text Normalization</button>
+      <button type="button" class="settings-nav__item" data-section="integrations">Integrations</button>
+      <button type="button" class="settings-nav__item" data-section="debug">Debug</button>
+    </nav>
+    <form action="{{ url_for('settings.update_settings') }}" method="post" class="settings__form">
+      <div class="settings-panels">
+        <section class="settings-panel is-active" data-section="narration">
+          <fieldset class="settings__section">
+            <legend>Narration Defaults</legend>
+            <div class="field">
+              <label for="default_speaker">Default Speaker</label>
+              <select id="default_speaker" name="default_speaker">
+                <option value="" {% if not settings.default_speaker %}selected{% endif %}>Use fallback voice</option>
+                {% if options.voice_profile_options %}
+                  {% for profile in options.voice_profile_options %}
+                    {% set profile_value = 'speaker:' ~ profile.name %}
+                    <option value="{{ profile_value }}" {% if settings.default_speaker == profile_value %}selected{% endif %}>{{ profile.name }}{% if profile.provider %} · {{ profile.provider|capitalize }}{% endif %}{% if profile.language %} · {{ profile.language|upper }}{% endif %}</option>
+                  {% endfor %}
+                {% endif %}
+                {% set current_default = settings.default_speaker %}
+                {% if current_default %}
+                  {% set known_default = namespace(value=False) %}
+                  {% for profile in options.voice_profile_options %}
+                    {% if current_default == 'speaker:' ~ profile.name or current_default == 'profile:' ~ profile.name %}
+                      {% set known_default.value = True %}
+                    {% endif %}
+                  {% endfor %}
+                  {% if not known_default.value %}
+                    <option value="{{ current_default }}" selected>{{ current_default }}</option>
+                  {% endif %}
+                {% endif %}
+              </select>
+              <p class="hint">Pick a saved speaker from Speaker Studio to use by default for new jobs.</p>
+            </div>
+
+            <div class="field field--wide">
+              <p class="tag">Kokoro settings</p>
+            </div>
+            <div class="field">
+              <label for="default_voice">Fallback Kokoro Voice</label>
+              <select id="default_voice" name="default_voice">
+                <optgroup label="Standard voices">
+                  {% for voice in options.voices %}
+                  <option value="{{ voice }}" {% if settings.default_voice == voice %}selected{% endif %}>{{ voice }}</option>
+                  {% endfor %}
+                </optgroup>
+                {% if options.voice_profile_options %}
+                <optgroup label="Saved speakers">
+                  {% for profile in options.voice_profile_options %}
+                  {% set profile_value = 'speaker:' ~ profile.name %}
+                  <option value="{{ profile_value }}" {% if settings.default_voice == profile_value %}selected{% endif %}>{{ profile.name }}{% if profile.language %} · {{ profile.language|upper }}{% endif %}</option>
+                  {% endfor %}
+                </optgroup>
+                {% endif %}
+                {% set current_default = settings.default_voice %}
+                {% if current_default %}
+                {% set known_default = namespace(value=False) %}
+                {% if current_default in options.voices %}
+                  {% set known_default.value = True %}
+                {% else %}
+                  {% for profile in options.voice_profile_options %}
+                    {% if current_default == 'profile:' ~ profile.name or current_default == 'speaker:' ~ profile.name %}
+                      {% set known_default.value = True %}
+                    {% endif %}
+                  {% endfor %}
+                {% endif %}
+                {% if not known_default.value %}
+                  <option value="{{ current_default }}" selected>{{ current_default }}</option>
+                {% endif %}
+                {% endif %}
+              </select>
+              <p class="hint">Used when no default speaker is selected, and as a fallback when speaker analysis cannot resolve a speaker.</p>
+            </div>
+
+            <div class="field field--wide">
+              <p class="tag">Supertonic settings</p>
+              <p class="hint">These defaults apply when a Supertonic speaker does not override them.</p>
+            </div>
+            <div class="field">
+              <label for="supertonic_total_steps">Supertonic Quality (total steps)</label>
+              <input type="number" id="supertonic_total_steps" name="supertonic_total_steps" min="2" max="15" value="{{ settings.supertonic_total_steps }}">
+              <p class="hint">2 = fastest/lowest quality, 15 = slowest/highest quality.</p>
+            </div>
+            <div class="field">
+              <label for="supertonic_speed">Supertonic Speed</label>
+              <input type="number" id="supertonic_speed" name="supertonic_speed" min="0.7" max="2.0" step="0.05" value="{{ '%.2f'|format(settings.supertonic_speed) }}">
+            </div>
+            <div class="field">
+              <label for="chunk_level_default">Chunk Granularity</label>
+              <select id="chunk_level_default" name="chunk_level">
+                {% for option in options.chunk_levels %}
+                <option value="{{ option.value }}" {% if settings.chunk_level == option.value %}selected{% endif %}>{{ option.label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label for="speaker_analysis_threshold">Speaker Analysis Minimum Mentions</label>
+              <input type="number" min="1" max="25" id="speaker_analysis_threshold" name="speaker_analysis_threshold" value="{{ settings.speaker_analysis_threshold }}">
+              <p class="hint">Speakers detected fewer times fall back to the narrator voice.</p>
+            </div>
+            <div class="field field--wide">
+              <label for="speaker_pronunciation_sentence">Speaker Pronunciation Preview</label>
+              <input type="text" id="speaker_pronunciation_sentence" name="speaker_pronunciation_sentence" value="{{ settings.speaker_pronunciation_sentence }}" placeholder="This is {{ '{{name}}' }} speaking.">
+              <p class="hint">Include <code>{{ '{{name}}' }}</code> where the speaker name should be inserted.</p>
+            </div>
+            <div class="field field--stack">
+              <label class="toggle-pill">
+                <input type="checkbox" name="enable_entity_recognition" value="true" {% if settings.enable_entity_recognition %}checked{% endif %}>
+                <span>Automatically detect entities for new jobs</span>
+              </label>
+              <p class="hint">Disable if you prefer to skip entity extraction in the job wizard.</p>
+            </div>
+            <div class="field field--wide">
+              <label for="speaker_random_languages">Randomizer Languages</label>
+              {% set selected_languages = settings.speaker_random_languages or [] %}
+              <select id="speaker_random_languages" name="speaker_random_languages" multiple size="6">
+                {% for code, label in options.languages.items() %}
+                <option value="{{ code }}" {% if code in selected_languages %}selected{% endif %}>{{ label }} ({{ code|upper }})</option>
+                {% endfor %}
+              </select>
+              <p class="hint">Limits random voice selection for speakers marked as random. Leave empty to allow any language.</p>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="settings-panel" data-section="audio">
+          <fieldset class="settings__section">
+            <legend>Audio &amp; Delivery</legend>
+            <div class="field">
+              <label for="output_format">Audio Format</label>
+              <select id="output_format" name="output_format">
+                {% for fmt in options.output_formats %}
+                <option value="{{ fmt }}" {% if settings.output_format == fmt %}selected{% endif %}>{{ fmt }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label for="save_mode">Save Location</label>
+              <select id="save_mode" name="save_mode">
+                {% for location in save_locations %}
+                <option value="{{ location.value }}" {% if settings.save_mode == location.value %}selected{% endif %}>{{ location.label }}</option>
+                {% endfor %}
+              </select>
+              <p class="tag">Default output: <code>{{ default_output_dir }}</code></p>
+            </div>
+            <div class="field">
+              <label for="separate_chapters_format">Separate Chapter Format</label>
+              <select id="separate_chapters_format" name="separate_chapters_format">
+                {% for fmt in options.separate_formats %}
+                <option value="{{ fmt }}" {% if settings.separate_chapters_format == fmt %}selected{% endif %}>{{ fmt|upper }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field field--choices">
+              <label class="toggle-pill">
+                <input type="checkbox" name="save_chapters_separately" value="true" {% if settings.save_chapters_separately %}checked{% endif %}>
+                <span>Save Each Chapter Separately</span>
+              </label>
+              <label class="toggle-pill">
+                <input type="checkbox" name="merge_chapters_at_end" value="true" {% if settings.merge_chapters_at_end %}checked{% endif %}>
+                <span>Also Create Merged Audiobook</span>
+              </label>
+              <label class="toggle-pill">
+                <input type="checkbox" name="save_as_project" value="true" {% if settings.save_as_project %}checked{% endif %}>
+                <span>Save as Project With Metadata</span>
+              </label>
+            </div>
+            <div class="field">
+              <label for="silence_between_chapters">Silence Between Chapters (Seconds)</label>
+              <input type="number" step="0.5" min="0" id="silence_between_chapters" name="silence_between_chapters" value="{{ settings.silence_between_chapters }}">
+            </div>
+            <div class="field">
+              <label for="chapter_intro_delay">Pause After Chapter Titles (Seconds)</label>
+              <input type="number" step="0.1" min="0" id="chapter_intro_delay" name="chapter_intro_delay" value="{{ '%.2f'|format(settings.chapter_intro_delay) }}">
+              <p class="hint">Inserted between the spoken chapter title and the chapter content. Set to 0 to disable.</p>
+            </div>
+            <div class="field field--stack">
+              <label class="toggle-pill">
+                <input type="checkbox" name="read_title_intro" value="true" {% if settings.read_title_intro %}checked{% endif %}>
+                <span>Read Book Title Before Narration</span>
+              </label>
+              <p class="hint">When enabled, the narrator speaks the title, optional subtitle, and author names before chapter one.</p>
+            </div>
+            <div class="field field--stack">
+              <label class="toggle-pill">
+                <input type="checkbox" name="read_closing_outro" value="true" {% if settings.read_closing_outro %}checked{% endif %}>
+                <span>Read Closing Outro After Narration</span>
+              </label>
+              <p class="hint">Adds a brief "The end" line after the final chapter, optionally including series information.</p>
+            </div>
+            <div class="field field--stack">
+              <label class="toggle-pill">
+                <input type="checkbox" name="normalize_chapter_opening_caps" value="true" {% if settings.normalize_chapter_opening_caps %}checked{% endif %}>
+                <span>Normalize ALL CAPS Chapter Openings</span>
+              </label>
+              <p class="hint">Converts screaming uppercase openings to sentence case while preserving acronyms.</p>
+            </div>
+            <div class="field field--stack">
+              <label class="toggle-pill">
+                <input type="checkbox" name="auto_prefix_chapter_titles" value="true" {% if settings.auto_prefix_chapter_titles %}checked{% endif %}>
+                <span>Add "Chapter" before numeric chapter titles</span>
+              </label>
+              <p class="hint">Ensures the spoken chapter heading starts with "Chapter" when source titles begin with only a number or numeral.</p>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="settings-panel" data-section="subtitles">
+          <fieldset class="settings__section">
+            <legend>Subtitles &amp; Text</legend>
+            <div class="field">
+              <label for="subtitle_format">Subtitle File Format</label>
+              <select id="subtitle_format" name="subtitle_format">
+                {% for value, text in options.subtitle_formats %}
+                <option value="{{ value }}" {% if settings.subtitle_format == value %}selected{% endif %}>{{ text }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label for="max_subtitle_words">Max Words Per Subtitle Entry</label>
+              <input type="number" min="1" max="200" id="max_subtitle_words" name="max_subtitle_words" value="{{ settings.max_subtitle_words }}">
+            </div>
+            <div class="field field--choices">
+              <label class="toggle-pill">
+                <input type="checkbox" name="replace_single_newlines" value="true" {% if settings.replace_single_newlines %}checked{% endif %}>
+                <span>Replace Single Newlines</span>
+              </label>
+              <label class="toggle-pill">
+                <input type="checkbox" name="generate_epub3" value="true" {% if settings.generate_epub3 %}checked{% endif %}>
+                <span>Generate EPUB 3 (experimental)</span>
+              </label>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="settings-panel" data-section="performance">
+          <fieldset class="settings__section">
+            <legend>Performance</legend>
+            <div class="field field--choices">
+              <label class="toggle-pill">
+                <input type="checkbox" name="use_gpu" value="true" {% if settings.use_gpu %}checked{% endif %}>
+                <span>Use GPU (when available)</span>
+              </label>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="settings-panel" data-section="llm">
+          <fieldset class="settings__section">
+            <legend>Endpoint</legend>
+            <div class="field">
+              <label for="llm_base_url">Base URL</label>
+              <input type="url" id="llm_base_url" name="llm_base_url" value="{{ settings.llm_base_url }}" placeholder="https://localhost:11434/v1">
+              <p class="hint">Point to an OpenAI-compatible endpoint such as Ollama or a proxy.</p>
+            </div>
+            <div class="field">
+              <label for="llm_api_key">API Key</label>
+              <input type="text" id="llm_api_key" name="llm_api_key" value="{{ settings.llm_api_key }}" autocomplete="off" placeholder="ollama">
+              <p class="hint">Leave blank or use <code>ollama</code> for local servers that do not require keys.</p>
+            </div>
+            <div class="field field--inline">
+              <div class="field__group">
+                <label for="llm_model">Default Model</label>
+                <select id="llm_model" name="llm_model" data-current-model="{{ settings.llm_model }}">
+                  {% if settings.llm_model %}
+                  <option value="{{ settings.llm_model }}" selected>{{ settings.llm_model }}</option>
+                  {% else %}
+                  <option value="" selected disabled>Select a model</option>
+                  {% endif %}
+                </select>
+              </div>
+              <div class="field__group">
+                <label for="llm_timeout">Timeout (seconds)</label>
+                <input type="number" step="1" min="1" id="llm_timeout" name="llm_timeout" value="{{ settings.llm_timeout }}">
+              </div>
+              <button type="button" class="button button--ghost" data-action="llm-refresh-models">Refresh models</button>
+            </div>
+          </fieldset>
+          <fieldset class="settings__section">
+            <legend>Normalization Prompt</legend>
+            <div class="field">
+              <label for="llm_prompt">Prompt Template</label>
+              <textarea id="llm_prompt" name="llm_prompt" rows="6">{{ settings.llm_prompt }}</textarea>
+              <p class="hint">Use <code>{{ '{{sentence}}' }}</code> for the active sentence. <code>{{ '{{paragraph}}' }}</code> remains available for legacy prompts.</p>
+            </div>
+            <div class="field field--choices">
+              <span class="field__label">Context Mode</span>
+              <div class="choices choices--inline">
+                {% for option in llm_context_options %}
+                <label class="radio-pill">
+                  <input type="radio" name="llm_context_mode" value="{{ option.value }}" {% if settings.llm_context_mode == option.value %}checked{% endif %}>
+                  <span>{{ option.label }}</span>
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="preview-card" data-preview="llm">
+              <label for="llm_preview_text">Try the prompt</label>
+              <textarea id="llm_preview_text" rows="3">I've been waiting all day.</textarea>
+              <div class="preview-card__actions">
+                <button type="button" class="button" data-action="llm-preview">Preview</button>
+                <span class="preview-card__status" data-role="llm-preview-status"></span>
+              </div>
+              <div class="preview-card__output" data-role="llm-preview-output"></div>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="settings-panel" data-section="normalization">
+          {% for group in options.normalization_groups %}
+          <fieldset class="settings__section">
+            <legend>{{ group.label }}</legend>
+            {% if group.label == "Apostrophes & Contractions" %}
+            <div class="field">
+              <span class="field__label">Strategy</span>
+              <div class="choices choices--inline">
+                {% for option in apostrophe_modes %}
+                <label class="radio-pill">
+                  <input type="radio" name="normalization_apostrophe_mode" value="{{ option.value }}" {% if settings.normalization_apostrophe_mode == option.value %}checked{% endif %}>
+                  <span>{{ option.label }}</span>
+                </label>
+                {% endfor %}
+              </div>
+              {% if settings.normalization_apostrophe_mode == 'llm' and not llm_ready %}
+              <p class="hint hint--warning">Configure the LLM connection before using it for audiobook runs.</p>
+              {% endif %}
+            </div>
+            {% endif %}
+            <div class="field field--choices">
+              {% for option in group.options %}
+              <label class="toggle-pill">
+                <input type="checkbox" name="{{ option.key }}" value="true" {% if settings[option.key] %}checked{% endif %}>
+                <span>{{ option.label }}</span>
+              </label>
+              {% endfor %}
+            </div>
+            {% if group.label == "Apostrophes & Contractions" %}
+            <div class="field field--inline field--actions">
+              <button type="button" class="button button--ghost button--small" data-action="contraction-modal-open">Advanced Contraction Settings…</button>
+              <p class="hint">Choose which contraction families are expanded.</p>
+            </div>
+            {% endif %}
+          </fieldset>
+          {% endfor %}
+
+          <fieldset class="settings__section">
+            <legend>Sample &amp; Preview</legend>
+            <div class="field field--inline">
+              <div class="field__group">
+                <label for="normalization_sample_select">Sample</label>
+                <select id="normalization_sample_select">
+                  {% for key, text in normalization_samples.items() %}
+                  <option value="{{ text }}" {% if loop.first %}selected{% endif %}>{{ key|capitalize }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="field__group">
+                <label for="normalization_sample_voice">Voice</label>
+                <select id="normalization_sample_voice">
+                  {% for voice in options.voices %}
+                  <option value="{{ voice }}" {% if settings.default_voice == voice %}selected{% endif %}>{{ voice }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="normalization_sample_text">Sample text</label>
+              <textarea id="normalization_sample_text" rows="4">{{ normalization_samples['apostrophes'] }}</textarea>
+            </div>
+            <div class="preview-card" data-preview="normalization">
+              <div class="preview-card__actions">
+                <button type="button" class="button" data-action="normalization-preview">Preview with current settings</button>
+                <span class="preview-card__status" data-role="normalization-preview-status"></span>
+              </div>
+              <pre class="preview-card__output" data-role="normalization-preview-output"></pre>
+              <audio controls class="preview-card__audio" data-role="normalization-preview-audio" hidden></audio>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="settings-panel" data-section="integrations">
+          <fieldset class="settings__section">
+            <legend>Calibre OPDS</legend>
+            <div class="field field--choices">
+              <label class="toggle-pill">
+                <input type="checkbox" name="calibre_opds_enabled" value="true" {% if integrations.calibre_opds.enabled %}checked{% endif %}>
+                <span>Enable Calibre integration</span>
+              </label>
+              <label class="toggle-pill">
+                <input type="checkbox" name="calibre_opds_verify_ssl" value="true" {% if integrations.calibre_opds.verify_ssl %}checked{% endif %}>
+                <span>Verify TLS certificates</span>
+              </label>
+            </div>
+            <div class="field">
+              <label for="calibre_opds_base_url">Base URL</label>
+              <input type="url" id="calibre_opds_base_url" name="calibre_opds_base_url" value="{{ integrations.calibre_opds.base_url }}" placeholder="https://calibre.example.com/opds">
+            </div>
+            <div class="field">
+              <label for="calibre_opds_username">Username</label>
+              <input type="text" id="calibre_opds_username" name="calibre_opds_username" value="{{ integrations.calibre_opds.username }}">
+            </div>
+            <div class="field field--inline">
+              <div class="field__group">
+                <label for="calibre_opds_password">Password</label>
+                <input type="password" id="calibre_opds_password" name="calibre_opds_password" value="" placeholder="{% if integrations.calibre_opds.has_password %}••••••••{% endif %}" data-has-secret="{{ 'true' if integrations.calibre_opds.has_password else 'false' }}">
+                <p class="hint">Leave blank to keep the stored password.</p>
+              </div>
+              <div class="field__group field__group--checkbox">
+                <label class="toggle-pill">
+                  <input type="checkbox" name="calibre_opds_password_clear" value="true">
+                  <span>Clear saved password</span>
+                </label>
+              </div>
+            </div>
+            <div class="field field--inline">
+              <button type="button" class="button button--ghost" data-action="calibre-test">Test connection</button>
+              <span class="field__status" data-role="calibre-test-status" aria-live="polite"></span>
+            </div>
+          </fieldset>
+
+          <fieldset class="settings__section">
+            <legend>Audiobookshelf</legend>
+            <div class="field field--choices">
+              <label class="toggle-pill">
+                <input type="checkbox" name="audiobookshelf_enabled" value="true" {% if integrations.audiobookshelf.enabled %}checked{% endif %}>
+                <span>Enable Audiobookshelf uploads</span>
+              </label>
+              <label class="toggle-pill">
+                <input type="checkbox" name="audiobookshelf_auto_send" value="true" {% if integrations.audiobookshelf.auto_send %}checked{% endif %}>
+                <span>Upload finished jobs automatically</span>
+              </label>
+              <label class="toggle-pill">
+                <input type="checkbox" name="audiobookshelf_verify_ssl" value="true" {% if integrations.audiobookshelf.verify_ssl %}checked{% endif %}>
+                <span>Verify TLS certificates</span>
+              </label>
+            </div>
+            <div class="field">
+              <label for="audiobookshelf_base_url">Base URL</label>
+              <input type="url" id="audiobookshelf_base_url" name="audiobookshelf_base_url" value="{{ integrations.audiobookshelf.base_url }}" placeholder="https://abs.local:13378">
+              <p class="hint">Use the server root (no trailing <code>/api</code>); the upload requests add it automatically.</p>
+            </div>
+            <div class="field field--inline">
+              <div class="field__group">
+                <label for="audiobookshelf_library_id">Library ID</label>
+                <input type="text" id="audiobookshelf_library_id" name="audiobookshelf_library_id" value="{{ integrations.audiobookshelf.library_id }}">
+              </div>
+              <div class="field__group">
+                <label for="audiobookshelf_collection_id">Collection ID (optional)</label>
+                <input type="text" id="audiobookshelf_collection_id" name="audiobookshelf_collection_id" value="{{ integrations.audiobookshelf.collection_id }}">
+              </div>
+        <div class="field__group">
+          <label for="audiobookshelf_folder_id">Folder (name or ID)</label>
+                  <div class="field__input-with-button">
+                    <input type="text" id="audiobookshelf_folder_id" name="audiobookshelf_folder_id" value="{{ integrations.audiobookshelf.folder_id }}">
+                    <button type="button" class="button button--ghost button--small" data-action="audiobookshelf-list-folders">Browse folders</button>
+                  </div>
+                  <p class="hint">Enter the folder exactly as it appears in Audiobookshelf, paste the folder ID, or browse the available folders.</p>
+        </div>
+            </div>
+            <div class="field field--inline">
+              <div class="field__group">
+                <label for="audiobookshelf_api_token">API token</label>
+                <input type="password" id="audiobookshelf_api_token" name="audiobookshelf_api_token" value="" placeholder="{% if integrations.audiobookshelf.has_api_token %}••••••••{% endif %}" data-has-secret="{{ 'true' if integrations.audiobookshelf.has_api_token else 'false' }}">
+                <p class="hint">Leave blank to keep the stored token.</p>
+              </div>
+              <div class="field__group field__group--checkbox">
+                <label class="toggle-pill">
+                  <input type="checkbox" name="audiobookshelf_api_token_clear" value="true">
+                  <span>Clear saved token</span>
+                </label>
+              </div>
+            </div>
+            <div class="field field--inline">
+              <div class="field__group">
+                <label for="audiobookshelf_timeout">Request timeout (seconds)</label>
+                <input type="number" step="1" min="5" id="audiobookshelf_timeout" name="audiobookshelf_timeout" value="{{ integrations.audiobookshelf.timeout }}">
+              </div>
+            </div>
+            <div class="field field--choices">
+              <label class="toggle-pill">
+                <input type="checkbox" name="audiobookshelf_send_cover" value="true" {% if integrations.audiobookshelf.send_cover %}checked{% endif %}>
+                <span>Include cover artwork</span>
+              </label>
+              <label class="toggle-pill">
+                <input type="checkbox" name="audiobookshelf_send_chapters" value="true" {% if integrations.audiobookshelf.send_chapters %}checked{% endif %}>
+                <span>Send chapter markers</span>
+              </label>
+              <label class="toggle-pill">
+                <input type="checkbox" name="audiobookshelf_send_subtitles" value="true" {% if integrations.audiobookshelf.send_subtitles %}checked{% endif %}>
+                <span>Send subtitle files</span>
+              </label>
+            </div>
+            <div class="field field--inline">
+              <button type="button" class="button button--ghost" data-action="audiobookshelf-test">Test connection</button>
+              <span class="field__status" data-role="audiobookshelf-test-status" aria-live="polite"></span>
+            </div>
+          </fieldset>
+        </section>
+
+        <section class="settings-panel" data-section="debug">
+          <fieldset class="settings__section">
+            <legend>Debug · TTS transformations</legend>
+            <p class="hint">Generate a set of WAV files from a purpose-built EPUB containing code-tagged examples. When something sounds wrong, report the code (e.g. <code>NUM_001</code>) to pinpoint the failing transformation.</p>
+
+            <div class="field field--stack">
+              <button type="submit" class="button" form="debug-tts-form">Generate debug WAVs</button>
+              <p class="hint">Uses your current Settings defaults (voice, language, speed, GPU). If generation fails, an error will appear at the top of this page.</p>
+            </div>
+
+            {% if debug_manifest and debug_manifest.artifacts %}
+            <div class="field field--wide">
+              <label>Latest debug WAVs</label>
+              <ul>
+                {% for item in debug_manifest.artifacts %}
+                <li>
+                  <a href="{{ url_for('settings.download_debug_wav', run_id=debug_manifest.run_id, filename=item.filename) }}">{{ item.label }} · {{ item.filename }}</a>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+
+            {% if debug_samples %}
+            <div class="field field--wide">
+              <label>Included examples</label>
+              <ul>
+                {% for sample in debug_samples %}
+                <li><strong>{{ sample.code }}</strong> — {{ sample.label }}: <span class="muted">{{ sample.text }}</span></li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+          </fieldset>
+        </section>
+      </div>
+
+      <div class="modal" data-role="contraction-modal" hidden>
+        <div class="modal__overlay" data-role="contraction-modal-overlay" tabindex="-1"></div>
+        <div class="modal__content card card--modal" role="dialog" aria-modal="true" aria-labelledby="contraction-modal-title">
+          <header class="modal__header">
+            <p class="modal__eyebrow">Normalization</p>
+            <h2 class="modal__title" id="contraction-modal-title">Contraction Options</h2>
+            <button type="button" class="button button--ghost button--small" data-action="contraction-modal-close" aria-label="Close contraction options">Close</button>
+          </header>
+          <div class="modal__body">
+            <p class="hint">Enable or disable specific contraction families. These controls apply when contraction expansion is enabled.</p>
+            <div class="field field--choices">
+              <label class="toggle-pill">
+                <input type="checkbox" name="normalization_contraction_aux_be" value="true" {% if settings.normalization_contraction_aux_be %}checked{% endif %}>
+                <span>Be verbs ('m, 're, 's -> am/is/are)</span>
+              </label>
+              <label class="toggle-pill">
+                <input type="checkbox" name="normalization_contraction_aux_have" value="true" {% if settings.normalization_contraction_aux_have %}checked{% endif %}>
+                <span>Have auxiliaries ('ve, 'd -> have/had)</span>
+              </label>
+              <label class="toggle-pill">
+                <input type="checkbox" name="normalization_contraction_modal_will" value="true" {% if settings.normalization_contraction_modal_will %}checked{% endif %}>
+                <span>Will modals ('ll -> will)</span>
+              </label>
+              <label class="toggle-pill">
+                <input type="checkbox" name="normalization_contraction_modal_would" value="true" {% if settings.normalization_contraction_modal_would %}checked{% endif %}>
+                <span>Would conditionals ('d -> would)</span>
+              </label>
+              <label class="toggle-pill">
+                <input type="checkbox" name="normalization_contraction_negation_not" value="true" {% if settings.normalization_contraction_negation_not %}checked{% endif %}>
+                <span>Negative forms (can't -> can not)</span>
+              </label>
+              <label class="toggle-pill">
+                <input type="checkbox" name="normalization_contraction_let_us" value="true" {% if settings.normalization_contraction_let_us %}checked{% endif %}>
+                <span>Let us (let's -> let us)</span>
+              </label>
+            </div>
+          </div>
+          <footer class="modal__footer">
+            <button type="button" class="button button--ghost" data-action="contraction-modal-close">Done</button>
+          </footer>
+        </div>
+      </div>
+
+      <div class="modal" data-role="audiobookshelf-folder-modal" hidden>
+        <div class="modal__overlay" data-role="audiobookshelf-folder-overlay" tabindex="-1"></div>
+        <div class="modal__content card card--modal folder-picker-modal" role="dialog" aria-modal="true" aria-labelledby="audiobookshelf-folder-picker-title">
+          <header class="modal__header">
+            <p class="modal__eyebrow">Audiobookshelf</p>
+            <h2 class="modal__title" id="audiobookshelf-folder-picker-title">Select folder</h2>
+            <button type="button" class="button button--ghost button--small" data-action="audiobookshelf-folder-close" aria-label="Close folder picker">Close</button>
+          </header>
+          <div class="modal__body">
+            <div class="folder-picker" data-role="audiobookshelf-folder-picker">
+              <div class="folder-picker__controls">
+                <input type="search" data-role="audiobookshelf-folder-filter" placeholder="Filter folders" autocomplete="off" spellcheck="false">
+              </div>
+              <p class="folder-picker__status" data-role="audiobookshelf-folder-status"></p>
+              <div class="folder-picker__list" data-role="audiobookshelf-folder-list" role="listbox"></div>
+              <p class="folder-picker__empty" data-role="audiobookshelf-folder-empty" hidden>No folders match your filter.</p>
+            </div>
+          </div>
+          <footer class="modal__footer">
+            <button type="button" class="button button--ghost" data-action="audiobookshelf-folder-close">Cancel</button>
+          </footer>
+        </div>
+      </div>
+
+      <div class="settings__actions">
+        <button type="submit" class="button">Save Settings</button>
+      </div>
+    </form>
+
+    <form id="debug-tts-form" action="{{ url_for('settings.run_debug_wavs') }}" method="post"></form>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script type="module" src="{{ url_for('static', filename='settings.js') }}"></script>
+{% endblock %}
+

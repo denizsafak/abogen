@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}abogen · Queue{% endblock %}
+
+{% block content %}
+<section class="card">
+  <div id="jobs-panel"
+       hx-get="{{ url_for('jobs.jobs_partial') }}"
+       hx-trigger="load, every 3s"
+       hx-target="#jobs-panel"
+       hx-swap="innerHTML">
+    {{ jobs_panel|safe }}
+  </div>
+</section>
+{% include "partials/reader_modal.html" %}
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script type="module" src="{{ url_for('static', filename='queue.js') }}"></script>
+{% endblock %}

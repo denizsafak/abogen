@@ -1,3 +1,15 @@
+# Unreleased
+
+# 1.3.0
+- Added an EPUB 3 packaging pipeline that builds media-overlay EPUBs from generated audio and chunk metadata.
+- Persisted chunk timing metadata in job artifacts and exercised the exporter with automated tests.
+- Added Flask-based Web UI (`abogen-web`) for Docker and headless server deployments.
+- Reorganized codebase to support both PyQt6 desktop GUI and Web UI from a shared core.
+- Added Supertonic TTS engine support with GPU acceleration.
+- Added entity analysis and pronunciation override system for proper nouns.
+- Added speaker/role assignment for multi-voice "theatrical" audiobooks.
+- Added Calibre OPDS and Audiobookshelf integration.
+
 # 1.2.5
 - Added new option: `Override item settings with current selection` in the queue manager. When enabled, all items in the queue will be processed using the current global settings selected in the main GUI, overriding their individual settings. When disabled, each item will retain its own specific settings.
 - Fixed `Error "Could not load the Qt platform plugin "xcb"` error that occurred in some Linux distributions due to missing `libxcb-cursor0` library by conditionally loading the bundled library when the system version is unavailable, issue mentioned by @bmcgonag in #101.
@@ -53,7 +65,7 @@
 - Fixed `/` and `\` path display by normalizing paths.
 - Fixed book reprocessing issue where books were being processed every time the chapters window was opened, improving performance when reopening the same book.
 - Fixed taskbar icon not appearing correctly in Windows.
-- Fixed “Go to folder” button not opening the chapter output directory when only separate chapters were generated.
+- Fixed "Go to folder" button not opening the chapter output directory when only separate chapters were generated.
 - Improvements in code and documentation.
 
 # 1.1.9
@@ -182,7 +194,7 @@
 - Improved invalid profile handling in the voice mixer.
 
 # v1.0.3
-- Added voice mixing, allowing multiple voices to be combined into a single “Mixed Voice”, a feature mentioned by @PulsarFTW in #1. Special thanks to @jborza for making this possible through his contributions in #5.
+- Added voice mixing, allowing multiple voices to be combined into a single "Mixed Voice", a feature mentioned by @PulsarFTW in #1. Special thanks to @jborza for making this possible through his contributions in #5.
 - Added profile system to voice mixer, allowing users to create and manage multiple voice profiles.
 - Improvements in the voice mixer, mostly for organizing controls and enhancing user experience.
 - Added icons for flags and genders in the GUI, making it easier to identify different options.

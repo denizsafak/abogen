@@ -1,8 +1,5 @@
 import re
-import ebooklib
 import base64
-import fitz  # PyMuPDF for PDF support
-from ebooklib import epub
 from bs4 import BeautifulSoup, NavigableString
 from PyQt6.QtGui import QMovie
 from PyQt6.QtWidgets import (
@@ -31,6 +28,7 @@ from abogen.utils import (
     detect_encoding,
     get_resource_path,
 )
+from abogen.book_parser import get_book_parser
 
 from abogen.subtitle_utils import (
     clean_text,
@@ -38,9 +36,8 @@ from abogen.subtitle_utils import (
 )
 
 import os
-import logging  # Add logging
+import logging
 import urllib.parse
-import markdown
 import textwrap
 
 # Setup logging
@@ -48,13 +45,6 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# Pre-compile frequently used regex patterns for better performance
-_BRACKETED_NUMBERS_PATTERN = re.compile(r"\[\s*\d+\s*\]")
-_STANDALONE_PAGE_NUMBERS_PATTERN = re.compile(r"^\s*\d+\s*$", re.MULTILINE)
-_PAGE_NUMBERS_AT_END_PATTERN = re.compile(r"\s+\d+\s*$", re.MULTILINE)
-_PAGE_NUMBERS_WITH_DASH_PATTERN = re.compile(
-    r"\s+[-–—]\s*\d+\s*[-–—]?\s*$", re.MULTILINE
-)
 _HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 _LEADING_DASH_PATTERN = re.compile(r"^\s*[-–—]\s*")
 _LEADING_SIMPLE_DASH_PATTERN = re.compile(r"^\s*-\s*")
@@ -106,23 +96,22 @@ class HandlerDialog(QDialog):
 
         # Normalize path
         book_path = os.path.normpath(os.path.abspath(book_path))
-
-        # Determine file type if not explicitly provided
-        if file_type:
-            self.file_type = file_type
-        elif book_path.lower().endswith(".pdf"):
-            self.file_type = "pdf"
-        elif book_path.lower().endswith((".md", ".markdown")):
-            self.file_type = "markdown"
-        else:
-            self.file_type = "epub"
         self.book_path = book_path
+
+        # Initialize Parser
+        try:
+            # Factory handles file type detection if file_type is None
+            self.parser = get_book_parser(book_path, file_type=file_type)
+            # Parser loads automatically in init now
+        except Exception as e:
+            logging.error(f"Failed to initialize parser for {book_path}: {e}")
+            raise
 
         # Extract book name from file path
         book_name = os.path.splitext(os.path.basename(book_path))[0]
 
         # Set window title based on file type and book name
-        item_type = "Chapters" if self.file_type in ["epub", "markdown"] else "Pages"
+        item_type = "Chapters" if self.parser.file_type in ["epub", "markdown"] else "Pages"
         self.setWindowTitle(f"Select {item_type} - {book_name}")
         self.resize(1200, 900)
         self._block_signals = False  # Flag to prevent recursive signals
@@ -138,57 +127,8 @@ class HandlerDialog(QDialog):
         self.merge_chapters_at_end = HandlerDialog._merge_chapters_at_end
         self.save_as_project = HandlerDialog._save_as_project
 
-        # Load the book based on file type
-        try:
-            if self.file_type == "epub":
-                self.book = epub.read_epub(book_path)
-            elif self.file_type == "markdown":
-                self.book = None  # Markdown doesn't use ebooklib
-            else:
-                self.book = None
-        except KeyError as e:
-            logging.error(
-                f"EPUB file is missing a referenced file: {e}. Skipping missing file."
-            )
-            # Try to patch ebooklib to skip missing files (monkey-patch read_file)
-            import types
-
-            orig_read_file = None
-            try:
-                from ebooklib import epub as _epub_module
-
-                reader_class = _epub_module.EpubReader
-                orig_read_file = reader_class.read_file
-
-                def safe_read_file(self, name):
-                    try:
-                        return orig_read_file(self, name)
-                    except KeyError:
-                        logging.warning(
-                            f"Missing file in EPUB: {name}. Returning empty bytes."
-                        )
-                        return b""
-
-                reader_class.read_file = safe_read_file
-                self.book = epub.read_epub(book_path)
-                reader_class.read_file = orig_read_file  # Restore
-            except Exception as patch_e:
-                logging.error(f"Failed to patch ebooklib for missing files: {patch_e}")
-                raise e
-        self.pdf_doc = fitz.open(book_path) if self.file_type == "pdf" else None
-        self.markdown_text = None
-        if self.file_type == "markdown":
-            try:
-                encoding = detect_encoding(book_path)
-                with open(book_path, "r", encoding=encoding, errors="replace") as f:
-                    self.markdown_text = f.read()
-            except Exception as e:
-                logging.error(f"Error reading markdown file: {e}")
-                self.markdown_text = ""
-        self.markdown_toc = []  # For storing parsed markdown TOC
-
-        # Extract book metadata
-        self.book_metadata = self._extract_book_metadata()
+        # Initialize metadata dict; will be populated in _preprocess_content by the background loader
+        self.book_metadata = {}
 
         # Initialize UI elements that are used in other methods
         self.save_chapters_checkbox = None
@@ -207,6 +147,8 @@ class HandlerDialog(QDialog):
         # For storing content and lengths (will be filled by background loader)
         self.content_texts = {}
         self.content_lengths = {}
+        # Also maintain refs for structure
+        self.processed_nav_structure = []
 
         # Add a placeholder "Information" item so the tree isn't empty immediately
         info_item = QTreeWidgetItem(self.treeWidget, ["Information"])
@@ -396,787 +338,51 @@ class HandlerDialog(QDialog):
         cfg = load_config()
         replace_single_newlines = cfg.get("replace_single_newlines", True)
 
-        cache_key = (self.book_path, mod_time, self.file_type, replace_single_newlines)
+        cache_key = (self.book_path, mod_time, self.parser.file_type, replace_single_newlines)
 
         # Check if content is already cached
         if cache_key in HandlerDialog._content_cache:
             cached_data = HandlerDialog._content_cache[cache_key]
             self.content_texts = cached_data["content_texts"]
             self.content_lengths = cached_data["content_lengths"]
-            if "doc_content" in cached_data:
-                self.doc_content = cached_data["doc_content"]
-            if "markdown_toc" in cached_data:
-                self.markdown_toc = cached_data["markdown_toc"]
+            if "processed_nav_structure" in cached_data:
+                self.processed_nav_structure = cached_data["processed_nav_structure"]
+            if "book_metadata" in cached_data:
+                self.book_metadata = cached_data["book_metadata"]
+            
+            # Apply to parser so it stays in sync if used elsewhere
+            self.parser.content_texts = self.content_texts
+            self.parser.content_lengths = self.content_lengths
+            self.parser.processed_nav_structure = self.processed_nav_structure
+            self.parser.book_metadata = self.book_metadata
+
             logging.info(f"Using cached content for {os.path.basename(self.book_path)}")
             return
 
         # Process content if not cached
-        if self.file_type == "epub":
-            try:
-                self._process_epub_content_nav()  # Use the new navigation-based method
-            except Exception as e:
-                logging.error(
-                    f"Error processing EPUB with navigation: {e}. Falling back to TOC/spine.",
-                    exc_info=True,
-                )
-                # Fallback to a simpler spine-based processing if nav fails
-                self._process_epub_content_spine_fallback()
-        elif self.file_type == "markdown":
-            self._preprocess_markdown_content()
-        else:
-            self._preprocess_pdf_content()
+        try:
+            self.parser.process_content(replace_single_newlines=replace_single_newlines)
+            self.content_texts = self.parser.content_texts
+            self.content_lengths = self.parser.content_lengths
+            self.processed_nav_structure = self.parser.processed_nav_structure
+            self.book_metadata = self.parser.get_metadata()
+        except Exception as e:
+            logging.error(f"Error processing content: {e}", exc_info=True)
+            # Handle empty/failure case
+            self.content_texts = {}
+            self.content_lengths = {}
 
         # Cache the processed content
         cache_data = {
             "content_texts": self.content_texts,
             "content_lengths": self.content_lengths,
+            "processed_nav_structure": self.processed_nav_structure,
+            "book_metadata": self.book_metadata,
         }
-        if hasattr(self, "doc_content"):
-            cache_data["doc_content"] = self.doc_content
-        if hasattr(self, "markdown_toc"):
-            cache_data["markdown_toc"] = self.markdown_toc
 
         HandlerDialog._content_cache[cache_key] = cache_data
         logging.info(f"Cached content for {os.path.basename(self.book_path)}")
 
-    def _preprocess_pdf_content(self):
-        """Pre-process all page contents from PDF document"""
-        for page_num in range(len(self.pdf_doc)):
-            text = clean_text(self.pdf_doc[page_num].get_text())
-            # Remove bracketed numbers, page numbers, etc. using pre-compiled patterns
-            # Combine all regex operations for better performance
-            text = _BRACKETED_NUMBERS_PATTERN.sub("", text)
-            text = _STANDALONE_PAGE_NUMBERS_PATTERN.sub("", text)
-            text = _PAGE_NUMBERS_AT_END_PATTERN.sub("", text)
-            text = _PAGE_NUMBERS_WITH_DASH_PATTERN.sub("", text)
-
-            page_id = f"page_{page_num + 1}"
-            self.content_texts[page_id] = text
-            self.content_lengths[page_id] = calculate_text_length(text)
-
-    def _preprocess_markdown_content(self):
-        if not self.markdown_text:
-            return
-
-        # Generate TOC from the original (dedented) markdown BEFORE cleaning,
-        # so header ids/anchors are preserved for reliable position detection.
-        original_text = textwrap.dedent(self.markdown_text)
-        md = markdown.Markdown(extensions=["toc", "fenced_code"])
-        html = md.convert(original_text)
-        self.markdown_toc = md.toc_tokens
-
-        # Use cleaned text for stored content/length calculations
-        cleaned_full_text = clean_text(original_text)
-
-        soup = BeautifulSoup(html, "html.parser")
-        self.content_texts = {}
-        self.content_lengths = {}
-
-        if not self.markdown_toc:
-            chapter_id = "markdown_content"
-            self.content_texts[chapter_id] = cleaned_full_text
-            self.content_lengths[chapter_id] = calculate_text_length(cleaned_full_text)
-            return
-
-        all_headers = []
-
-        def flatten_toc(toc_list):
-            for header in toc_list:
-                all_headers.append(header)
-                if header.get("children"):
-                    flatten_toc(header["children"])
-
-        flatten_toc(self.markdown_toc)
-
-        header_positions = []
-        for header in all_headers:
-            header_id = header["id"]
-            id_pattern = f'id="{header_id}"'
-            pos = html.find(id_pattern)
-            if pos != -1:
-                tag_start = html.rfind("<", 0, pos)
-                header_positions.append(
-                    {"id": header_id, "start": tag_start, "name": header["name"]}
-                )
-        header_positions.sort(key=lambda x: x["start"])
-
-        for i, header_pos in enumerate(header_positions):
-            header_id = header_pos["id"]
-            header_name = header_pos["name"]
-            content_start = header_pos["start"]
-            content_end = (
-                header_positions[i + 1]["start"]
-                if i + 1 < len(header_positions)
-                else len(html)
-            )
-            section_html = html[content_start:content_end]
-            section_soup = BeautifulSoup(section_html, "html.parser")
-            header_tag = section_soup.find(attrs={"id": header_id})
-            if header_tag:
-                header_tag.decompose()
-            # Clean section text for storage/lengths
-            section_text = clean_text(section_soup.get_text()).strip()
-            chapter_id = header_id
-            if section_text:
-                full_content = f"{header_name}\n\n{section_text}"
-                self.content_texts[chapter_id] = full_content
-                self.content_lengths[chapter_id] = calculate_text_length(full_content)
-            else:
-                self.content_texts[chapter_id] = header_name
-                self.content_lengths[chapter_id] = calculate_text_length(header_name)
-
-    def _process_epub_content_spine_fallback(self):
-        """Fallback EPUB processing based purely on spine order."""
-        logging.info("Using spine fallback for EPUB processing.")
-        self.doc_content = {}
-        spine_docs = []
-        for spine_item_tuple in self.book.spine:
-            item_id = spine_item_tuple[0]
-            item = self.book.get_item_with_id(item_id)
-            if item:
-                spine_docs.append(item.get_name())
-            else:
-                logging.warning(f"Spine item with id '{item_id}' not found.")
-
-        # Cache content
-        for item in self.book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
-            href = item.get_name()
-            if href in spine_docs:
-                try:
-                    html_content = item.get_content().decode("utf-8", errors="ignore")
-                    self.doc_content[href] = html_content
-                except Exception as e:
-                    logging.error(f"Error decoding content for {href}: {e}")
-                    self.doc_content[href] = ""
-
-        # Create a simple TOC based on spine order
-        synthetic_toc = []
-        self.content_texts = {}
-        self.content_lengths = {}
-        for i, doc_href in enumerate(spine_docs):
-            html_content = self.doc_content.get(doc_href, "")
-            if html_content:
-                soup = BeautifulSoup(html_content, "html.parser")
-
-                # Handle ordered lists by prepending numbers to list items
-                for ol in soup.find_all("ol"):
-                    # Get start attribute or default to 1
-                    start = int(ol.get("start", 1))
-                    for i, li in enumerate(ol.find_all("li", recursive=False)):
-                        # Insert the number at the beginning of the list item
-                        number_text = f"{start + i}) "
-                        if li.string:
-                            li.string.replace_with(number_text + li.string)
-                        else:
-                            li.insert(0, NavigableString(number_text))
-
-                # Remove sup and sub tags
-                for tag in soup.find_all(["sup", "sub"]):
-                    tag.decompose()
-
-                text = clean_text(soup.get_text()).strip()
-                if text:
-                    self.content_texts[doc_href] = text
-                    self.content_lengths[doc_href] = calculate_text_length(text)
-
-                    title = None
-                    if soup.title and soup.title.string:
-                        title = soup.title.string.strip()
-                    elif (h1 := soup.find("h1")) and h1.get_text(strip=True):
-                        title = h1.get_text(strip=True)
-
-                    if not title:
-                        title = f"Untitled Chapter {i + 1}"
-                    synthetic_toc.append(
-                        (epub.Link(doc_href, title, doc_href), [])
-                    )  # Wrap in tuple and empty list for compatibility
-
-        # Replace book.toc with the synthetic one if it was empty or fallback was triggered
-        if not self.book.toc or not hasattr(
-            self, "processed_nav_structure"
-        ):  # Check if nav processing failed
-            self.book.toc = synthetic_toc
-            logging.info(f"Generated synthetic TOC with {len(synthetic_toc)} entries.")
-
-    def _process_epub_content_nav(self):
-        """
-        Process EPUB content using ITEM_NAVIGATION (NAV HTML) or ITEM_NCX.
-        Globally orders navigation entries and slices content between them.
-        """
-        logging.info(
-            "Attempting to process EPUB using navigation document (NAV/NCX)..."
-        )
-        nav_item = None
-        nav_type = None
-
-        # 1. Check ITEM_NAVIGATION for actual NAV HTML (.xhtml/.html)
-        nav_items = list(self.book.get_items_of_type(ebooklib.ITEM_NAVIGATION))
-        if nav_items:
-            # Prefer files explicitly named 'nav.xhtml' or similar
-            preferred_nav = next(
-                (
-                    item
-                    for item in nav_items
-                    if "nav" in item.get_name().lower()
-                    and item.get_name().lower().endswith((".xhtml", ".html"))
-                ),
-                None,
-            )
-            if preferred_nav:
-                nav_item = preferred_nav
-                nav_type = "html"
-                logging.info(f"Found preferred NAV HTML item: {nav_item.get_name()}")
-            else:
-                # Check if any ITEM_NAVIGATION is actually HTML
-                html_nav = next(
-                    (
-                        item
-                        for item in nav_items
-                        if item.get_name().lower().endswith((".xhtml", ".html"))
-                    ),
-                    None,
-                )
-                if html_nav:
-                    nav_item = html_nav
-                    nav_type = "html"
-                    logging.info(
-                        f"Found NAV HTML item in ITEM_NAVIGATION: {html_nav.get_name()}"
-                    )
-
-        # 2. If no NAV HTML found via ITEM_NAVIGATION, check if ITEM_NAVIGATION points to NCX
-        if not nav_item and nav_items:
-            ncx_in_nav = next(
-                (
-                    item
-                    for item in nav_items
-                    if item.get_name().lower().endswith(".ncx")
-                ),
-                None,
-            )
-            if ncx_in_nav:
-                nav_item = ncx_in_nav
-                nav_type = "ncx"
-                logging.info(
-                    f"Found NCX item via ITEM_NAVIGATION: {ncx_in_nav.get_name()}"
-                )
-
-        # 3. If still no nav_item, check for NCX or fallback to NAV HTML in all ITEM_DOCUMENTs
-        ncx_constant = getattr(epub, "ITEM_NCX", None)
-        if not nav_item and ncx_constant is not None:
-            ncx_items = list(self.book.get_items_of_type(ncx_constant))
-            if ncx_items:
-                nav_item = ncx_items[0]
-                nav_type = "ncx"
-                logging.info(f"Found NCX item via ITEM_NCX: {nav_item.get_name()}")
-        # Fallback: search all ITEM_DOCUMENTs for a NAV HTML with <nav epub:type="toc">
-        if not nav_item:
-            for item in self.book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
-                try:
-                    html_content = item.get_content().decode("utf-8", errors="ignore")
-                    if "<nav" in html_content and 'epub:type="toc"' in html_content:
-                        soup = BeautifulSoup(html_content, "html.parser")
-                        nav_tag = soup.find("nav", attrs={"epub:type": "toc"})
-                        if nav_tag:
-                            nav_item = item
-                            nav_type = "html"
-                            logging.info(
-                                f"Found NAV HTML with TOC in: {item.get_name()}"
-                            )
-                            break
-                except Exception as e:
-                    continue
-        # 4. If no navigation item found by any method, trigger fallback
-        if not nav_item or not nav_type:
-            logging.warning(
-                "No suitable EPUB navigation document (NAV HTML or NCX) found. Falling back."
-            )
-            raise ValueError("No navigation document found")  # Trigger fallback
-
-        # Determine parser based on the confirmed nav_type
-        parser_type = "html.parser" if nav_type == "html" else "xml"
-        logging.info(f"Using parser: '{parser_type}' for {nav_item.get_name()}")
-        try:
-            nav_content = nav_item.get_content().decode("utf-8", errors="ignore")
-            nav_soup = BeautifulSoup(nav_content, parser_type)
-        except Exception as e:
-            logging.error(
-                f"Failed to parse navigation content ({nav_item.get_name()}) using {parser_type}: {e}",
-                exc_info=True,
-            )
-            raise ValueError(
-                f"Failed to parse navigation content: {e}"
-            )  # Trigger fallback
-
-        # --- Rest of the processing logic ---
-        # 1. Cache all document HTML and determine spine order (no changes needed here)
-        self.doc_content = {}
-        spine_docs = []
-        for spine_item_tuple in self.book.spine:
-            item_id = spine_item_tuple[0]
-            item = self.book.get_item_with_id(item_id)
-            if item:
-                spine_docs.append(item.get_name())
-            else:
-                logging.warning(f"Spine item with id '{item_id}' not found.")
-        doc_order = {href: i for i, href in enumerate(spine_docs)}
-        # Add a mapping for unquoted (decoded) hrefs as well
-        doc_order_decoded = {
-            urllib.parse.unquote(href): i for href, i in doc_order.items()
-        }
-
-        # Clear previous content/lengths before processing
-        self.content_texts = {}
-        self.content_lengths = {}
-
-        for item in self.book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
-            href = item.get_name()
-            if href in doc_order or any(
-                href in nav_point.get("src", "")
-                for nav_point in nav_soup.find_all(["content", "a"])
-            ):
-                try:
-                    html_content = item.get_content().decode("utf-8", errors="ignore")
-                    self.doc_content[href] = html_content
-                except Exception as e:
-                    logging.error(f"Error decoding content for {href}: {e}")
-                    self.doc_content[href] = ""
-
-        # 2. Extract and order navigation entries globally
-        ordered_nav_entries = []
-
-        # Define find_position locally or ensure self._find_position_robust is used correctly
-        # Using self._find_position_robust is preferred as it's a method of the class
-        find_position_func = self._find_position_robust
-
-        # Store the parsed structure for tree building later
-        self.processed_nav_structure = []
-
-        # Call the correct parsing function based on confirmed nav_type
-        parse_successful = False
-        if nav_type == "ncx":
-            nav_map = nav_soup.find("navMap")
-            if nav_map:
-                logging.info("Parsing NCX <navMap>...")
-                for nav_point in nav_map.find_all("navPoint", recursive=False):
-                    self._parse_ncx_navpoint(
-                        nav_point,
-                        ordered_nav_entries,
-                        doc_order,
-                        doc_order_decoded,
-                        self.processed_nav_structure,
-                        find_position_func,
-                    )
-                parse_successful = bool(
-                    ordered_nav_entries
-                )  # Success if entries were added
-            else:
-                logging.warning("Could not find <navMap> in NCX file.")
-        elif nav_type == "html":
-            logging.info("Parsing NAV HTML...")
-            toc_nav = nav_soup.find("nav", attrs={"epub:type": "toc"})
-            if not toc_nav:
-                # Fallback: look for any <nav> element containing an <ol>
-                all_navs = nav_soup.find_all("nav")
-                for nav in all_navs:
-                    if nav.find("ol"):
-                        toc_nav = nav
-                        logging.info("Found fallback TOC structure in <nav> with <ol>.")
-                        break
-            if toc_nav:
-                top_ol = toc_nav.find("ol", recursive=False)
-                if top_ol:
-                    for li in top_ol.find_all("li", recursive=False):
-                        self._parse_html_nav_li(
-                            li,
-                            ordered_nav_entries,
-                            doc_order,
-                            doc_order_decoded,
-                            self.processed_nav_structure,
-                            find_position_func,
-                        )
-                    parse_successful = bool(
-                        ordered_nav_entries
-                    )  # Success if entries were added
-                else:
-                    logging.warning("Found <nav> for TOC but no top-level <ol> inside.")
-            else:
-                logging.warning(
-                    "Could not find TOC structure (<nav epub:type='toc'> or <nav><ol>) in NAV HTML."
-                )
-
-        # Handle case where parsing ran but found no valid entries OR parsing failed
-        if not parse_successful:
-            logging.warning(
-                "Navigation parsing completed but found no valid entries, or parsing failed. Falling back."
-            )
-            raise ValueError("No valid navigation entries found after parsing")
-
-        # Sort entries globally by document order and position within the document
-        ordered_nav_entries.sort(key=lambda x: (x["doc_order"], x["position"]))
-        logging.info(f"Sorted {len(ordered_nav_entries)} navigation entries.")
-
-        # 3. Slice content ONLY between sorted TOC entries
-        num_entries = len(ordered_nav_entries)
-        for i in range(num_entries):
-            current_entry = ordered_nav_entries[i]
-            current_src = current_entry["src"]
-            current_doc = current_entry["doc_href"]
-            current_pos = current_entry["position"]
-            current_doc_html = self.doc_content.get(current_doc, "")
-
-            start_slice_pos = current_pos
-            slice_html = ""
-
-            next_entry = ordered_nav_entries[i + 1] if (i + 1) < num_entries else None
-
-            if next_entry:
-                next_doc = next_entry["doc_href"]
-                next_pos = next_entry["position"]
-
-                # Always include all content from current position to next position, even if next_doc is before current_doc
-                if current_doc == next_doc:
-                    slice_html = current_doc_html[start_slice_pos:next_pos]
-                else:
-                    # Collect all content from current_doc (from start_slice_pos to end),
-                    # then all intermediate docs (in spine order),
-                    # then up to next_pos in next_doc (even if next_doc is before current_doc in spine)
-                    slice_html = current_doc_html[start_slice_pos:]
-                    docs_between = []
-                    try:
-                        idx_current = spine_docs.index(current_doc)
-                        idx_next = spine_docs.index(next_doc)
-                        if idx_current < idx_next:
-                            for doc_idx in range(idx_current + 1, idx_next):
-                                docs_between.append(spine_docs[doc_idx])
-                        elif idx_current > idx_next:
-                            for doc_idx in range(idx_current + 1, len(spine_docs)):
-                                docs_between.append(spine_docs[doc_idx])
-                            for doc_idx in range(0, idx_next):
-                                docs_between.append(spine_docs[doc_idx])
-                    except Exception:
-                        pass
-                    for doc_href in docs_between:
-                        slice_html += self.doc_content.get(doc_href, "")
-                    next_doc_html = self.doc_content.get(next_doc, "")
-                    slice_html += next_doc_html[:next_pos]
-            else:
-                # Last TOC entry: include all content from current position to end of book
-                slice_html = current_doc_html[start_slice_pos:]
-                try:
-                    idx_current = spine_docs.index(current_doc)
-                    for doc_idx in range(idx_current + 1, len(spine_docs)):
-                        intermediate_doc_href = spine_docs[doc_idx]
-                        slice_html += self.doc_content.get(intermediate_doc_href, "")
-                except Exception:
-                    pass
-            # Fallback: if slice_html is empty, try to get the whole file's text
-            if not slice_html.strip() and current_doc_html:
-                logging.warning(
-                    f"No content found for src '{current_src}', using full file as fallback."
-                )
-                slice_html = current_doc_html
-            if slice_html.strip():
-                slice_soup = BeautifulSoup(slice_html, "html.parser")
-                # Add line breaks after paragraphs and divs
-                for tag in slice_soup.find_all(["p", "div"]):
-                    tag.append("\n\n")
-
-                # Handle ordered lists by prepending numbers to list items
-                for ol in slice_soup.find_all("ol"):
-                    # Get start attribute or default to 1
-                    start = int(ol.get("start", 1))
-                    for i, li in enumerate(ol.find_all("li", recursive=False)):
-                        # Insert the number at the beginning of the list item
-                        number_text = f"{start + i}) "
-                        if li.string:
-                            li.string.replace_with(number_text + li.string)
-                        else:
-                            li.insert(0, NavigableString(number_text))
-
-                # Remove sup and sub tags that might contain footnotes
-                for tag in slice_soup.find_all(["sup", "sub"]):
-                    tag.decompose()
-
-                text = clean_text(slice_soup.get_text()).strip()
-                if text:
-                    self.content_texts[current_src] = text
-                    self.content_lengths[current_src] = calculate_text_length(text)
-                else:
-                    self.content_texts[current_src] = ""
-                    self.content_lengths[current_src] = 0
-            else:
-                self.content_texts[current_src] = ""
-                self.content_lengths[current_src] = 0
-
-        # 4. Extract text and store using the original TOC entry src as the key
-        if ordered_nav_entries:
-            first_entry = ordered_nav_entries[0]
-            first_doc_href = first_entry["doc_href"]
-            first_pos = first_entry["position"]
-            first_doc_order = first_entry["doc_order"]
-            prefix_html = ""
-
-            for doc_idx in range(first_doc_order):
-                if doc_idx < len(spine_docs):
-                    intermediate_doc_href = spine_docs[doc_idx]
-                    prefix_html += self.doc_content.get(intermediate_doc_href, "")
-                else:
-                    logging.warning(
-                        f"Document index {doc_idx} out of bounds for spine (length {len(spine_docs)})."
-                    )
-
-            first_doc_html = self.doc_content.get(first_doc_href, "")
-            prefix_html += first_doc_html[:first_pos]
-
-            if prefix_html.strip():
-                prefix_soup = BeautifulSoup(prefix_html, "html.parser")
-                for tag in prefix_soup.find_all(["sup", "sub"]):
-                    tag.decompose()
-                prefix_text = clean_text(prefix_soup.get_text()).strip()
-
-                if prefix_text:
-                    prefix_chapter_src = "internal:prefix_content"
-                    self.content_texts[prefix_chapter_src] = prefix_text
-                    self.content_lengths[prefix_chapter_src] = len(prefix_text)
-                    self.processed_nav_structure.insert(
-                        0,
-                        {
-                            "src": prefix_chapter_src,
-                            "title": "Introduction",
-                            "children": [],
-                        },
-                    )
-                    logging.info(
-                        f"Added prefix content chapter '{prefix_chapter_src}'."
-                    )
-
-        logging.info(
-            f"Finished processing EPUB navigation. Found {len(self.content_texts)} content sections linked to TOC."
-        )
-
-    def _find_doc_key(self, base_href, doc_order, doc_order_decoded):
-        """Find the best matching doc_key for a given base_href using robust matching."""
-        candidates = [
-            base_href,
-            urllib.parse.unquote(base_href),
-        ]
-        base_name = os.path.basename(base_href).lower()
-        for k in list(doc_order.keys()) + list(doc_order_decoded.keys()):
-            if os.path.basename(k).lower() == base_name:
-                candidates.append(k)
-        for candidate in candidates:
-            if candidate in doc_order:
-                return candidate, doc_order[candidate]
-            elif candidate in doc_order_decoded:
-                return candidate, doc_order_decoded[candidate]
-        return None, None
-
-    def _parse_ncx_navpoint(
-        self,
-        nav_point,
-        ordered_entries,
-        doc_order,
-        doc_order_decoded,
-        tree_structure_list,
-        find_position_func,
-    ):
-        nav_label = nav_point.find("navLabel")
-        content = nav_point.find("content")
-        title = (
-            nav_label.find("text").get_text(strip=True)
-            if nav_label and nav_label.find("text")
-            else "Untitled Section"
-        )
-        src = content["src"] if content and "src" in content.attrs else None
-
-        current_entry_node = {"title": title, "src": src, "children": []}
-
-        if src:
-            base_href, fragment = src.split("#", 1) if "#" in src else (src, None)
-            doc_key, doc_idx = self._find_doc_key(
-                base_href, doc_order, doc_order_decoded
-            )
-            if not doc_key:
-                logging.warning(
-                    f"Navigation entry '{title}' points to '{base_href}', which is not in the spine or document list (even after basename fallback)."
-                )
-                current_entry_node["has_content"] = False
-            else:
-                position = find_position_func(doc_key, fragment)
-                entry_data = {
-                    "src": src,
-                    "title": title,
-                    "doc_href": doc_key,
-                    "position": position,
-                    "doc_order": doc_idx,
-                }
-                ordered_entries.append(entry_data)
-                current_entry_node["has_content"] = True
-        else:
-            logging.warning(f"Navigation entry '{title}' has no 'src' attribute.")
-            current_entry_node["has_content"] = False
-
-        child_navpoints = nav_point.find_all("navPoint", recursive=False)
-        if child_navpoints:
-            for child_np in child_navpoints:
-                # Pass find_position_func down recursively
-                self._parse_ncx_navpoint(
-                    child_np,
-                    ordered_entries,
-                    doc_order,
-                    doc_order_decoded,
-                    current_entry_node["children"],
-                    find_position_func,
-                )
-
-        if title and (
-            current_entry_node.get("has_content", False)
-            or current_entry_node["children"]
-        ):
-            tree_structure_list.append(current_entry_node)
-
-    def _parse_html_nav_li(
-        self,
-        li_element,
-        ordered_entries,
-        doc_order,
-        doc_order_decoded,
-        tree_structure_list,
-        find_position_func,
-    ):
-        link = li_element.find("a", recursive=False)
-        span_text = li_element.find("span", recursive=False)
-        title = "Untitled Section"
-        src = None
-        current_entry_node = {"children": []}
-
-        if link and "href" in link.attrs:
-            src = link["href"]
-            title = link.get_text(strip=True) or title
-            if not title.strip() and span_text:
-                title = span_text.get_text(strip=True) or title
-            if not title.strip():
-                li_text = "".join(
-                    t for t in li_element.contents if isinstance(t, NavigableString)
-                ).strip()
-                title = li_text or title
-        elif span_text:
-            title = span_text.get_text(strip=True) or title
-            if not title.strip():
-                li_text = "".join(
-                    t for t in li_element.contents if isinstance(t, NavigableString)
-                ).strip()
-                title = li_text or title
-        else:
-            li_text = "".join(
-                t for t in li_element.contents if isinstance(t, NavigableString)
-            ).strip()
-            title = li_text or title
-
-        current_entry_node["title"] = title
-        current_entry_node["src"] = src
-
-        doc_key = None
-        doc_idx = None
-        position = 0
-        fragment = None
-        if src:
-            base_href, fragment = src.split("#", 1) if "#" in src else (src, None)
-            doc_key, doc_idx = self._find_doc_key(
-                base_href, doc_order, doc_order_decoded
-            )
-            if doc_key is not None:
-                position = find_position_func(doc_key, fragment)
-                entry_data = {
-                    "src": src,
-                    "title": title,
-                    "doc_href": doc_key,
-                    "position": position,
-                    "doc_order": doc_idx,
-                }
-                ordered_entries.append(entry_data)
-                current_entry_node["has_content"] = True
-            else:
-                logging.warning(
-                    f"Navigation entry '{title}' points to '{base_href}', which is not in the spine or document list (even after basename fallback)."
-                )
-                current_entry_node["has_content"] = False
-        else:
-            current_entry_node["has_content"] = False
-
-        for child_ol in li_element.find_all("ol", recursive=False):
-            for child_li in child_ol.find_all("li", recursive=False):
-                self._parse_html_nav_li(
-                    child_li,
-                    ordered_entries,
-                    doc_order,
-                    doc_order_decoded,
-                    current_entry_node["children"],
-                    find_position_func,
-                )
-        tree_structure_list.append(current_entry_node)
-
-    def _find_position_robust(self, doc_href, fragment_id):
-        if doc_href not in self.doc_content:
-            logging.warning(f"Document '{doc_href}' not found in cached content.")
-            return 0
-        html_content = self.doc_content[doc_href]
-        if not fragment_id:
-            return 0
-
-        try:
-            temp_soup = BeautifulSoup(f"<div>{html_content}</div>", "html.parser")
-            target_element = temp_soup.find(id=fragment_id)
-            if target_element:
-                tag_str = str(target_element)
-                pos = html_content.find(tag_str[: min(len(tag_str), 200)])
-                if pos != -1:
-                    logging.debug(
-                        f"Found position for id='{fragment_id}' in {doc_href} using BeautifulSoup: {pos}"
-                    )
-                    return pos
-        except Exception as e:
-            logging.warning(
-                f"BeautifulSoup failed to find id='{fragment_id}' in {doc_href}: {e}"
-            )
-
-        safe_fragment_id = re.escape(fragment_id)
-        id_name_pattern = re.compile(
-            f"<[^>]+(?:id|name)\\s*=\\s*[\"']{safe_fragment_id}[\"']", re.IGNORECASE
-        )
-        match = id_name_pattern.search(html_content)
-        if match:
-            pos = match.start()
-            logging.debug(
-                f"Found position for id/name='{fragment_id}' in {doc_href} using regex: {pos}"
-            )
-            return pos
-
-        id_match_str = f'id="{fragment_id}"'
-        name_match_str = f'name="{fragment_id}"'
-        id_pos = html_content.find(id_match_str)
-        name_pos = html_content.find(name_match_str)
-
-        pos = -1
-        if id_pos != -1 and name_pos != -1:
-            pos = min(id_pos, name_pos)
-        elif id_pos != -1:
-            pos = id_pos
-        elif name_pos != -1:
-            pos = name_pos
-
-        if pos != -1:
-            tag_start_pos = html_content.rfind("<", 0, pos)
-            final_pos = tag_start_pos if tag_start_pos != -1 else 0
-            logging.debug(
-                f"Found position for id/name='{fragment_id}' in {doc_href} using string search: {final_pos}"
-            )
-            return final_pos
-
-        logging.warning(
-            f"Anchor '{fragment_id}' not found in {doc_href}. Defaulting to position 0."
-        )
-        return 0
 
     def _build_tree(self):
         self.treeWidget.clear()
@@ -1188,21 +394,19 @@ class HandlerDialog(QDialog):
         font.setBold(True)
         info_item.setFont(0, font)
 
-        if self.file_type == "epub":
-            if (
-                hasattr(self, "processed_nav_structure")
-                and self.processed_nav_structure
-            ):
-                self._build_epub_tree_from_nav(
-                    self.processed_nav_structure, self.treeWidget
-                )
-            else:
-                logging.warning("Building EPUB tree using fallback book.toc.")
-                self._build_epub_tree_fallback(self.book.toc, self.treeWidget)
-        elif self.file_type == "markdown":
-            self._build_markdown_tree()
+        if self.processed_nav_structure:
+            self._build_tree_from_nav(
+                self.processed_nav_structure, self.treeWidget
+            )
         else:
-            self._build_pdf_tree()
+             # If no structure found but content exists (rare fallback), list flat
+             for ch_id, ch_len in self.content_lengths.items():
+                 # Simple flat list
+                 item = QTreeWidgetItem(self.treeWidget, [ch_id])
+                 item.setData(0, Qt.ItemDataRole.UserRole, ch_id)
+                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                 if self.content_texts.get(ch_id):
+                     item.setCheckState(0, Qt.CheckState.Checked if ch_id in self.checked_chapters else Qt.CheckState.Unchecked)
 
         has_parents = False
         iterator = QTreeWidgetItemIterator(
@@ -1218,7 +422,7 @@ class HandlerDialog(QDialog):
             item = self.treeWidget.topLevelItem(i)
             self._update_item_checkbox_state(item)
 
-    def _build_epub_tree_from_nav(
+    def _build_tree_from_nav(
         self, nav_nodes, parent_item, seen_content_hashes=None
     ):
         if seen_content_hashes is None:
@@ -1261,292 +465,8 @@ class HandlerDialog(QDialog):
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
 
             if children:
-                self._build_epub_tree_from_nav(children, item, seen_content_hashes)
+                self._build_tree_from_nav(children, item, seen_content_hashes)
 
-    def _build_epub_tree_fallback(self, toc_entries, parent_item):
-        for entry in toc_entries:
-            href, title, children = None, "Unknown", []
-            entry_obj = None
-            if isinstance(entry, ebooklib.epub.Link):
-                href, title = entry.href, entry.title or entry.href
-                entry_obj = entry
-            elif isinstance(entry, tuple) and len(entry) >= 1:
-                section_or_link = entry[0]
-                entry_obj = section_or_link
-                if isinstance(section_or_link, ebooklib.epub.Section):
-                    title = section_or_link.title
-                    href = getattr(section_or_link, "href", None)
-                elif isinstance(section_or_link, ebooklib.epub.Link):
-                    href, title = (
-                        section_or_link.href,
-                        section_or_link.title or section_or_link.href,
-                    )
-
-                if len(entry) > 1 and isinstance(entry[1], list):
-                    children = entry[1]
-            else:
-                continue
-
-            item = QTreeWidgetItem(parent_item, [title])
-            item.setData(0, Qt.ItemDataRole.UserRole, href)
-
-            has_content = (
-                href and href in self.content_texts and self.content_texts[href].strip()
-            )
-
-            if has_content or children:
-                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                is_checked = href and href in self.checked_chapters
-                item.setCheckState(
-                    0, Qt.CheckState.Checked if is_checked else Qt.CheckState.Unchecked
-                )
-            else:
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
-
-            if children:
-                self._build_epub_tree_fallback(children, item)
-
-    def _build_pdf_tree(self):
-        outline = self.pdf_doc.get_toc()
-        self.has_pdf_bookmarks = bool(outline)
-        self.bookmark_items_map = {}
-
-        if not outline:
-            self._build_pdf_pages_tree()
-            return
-
-        bookmark_pages = []
-        page_to_bookmark = {}
-        next_page_boundaries = {}
-        added_pages = set()
-
-        def extract_page_numbers(entries):
-            for entry in entries:
-                if len(entry) >= 3:
-                    _, title, page = entry[:3]
-                    page_num = (
-                        page - 1
-                        if isinstance(page, int)
-                        else self.pdf_doc.resolve_link(page)[0]
-                    )
-                    bookmark_pages.append((page_num, title))
-
-                    if len(entry) > 3 and isinstance(entry[3], list):
-                        extract_page_numbers(entry[3])
-
-        extract_page_numbers(outline)
-        bookmark_pages.sort()
-
-        for i, (page_num, title) in enumerate(bookmark_pages):
-            if i < len(bookmark_pages) - 1:
-                next_page_boundaries[page_num] = bookmark_pages[i + 1][0]
-            page_to_bookmark[page_num] = title
-
-        def build_outline_tree(entries, parent_item):
-            for entry in entries:
-                if len(entry) >= 3:
-                    entry_level, title, page = entry[:3]
-                    page_num = (
-                        page - 1
-                        if isinstance(page, int)
-                        else self.pdf_doc.resolve_link(page)[0]
-                    )
-                    page_id = f"page_{page_num + 1}"
-                    # attach chapters on same page under original
-                    if page_num in self.bookmark_items_map:
-                        orig = self.bookmark_items_map[page_num]
-                        child = QTreeWidgetItem(orig, [f"{title} (Same page)"])
-                        child.setData(0, Qt.ItemDataRole.UserRole, page_id)
-                        child.setFlags(child.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
-                        continue
-                    bookmark_item = QTreeWidgetItem(parent_item, [title])
-                    bookmark_item.setData(0, Qt.ItemDataRole.UserRole, page_id)
-                    # only allow checking if this chapter has content
-                    if self.content_lengths.get(page_id, 0) > 0:
-                        bookmark_item.setFlags(
-                            bookmark_item.flags() | Qt.ItemFlag.ItemIsUserCheckable
-                        )
-                        bookmark_item.setCheckState(
-                            0,
-                            (
-                                Qt.CheckState.Checked
-                                if page_id in self.checked_chapters
-                                else Qt.CheckState.Unchecked
-                            ),
-                        )
-                    else:
-                        bookmark_item.setFlags(
-                            bookmark_item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable
-                        )
-                    # map for uncategorized pages
-                    self.bookmark_items_map[page_num] = bookmark_item
-
-                    added_pages.add(page_num)
-
-                    next_page = next_page_boundaries.get(page_num, len(self.pdf_doc))
-                    for sub_page_num in range(page_num + 1, next_page):
-                        if (
-                            sub_page_num in page_to_bookmark
-                            or sub_page_num in added_pages
-                        ):
-                            continue
-
-                        page_id = f"page_{sub_page_num + 1}"
-                        page_title = f"Page {sub_page_num + 1}"
-
-                        page_text = self.content_texts.get(page_id, "").strip()
-                        if page_text:
-                            first_line = page_text.split("\n", 1)[0].strip()
-                            if first_line and len(first_line) < 100:
-                                page_title += f" - {first_line}"
-
-                        page_item = QTreeWidgetItem(bookmark_item, [page_title])
-                        page_item.setData(0, Qt.ItemDataRole.UserRole, page_id)
-                        # only allow checking if this sub-page has content
-                        if self.content_lengths.get(page_id, 0) > 0:
-                            page_item.setFlags(
-                                page_item.flags() | Qt.ItemFlag.ItemIsUserCheckable
-                            )
-                            page_item.setCheckState(
-                                0,
-                                (
-                                    Qt.CheckState.Checked
-                                    if page_id in self.checked_chapters
-                                    else Qt.CheckState.Unchecked
-                                ),
-                            )
-                        else:
-                            page_item.setFlags(
-                                page_item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable
-                            )
-
-                        added_pages.add(sub_page_num)
-
-        build_outline_tree(outline, self.treeWidget)
-
-        covered_pages = set(added_pages)
-        # attach any pages without direct bookmarks under nearest preceding chapter
-        uncategorized_pages = [
-            i for i in range(len(self.pdf_doc)) if i not in covered_pages
-        ]
-        for page_num in uncategorized_pages:
-            # find nearest previous bookmark
-            prev_nums = [n for n in sorted(self.bookmark_items_map) if n < page_num]
-            parent_item = (
-                self.bookmark_items_map[prev_nums[-1]] if prev_nums else self.treeWidget
-            )
-            page_id = f"page_{page_num + 1}"
-            title = f"Page {page_num + 1}"
-            text = self.content_texts.get(page_id, "").strip()
-            if text:
-                first = text.split("\n", 1)[0].strip()
-                if first and len(first) < 100:
-                    title += f" - {first}"
-            page_item = QTreeWidgetItem(parent_item, [title])
-            page_item.setData(0, Qt.ItemDataRole.UserRole, page_id)
-            # only allow checking if uncategorized page has content
-            if self.content_lengths.get(page_id, 0) > 0:
-                page_item.setFlags(page_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                page_item.setCheckState(
-                    0,
-                    (
-                        Qt.CheckState.Checked
-                        if page_id in self.checked_chapters
-                        else Qt.CheckState.Unchecked
-                    ),
-                )
-            else:
-                page_item.setFlags(page_item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
-
-    def _build_markdown_tree(self):
-        """Build tree structure for markdown file based on parsed TOC."""
-        if not self.markdown_text:
-            return
-
-        if not self.markdown_toc:
-            # Handle case with no headers (single content block)
-            if self.content_texts:
-                chapter_id = list(self.content_texts.keys())[0]
-                title = "Content"
-                item = QTreeWidgetItem(self.treeWidget, [title])
-                item.setData(0, Qt.ItemDataRole.UserRole, chapter_id)
-                if self.content_lengths.get(chapter_id, 0) > 0:
-                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                    is_checked = chapter_id in self.checked_chapters
-                    item.setCheckState(
-                        0,
-                        (
-                            Qt.CheckState.Checked
-                            if is_checked
-                            else Qt.CheckState.Unchecked
-                        ),
-                    )
-                else:
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
-            return
-
-        def build_from_toc(toc_list, parent_item):
-            for header in toc_list:
-                title = header["name"]
-                chapter_id = header["id"]
-
-                item = QTreeWidgetItem(parent_item, [title])
-                item.setData(0, Qt.ItemDataRole.UserRole, chapter_id)
-
-                has_content = self.content_lengths.get(chapter_id, 0) > 0
-                has_children = bool(header.get("children"))
-
-                if has_content or has_children:
-                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                    is_checked = chapter_id in self.checked_chapters
-                    item.setCheckState(
-                        0,
-                        (
-                            Qt.CheckState.Checked
-                            if is_checked
-                            else Qt.CheckState.Unchecked
-                        ),
-                    )
-                else:
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
-
-                if has_children:
-                    build_from_toc(header["children"], item)
-
-        build_from_toc(self.markdown_toc, self.treeWidget)
-
-    def _build_pdf_pages_tree(self):
-        pages_item = QTreeWidgetItem(self.treeWidget, ["Pages"])
-        pages_item.setFlags(pages_item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
-        font = pages_item.font(0)
-        font.setBold(True)
-        pages_item.setFont(0, font)
-
-        for page_num in range(len(self.pdf_doc)):
-            page_id = f"page_{page_num + 1}"
-            page_title = f"Page {page_num + 1}"
-
-            page_text = self.content_texts.get(page_id, "").strip()
-            if page_text:
-                first_line = page_text.split("\n", 1)[0].strip()
-                if first_line and len(first_line) < 100:
-                    page_title += f" - {first_line}"
-
-            page_item = QTreeWidgetItem(pages_item, [page_title])
-            page_item.setData(0, Qt.ItemDataRole.UserRole, page_id)
-            # only allow checking if standalone page has content
-            if self.content_lengths.get(page_id, 0) > 0:
-                page_item.setFlags(page_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                page_item.setCheckState(
-                    0,
-                    (
-                        Qt.CheckState.Checked
-                        if page_id in self.checked_chapters
-                        else Qt.CheckState.Unchecked
-                    ),
-                )
-            else:
-                page_item.setFlags(page_item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
 
     def _are_provided_checks_relevant(self):
         if not self.checked_chapters:
@@ -1594,7 +514,7 @@ class HandlerDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
-        item_type = "chapters" if self.file_type in ["epub", "markdown"] else "pages"
+        item_type = "chapters" if self.parser.file_type in ["epub", "markdown"] else "pages"
 
         self.auto_select_btn = QPushButton(f"Auto-select {item_type}", self)
         self.auto_select_btn.clicked.connect(self.auto_select_chapters)
@@ -1642,7 +562,7 @@ class HandlerDialog(QDialog):
 
         checkbox_text = (
             "Save each chapter separately"
-            if self.file_type in ["epub", "markdown"]
+            if self.parser.file_type in ["epub", "markdown"]
             else "Save each page separately"
         )
         self.save_chapters_checkbox = QCheckBox(checkbox_text, self)
@@ -1693,7 +613,7 @@ class HandlerDialog(QDialog):
             return
 
         if (
-            self.file_type == "pdf"
+            self.parser.file_type == "pdf"
             and hasattr(self, "has_pdf_bookmarks")
             and not self.has_pdf_bookmarks
         ):
@@ -1703,7 +623,7 @@ class HandlerDialog(QDialog):
 
         checked_count = 0
 
-        if self.file_type in ["epub", "markdown"]:
+        if self.parser.file_type in ["epub", "markdown"]:
             iterator = QTreeWidgetItemIterator(self.treeWidget)
             while iterator.value():
                 item = iterator.value()
@@ -1793,9 +713,9 @@ class HandlerDialog(QDialog):
     def _run_auto_check(self):
         self._block_signals = True
 
-        if self.file_type == "epub":
+        if self.parser.file_type == "epub":
             self._run_epub_auto_check()
-        elif self.file_type == "markdown":
+        elif self.parser.file_type == "markdown":
             self._run_markdown_auto_check()
         else:
             self._run_pdf_auto_check()
@@ -1872,15 +792,6 @@ class HandlerDialog(QDialog):
             iterator += 1
 
     def _run_pdf_auto_check(self):
-        if hasattr(self, "has_pdf_bookmarks") and not self.has_pdf_bookmarks:
-            iterator = QTreeWidgetItemIterator(self.treeWidget)
-            while iterator.value():
-                item = iterator.value()
-                if item.flags() & Qt.ItemFlag.ItemIsUserCheckable:
-                    item.setCheckState(0, Qt.CheckState.Checked)
-                iterator += 1
-            return
-
         iterator = QTreeWidgetItemIterator(self.treeWidget)
         while iterator.value():
             item = iterator.value()
@@ -1889,16 +800,13 @@ class HandlerDialog(QDialog):
                 continue
 
             identifier = item.data(0, Qt.ItemDataRole.UserRole)
-
             if not identifier:
-                iterator += 1
-                continue
-
-            if (
-                not identifier.startswith("page_")
-                or self.content_lengths.get(identifier, 0) > 0
-            ):
-                item.setCheckState(0, Qt.CheckState.Checked)
+                 iterator += 1
+                 continue
+                 
+            # Logic: Check item if it has content (already handled by ItemIsUserCheckable flag really)
+            # But duplicate logic from previous implementation:
+            item.setCheckState(0, Qt.CheckState.Checked)
 
             iterator += 1
 
@@ -1957,7 +865,7 @@ class HandlerDialog(QDialog):
             return
 
         text = None
-        if self.file_type == "epub":
+        if self.parser.file_type == "epub":
             text = self.content_texts.get(identifier)
         else:
             text = self.content_texts.get(identifier)
@@ -1979,16 +887,15 @@ class HandlerDialog(QDialog):
         self.previewEdit.clear()
         html_content = "<html><body style='font-family: Arial, sans-serif;'>"
 
-        if self.book_metadata["cover_image"]:
+        cover_image = self.book_metadata.get("cover_image")
+        if cover_image:
             try:
-                image_data = base64.b64encode(self.book_metadata["cover_image"]).decode(
-                    "utf-8"
-                )
+                image_data = base64.b64encode(cover_image).decode("utf-8")
 
                 image_type = "jpeg"
-                if self.book_metadata["cover_image"].startswith(b"\x89PNG"):
+                if cover_image.startswith(b"\x89PNG"):
                     image_type = "png"
-                elif self.book_metadata["cover_image"].startswith(b"GIF"):
+                elif cover_image.startswith(b"GIF"):
                     image_type = "gif"
 
                 html_content += (
@@ -1997,38 +904,44 @@ class HandlerDialog(QDialog):
                 html_content += (
                     f"<img src='data:image/{image_type};base64,{image_data}' "
                 )
-                html_content += f"width='300' style='object-fit: contain;' /></div>"
+                html_content += "width='300' style='object-fit: contain;' /></div>"
             except Exception as e:
                 html_content += f"<p>Error displaying cover image: {str(e)}</p>"
 
-        if self.book_metadata["title"]:
+        title = self.book_metadata.get("title")
+        if title:
             html_content += (
-                f"<h2 style='text-align: center;'>{self.book_metadata['title']}</h2>"
+                f"<h2 style='text-align: center;'>{title}</h2>"
             )
 
-        if self.book_metadata["authors"]:
-            authors_text = ", ".join(self.book_metadata["authors"])
+        authors = self.book_metadata.get("authors")
+        if authors:
+            authors_text = ", ".join(authors)
             html_content += f"<p style='text-align: center; font-style: italic;'>By {authors_text}</p>"
 
-        if self.book_metadata["publisher"] or self.book_metadata.get(
-            "publication_year"
-        ):
+        publisher = self.book_metadata.get("publisher")
+        pub_year = self.book_metadata.get("publication_year")
+
+        if publisher or pub_year:
             pub_info = []
-            if self.book_metadata["publisher"]:
-                pub_info.append(f"Published by {self.book_metadata['publisher']}")
-            if self.book_metadata.get("publication_year"):
-                pub_info.append(f"Year: {self.book_metadata['publication_year']}")
+            if publisher:
+                pub_info.append(f"Published by {publisher}")
+            if pub_year:
+                pub_info.append(f"Year: {pub_year}")
             html_content += f"<p style='text-align: center;'>{' | '.join(pub_info)}</p>"
 
         html_content += "<hr/>"
 
-        if self.book_metadata["description"]:
+        description = self.book_metadata.get("description")
+        if description:
             # Use pre-compiled pattern for better performance
-            desc = _HTML_TAG_PATTERN.sub("", self.book_metadata["description"])
+            desc = _HTML_TAG_PATTERN.sub("", description)
             html_content += f"<h3>Description:</h3><p>{desc}</p>"
 
-        if self.file_type == "pdf":
-            page_count = len(self.pdf_doc) if self.pdf_doc else 0
+        if self.parser.file_type == "pdf":
+            # Access pdf_doc from parser if available
+            pdf_doc = getattr(self.parser, "pdf_doc", None)
+            page_count = len(pdf_doc) if pdf_doc else 0
             html_content += f"<p>File type: PDF<br>Page count: {page_count}</p>"
 
         html_content += "</body></html>"
@@ -2044,7 +957,7 @@ class HandlerDialog(QDialog):
             "publication_year": None,
         }
 
-        if self.file_type == "epub":
+        if self.parser.file_type == "epub":
             try:
                 title_items = self.book.get_metadata("DC", "title")
                 if title_items and len(title_items) > 0:
@@ -2098,7 +1011,7 @@ class HandlerDialog(QDialog):
                     if "cover" in item.get_name().lower():
                         metadata["cover_image"] = item.get_content()
                         break
-        elif self.file_type == "markdown":
+        elif self.parser.file_type == "markdown":
             # Extract metadata from markdown frontmatter or first heading
             if self.markdown_text:
                 # Try to extract YAML frontmatter
@@ -2214,9 +1127,9 @@ class HandlerDialog(QDialog):
         except Exception:
             pass
 
-        if self.file_type == "epub":
+        if self.parser.file_type == "epub":
             return self._get_epub_selected_text()
-        elif self.file_type == "markdown":
+        elif self.parser.file_type == "markdown":
             return self._get_markdown_selected_text()
         else:
             return self._get_pdf_selected_text()
@@ -2242,7 +1155,7 @@ class HandlerDialog(QDialog):
         # Count chapters/pages
         total_chapters = len(self.checked_chapters)
         chapter_text = (
-            f"{total_chapters} {'Chapters' if self.file_type == 'epub' else 'Pages'}"
+            f"{total_chapters} {'Chapters' if self.parser.file_type == 'epub' else 'Pages'}"
         )
 
         # Handle cover image
@@ -2529,15 +1442,4 @@ class HandlerDialog(QDialog):
         action.triggered.connect(do_toggle)
         menu.exec(self.treeWidget.mapToGlobal(pos))
 
-    def closeEvent(self, event):
-        if self.pdf_doc is not None:
-            try:
-                if hasattr(self.pdf_doc, "is_closed"):
-                    if not self.pdf_doc.is_closed:
-                        self.pdf_doc.close()
-                else:
-                    # Fallback: try/except close
-                    self.pdf_doc.close()
-            except Exception:
-                pass
-        event.accept()
+

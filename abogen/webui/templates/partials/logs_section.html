@@ -1,0 +1,7 @@
+<section class="card" id="logs"
+         hx-get="{{ url_for('jobs.job_logs_partial', job_id=job.id) }}"
+         hx-trigger="load, every 2s"
+         hx-target="#logs"
+         hx-swap="outerHTML">
+  {% include "partials/logs.html" %}
+</section>

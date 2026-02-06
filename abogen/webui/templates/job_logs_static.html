@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Logs · {{ job.original_filename }}{% endblock %}
+
+{% block content %}
+<section class="card logs-static">
+  {% include "partials/logs.html" %}
+  {% if job.logs %}
+    <details class="log-copy">
+      <summary>Copy raw log output</summary>
+      <textarea class="log-copy__textarea" readonly>{{- log_text -}}</textarea>
+    </details>
+  {% endif %}
+</section>
+{% endblock %}

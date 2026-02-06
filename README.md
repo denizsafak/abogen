@@ -18,7 +18,7 @@ Abogen is a powerful text-to-speech conversion tool that makes it easy to turn e
 
 https://github.com/user-attachments/assets/094ba3df-7d66-494a-bc31-0e4b41d0b865
 
-> This demo was generated in just 5 seconds, producing ∼1 minute of audio with perfectly synced subtitles. To create a similar video, see [the demo guide](https://github.com/denizsafak/abogen/tree/main/demo).
+> This demo was generated in just 5 seconds, producing ∼1 minute of audio with perfectly synced subtitles. To create a similar video, see [the demo guide](https://github.com/denizsafak/abogen/tree/main/demo).
 
 ## `How to install?` <a href="https://pypi.org/project/abogen/" target="_blank"><img src="https://img.shields.io/pypi/pyversions/abogen" alt="Abogen Compatible PyPi Python Versions" align="right" style="margin-top:6px;"></a>
 
@@ -166,13 +166,30 @@ pip3 install --pre torch torchvision torchaudio --index-url https://download.pyt
 
 > Special thanks to [@hg000125](https://github.com/hg000125) for his contribution in [#23](https://github.com/denizsafak/abogen/issues/23). AMD GPU support is possible thanks to his work.
 
+
+## Interfaces
+
+Abogen offers **two interfaces**, but currently they have different feature sets. The **Web UI** contains newer features that are still being integrated into the desktop application.
+
+| Command | Interface | Features |
+|---------|-----------|----------|
+| `abogen` | PyQt6 Desktop GUI | Stable core features |
+| `abogen-web` | Flask Web UI | Core features + **Supertonic TTS**, **LLM Normalization**, **Audiobookshelf Integration** and more! |
+
+> **Note:** The Web UI is under active development. We are working to integrate these new features into the PyQt desktop app. until then, the Web UI provides the most feature-rich experience.
+
+> Special thanks to [@jeremiahsb](https://github.com/jeremiahsb) for making this possible! I was honestly surprised by his [massive contribution](https://github.com/denizsafak/abogen/pull/120) (>55,000 lines!) that brought the entire Web UI to life.
+
+# 🖥️ Desktop Application (PyQt)
+
 ## `How to run?`
 
-You can simply run this command to start Abogen:
+You can simply run this command to start Abogen Desktop GUI:
 
 ```bash
 abogen
 ```
+
 > [!TIP]
 > If you installed Abogen using the Windows installer `(WINDOWS_INSTALL.bat)`, It should have created a shortcut in the same folder, or your desktop. You can run it from there. If you lost the shortcut, Abogen is located in `python_embedded/Scripts/abogen.exe`. You can run it from there directly.
 
@@ -189,7 +206,7 @@ abogen
 ## `In action`
 <img title="Abogen in action" src='https://raw.githubusercontent.com/denizsafak/abogen/refs/heads/main/demo/abogen.gif'> 
 
-Here’s Abogen in action: in this demo, it processes ∼3,000 characters of text in just 11 seconds and turns it into 3 minutes and 28 seconds of audio, and I have a low-end **RTX 2060 Mobile laptop GPU**. Your results may vary depending on your hardware.
+Here’s Abogen in action: in this demo, it processes ∼3,000 characters of text in just 11 seconds and turns it into 3 minutes and 28 seconds of audio, and I have a low-end **RTX 2060 Mobile laptop GPU**. Your results may vary depending on your hardware.
 
 ## `Configuration`
 
@@ -261,6 +278,172 @@ Abogen supports **queue mode**, allowing you to add multiple files to a processi
 Abogen will process each item in the queue automatically, saving outputs as configured.
 
 > Special thanks to [@jborza](https://github.com/jborza) for adding queue mode in PR [#35](https://github.com/denizsafak/abogen/pull/35)
+
+---
+# 🌐 Web Application (WebUI)
+
+## `How to run?`
+
+Run this command to start the Web UI:
+
+```bash
+abogen-web
+```
+Then open http://localhost:8808 and drag in your documents. Jobs run in the background worker and the browser updates automatically.
+
+<img title="Abogen in action" src='https://raw.githubusercontent.com/denizsafak/abogen/refs/heads/main/demo/abogen-webui.png'> 
+
+## `Using the web UI`
+1. Upload a document (drag & drop or use the upload button).
+2. Choose voice, language, speed, subtitle style, and output format.
+3. Click **Create job**. The job immediately appears in the queue.
+4. Watch progress and logs update live. Download audio/subtitle assets when complete.
+5. Cancel or delete jobs any time. Download logs for troubleshooting.
+
+Multiple jobs can run sequentially; the worker processes them in order.
+
+## `Container image`
+You can build a lightweight container image directly from the repository root:
+
+```bash
+docker build -t abogen .
+mkdir -p ~/abogen-data/uploads ~/abogen-data/outputs
+docker run --rm \
+  -p 8808:8808 \
+  -v ~/abogen-data:/data \
+  --name abogen \
+  abogen
+```
+
+Browse to http://localhost:8808. Uploaded source files are stored in `/data/uploads` and rendered audio/subtitles appear in `/data/outputs`.
+
+### Container environment variables
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ABOGEN_HOST` | `0.0.0.0` | Bind address for the Flask server |
+| `ABOGEN_PORT` | `8808` | HTTP port |
+| `ABOGEN_DEBUG` | `false` | Enable Flask debug mode |
+| `ABOGEN_UPLOAD_ROOT` | `/data/uploads` | Directory where uploaded files are stored |
+| `ABOGEN_OUTPUT_ROOT` | `/data/outputs` | Directory for generated audio and subtitles (legacy alias of `ABOGEN_OUTPUT_DIR`) |
+| `ABOGEN_OUTPUT_DIR` | `/data/outputs` | Container path for rendered audio/subtitles |
+| `ABOGEN_SETTINGS_DIR` | `/config` | Container path for JSON settings/configuration |
+| `ABOGEN_TEMP_DIR` | `/data/cache` (Docker) or platform cache dir | Container path for temporary audio working files |
+| `ABOGEN_UID` | `1000` | UID that the container should run as (matches host user) |
+| `ABOGEN_GID` | `1000` | GID that the container should run as (matches host group) |
+| `ABOGEN_LLM_BASE_URL` | `""` | OpenAI-compatible endpoint used to seed the Settings → LLM panel |
+| `ABOGEN_LLM_API_KEY` | `""` | API key passed to the endpoint above |
+| `ABOGEN_LLM_MODEL` | `""` | Default model selected when you refresh the model list |
+| `ABOGEN_LLM_TIMEOUT` | `30` | Timeout (seconds) for server-side LLM requests |
+| `ABOGEN_LLM_CONTEXT_MODE` | `sentence` | Default prompt context window (`sentence`, `paragraph`, `document`) |
+| `ABOGEN_LLM_PROMPT` | `""` | Custom normalization prompt template seeded into the UI |
+
+Set any of these with `-e VAR=value` when starting the container.
+
+To discover your local UID/GID for matching file permissions inside the container, run:
+
+```bash
+id -u
+id -g
+```
+
+Use those values to populate `ABOGEN_UID` / `ABOGEN_GID` in your `.env` file.
+
+When running via Docker Compose, set `ABOGEN_SETTINGS_DIR`,
+`ABOGEN_OUTPUT_DIR`, and `ABOGEN_TEMP_DIR` in your `.env` file to the host
+directories you want mounted into the container. Compose maps them to
+`/config`, `/data/outputs`, and `/data/cache` respectively while exporting
+those in-container paths to the application. Non-audio caches (e.g., Hugging
+Face downloads) stick to the container's internal cache under `/tmp/abogen-home/.cache`
+by default, so only conversion scratch data touches the mounted `ABOGEN_TEMP_DIR`.
+Ensure each host directory exists and is writable by the UID/GID you configure
+before starting the stack.
+
+### Docker Compose (GPU by default)
+The repo includes `docker-compose.yaml`, which targets GPU hosts out of the box. Install the NVIDIA Container Toolkit and run:
+
+```bash
+docker compose up -d --build
+```
+
+Key build/runtime knobs:
+
+- `TORCH_VERSION` – pin a specific PyTorch release that matches your driver (leave blank for the latest on the configured index).
+- `TORCH_INDEX_URL` – swap out the PyTorch download index when targeting a different CUDA build.
+- `ABOGEN_DATA` – host path that stores uploads/outputs (defaults to `./data`).
+
+CPU-only deployment: comment out the `deploy.resources.reservations.devices` block (and the optional `runtime: nvidia` line) inside the compose file. Compose will then run without requesting a GPU. If you prefer the classic CLI:
+
+```bash
+docker build -f abogen/Dockerfile -t abogen-gpu .
+docker run --rm \
+  --gpus all \
+  -p 8808:8808 \
+  -v ~/abogen-data:/data \
+  abogen-gpu
+```
+
+## `LLM-assisted text normalization`
+Abogen can hand tricky apostrophes and contractions to an OpenAI-compatible large language model. Configure it from **Settings → LLM**:
+
+1. Enter the base URL for your endpoint (Ollama, OpenAI proxy, etc.) and an API key if required. Use the server root (for Ollama: `http://localhost:11434`)—Abogen appends `/v1/...` automatically, but it also accepts inputs that already end in `/v1`.
+2. Click **Refresh models** to load the catalog, pick a default model, and adjust the timeout or prompt template.
+3. Use the preview box to test the prompt, then save the settings. The Normalization panel can synthesize a short audio preview with the current configuration.
+
+When you are running inside Docker or a CI pipeline, seed the form automatically with `ABOGEN_LLM_*` variables in your `.env` file. The `.env.example` file includes sample values for a local Ollama server.
+
+## `Audiobookshelf integration`
+Abogen can push finished audiobooks directly into Audiobookshelf. Configure this under **Settings → Integrations → Audiobookshelf** by providing:
+
+- **Base URL** – the HTTPS origin (and optional path prefix) where your Audiobookshelf server is reachable, for example `https://abs.example.com` or `https://media.example.com/abs`. Do **not** append `/api`.
+- **Library ID** – the identifier of the target Audiobookshelf library (copy it from the library’s settings page in ABS).
+- **Folder (name or ID)** – the destination folder inside that library. Enter the folder name exactly as it appears in Audiobookshelf (Abogen resolves it to the correct ID automatically), paste the raw `folderId`, or click **Browse folders** to fetch the available folders and populate the field.
+- **API token** – a personal access token generated in Audiobookshelf under *Account → API tokens*.
+
+You can enable automatic uploads for future jobs or trigger individual uploads from the queue once the connection succeeds.
+
+### Reverse proxy checklist (Nginx Proxy Manager)
+When Audiobookshelf sits behind Nginx Proxy Manager (NPM), make sure the API paths and headers reach the backend untouched:
+
+1. Create a **Proxy Host** that points to your ABS container or host (default forward port `13378`).
+2. Under the **SSL** tab, enable your certificate and tick **Force SSL** if you want HTTPS only.
+3. In the **Advanced** tab, append the snippet below so bearer tokens, client IPs, and large uploads survive the proxy hop:
+   ```nginx
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header X-Forwarded-Host $host;
+  proxy_set_header X-Forwarded-Port $server_port;
+  proxy_set_header Authorization $http_authorization;
+  client_max_body_size 5g;
+  proxy_read_timeout 300s;
+  proxy_connect_timeout 300s;
+   ```
+4. Disable **Block Common Exploits** (it strips Authorization headers in some NPM builds).
+5. Enable **Websockets Support** on the main proxy screen (Audiobookshelf uses it for the web UI, and it keeps the reverse proxy configuration consistent).
+6. If you publish Audiobookshelf under a path prefix (for example `/abs`), add a **Custom Location** with `Location: /abs/` and set the **Forward Path** to `/`. That rewrite strips the `/abs` prefix before traffic reaches Audiobookshelf so `/abs/api/...` on the internet becomes `/api/...` on the backend. Use the same prefixed URL in Abogen’s “Base URL” field.
+
+After saving the proxy host, test the API from the machine running Abogen:
+
+```bash
+curl -i "https://abs.example.com/api/libraries" \
+  -H "Authorization: Bearer YOUR_API_TOKEN"
+```
+
+If you still receive `Cannot GET /api/...`, the proxy is rewriting paths. Double-check the **Custom Locations** table (the `Forward Path` column should be empty for `/abs/`) and review the NPM access/error logs while issuing the curl request to confirm the backend sees the full `/api/libraries` URL.
+
+A JSON response confirming the libraries list means the proxy is routing API calls correctly. You can then use **Browse folders** to confirm the library contents, run **Test connection** in Abogen’s settings (it verifies the library and resolves the folder), and use the “Send to Audiobookshelf” button on completed jobs.
+
+## `JSON endpoints`
+Need machine-readable status updates? The dashboard calls a small set of helper endpoints you can reuse:
+- `GET /api/jobs/<id>` returns job metadata, progress, and log lines in JSON.
+- `GET /partials/jobs` renders the live job list as HTML (htmx uses this for polling).
+- `GET /partials/jobs/<id>/logs` renders just the log window.
+
+More automation hooks are planned; contributions are very welcome if you need additional routes.
+
+---
+# Core Features (Available in Both)
 
 ## `About Chapter Markers`
 When you process ePUB, PDF or markdown files, Abogen converts them into text files stored in your cache directory. When you click "Edit," you're actually modifying these converted text files. In these text files, you'll notice tags that look like this:
@@ -335,6 +518,9 @@ For a complete list of supported languages and voices, refer to Kokoro's [VOICES
 
 > See [How to fix Japanese audio not working?](#japanese-audio-not-working)
 
+---
+# Guides & Troubleshooting
+
 ## `MPV Config`
 I highly recommend using [MPV](https://mpv.io/installation/) to play your audio files, as it supports displaying subtitles even without a video track. Here's my `mpv.conf`:
 ```
@@ -352,54 +538,6 @@ audio-channels=auto
 audio-samplerate=48000
 volume-max=200
 ```
-
-## `Docker Guide`
-If you want to run Abogen in a Docker container:
-1) [Download the repository](https://github.com/denizsafak/abogen/archive/refs/heads/main.zip) and extract, or clone it using git.
-2) Go to `abogen` folder. You should see `Dockerfile` there.
-3) Open your terminal in that directory and run the following commands:
-
-```bash
-# Build the Docker image:
-docker build --progress plain -t abogen .
-
-# Note that building the image may take a while.
-# After building is complete, run the Docker container:
-
-# Windows
-docker run --name abogen -v %cd%:/shared -p 5800:5800 -p 5900:5900 --gpus all abogen
-
-# Linux
-docker run --name abogen -v $(pwd):/shared -p 5800:5800 -p 5900:5900 --gpus all abogen
-
-# MacOS
-docker run --name abogen -v $(pwd):/shared -p 5800:5800 -p 5900:5900 abogen
-
-# We expose port 5800 for use by a web browser, 5900 if you want to connect with a VNC client.
-```
-
-Abogen launches automatically inside the container. 
-- You can access it via a web browser at [http://localhost:5800](http://localhost:5800) or connect to it using a VNC client at `localhost:5900`.
-- You can use `/shared` directory to share files between your host and the container.
-- For later use, start it with `docker start abogen` and stop it with `docker stop abogen`.
-- Pass in `-e WEB_AUDIO="1"` for `docker run` to enable audio.
-
-Known issues:
-- Audio preview is not working inside container (ALSA error) if using a VNC client.
-- `Open cache directory` and `Open configuration directory` options in settings not working. (Tried pcmanfm, did not work with Abogen).
-
-> Special thanks to [@geo38](https://www.reddit.com/user/geo38/) from Reddit, who provided the Dockerfile and instructions in [this comment](https://www.reddit.com/r/selfhosted/comments/1k8x1yo/comment/mpe0bz8/).
-
-## `🌐 Web Application`
-
-A web-based version of Abogen has been developed by [@jeremiahsb](https://github.com/jeremiahsb).
-
-**Access the repository here:** [jeremiahsb/abogen](https://github.com/jeremiahsb/abogen)
-
-> [!NOTE]
-> I intend to merge this implementation into the main repository in the future once existing conflicts are resolved. Until then, please be aware that the web version is maintained independently and may not always be in sync with the latest updates in this repository.
-
-> Special thanks to [@jeremiahsb](https://github.com/jeremiahsb) for implementing the web app!
 
 ## `Similar Projects`
 Abogen is a standalone project, but it is inspired by and shares some similarities with other projects. Here are a few:
@@ -570,6 +708,7 @@ abogen                      # Opens the GUI
 Feel free to explore the code and make any changes you like.
 
 ## `Credits`
+- Web UI implementation by [@jeremiahsb](https://github.com/jeremiahsb)
 - Abogen uses [Kokoro](https://github.com/hexgrad/kokoro) for its high-quality, natural-sounding text-to-speech synthesis. Huge thanks to the Kokoro team for making this possible.
 - Thanks to the [spaCy](https://spacy.io/) project for its sentence-segmentation tools, which help Abogen produce cleaner, more natural sentence segmentation.
 - Thanks to [@wojiushixiaobai](https://github.com/wojiushixiaobai) for [Embedded Python](https://github.com/wojiushixiaobai/Python-Embed-Win64) packages. These modified packages include pip pre-installed, enabling Abogen to function as a standalone application without requiring users to separately install Python in Windows.

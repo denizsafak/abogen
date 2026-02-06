@@ -1,0 +1,76 @@
+{% set pending = pending if pending is defined else None %}
+{% set readonly = readonly if readonly is defined else False %}
+{% set settings_dict = settings if settings is defined else {} %}
+{% set provided_step = step if step is defined else (active_step if active_step is defined else 'book') %}
+{% set current_step = provided_step %}
+{% if current_step in ['settings', 'upload', ''] %}{% set current_step = 'book' %}{% endif %}
+{% if current_step not in ['book', 'chapters', 'entities'] %}{% set current_step = 'book' %}{% endif %}
+{% set step_number = {'book': 1, 'chapters': 2, 'entities': 3} %}
+{% set step_titles = {
+  'book': 'Book parameters',
+  'chapters': 'Select chapters',
+  'entities': 'Review entities'
+} %}
+{% set step_hints = {
+  'book': 'Choose your source file or paste text, then set the defaults used for chapter analysis and speaker casting.',
+  'chapters': "Choose which chapters to convert. We'll analyse entities automatically when you continue.",
+  'entities': 'Assign pronunciations, voices, and manual overrides before queueing the conversion.'
+} %}
+{% set navigation_labels = {
+  'book': 'Book parameters',
+  'chapters': 'Chapters',
+  'entities': 'Entities'
+} %}
+{% set total_steps = 3 %}
+{% set current_index = step_number[current_step] %}
+{% set is_open = open if open is defined else False %}
+{% set prepare_url_template = url_for('main.wizard_start', pending_id='__pending__') %}
+{% set cancel_url_template = url_for('main.wizard_cancel', pending_id='__pending__') %}
+{% set analyze_url_template = url_for('main.wizard_update', pending_id='__pending__') %}
+<div class="modal"
+     data-role="new-job-modal"
+     data-step="{{ current_step }}"
+     data-pending-id="{{ pending.id if pending else '' }}"
+     data-prepare-url-template="{{ prepare_url_template }}"
+     data-cancel-url-template="{{ cancel_url_template }}"
+     data-analyze-url-template="{{ analyze_url_template }}"
+     {% if is_open %}data-open="true"{% else %}hidden{% endif %}>
+  <div class="modal__overlay" data-role="new-job-modal-close" tabindex="-1"></div>
+  <div class="modal__content card card--modal wizard-card" role="dialog" aria-modal="true" aria-labelledby="new-job-modal-title">
+    <header class="modal__header wizard-card__header">
+      <div class="wizard-card__headline">
+        <nav class="step-indicator" aria-label="New job workflow">
+          {% for slug, label in navigation_labels.items() %}
+            {% set item_index = step_number[slug] %}
+            {% set state = 'is-active' if slug == current_step else ('is-complete' if item_index < current_index else '') %}
+            <button type="button"
+                    class="step-indicator__item {{ state }}"
+                    data-role="wizard-step-indicator"
+                    data-step="{{ slug }}"
+                    aria-current="{{ 'step' if slug == current_step else 'false' }}">
+              <span class="step-indicator__index">{{ item_index }}</span>
+              <span class="step-indicator__label">{{ label }}</span>
+            </button>
+          {% endfor %}
+        </nav>
+        <h2 class="modal__title" id="new-job-modal-title">{{ step_titles[current_step] }}</h2>
+        <p class="hint" data-role="wizard-hint">{{ step_hints[current_step] }}</p>
+      </div>
+      <div class="wizard-card__aside">
+        <button type="button" class="icon-button wizard-card__close" data-role="new-job-modal-close" aria-label="Close new job wizard">✕</button>
+        {% if pending %}
+        <p class="wizard-card__filename" title="{{ pending.original_filename }}">{{ pending.original_filename }}</p>
+        {% endif %}
+      </div>
+    </header>
+    <div class="wizard-card__stage" data-role="wizard-stage">
+      {% if current_step == 'book' %}
+        {% include 'partials/new_job_step_book.html' %}
+      {% elif current_step == 'chapters' %}
+        {% include 'partials/new_job_step_chapters.html' %}
+      {% else %}
+        {% include 'partials/new_job_step_entities.html' %}
+      {% endif %}
+    </div>
+  </div>
+</div>

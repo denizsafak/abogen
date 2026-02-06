@@ -1,0 +1,425 @@
+{% set pending = pending if pending is defined else None %}
+{% set metadata = pending.metadata_tags if pending else {} %}
+{% set readonly = readonly if readonly is defined else False %}
+{% set settings_dict = settings if settings is defined else {} %}
+{% set options = options if options is defined else {} %}
+{% set form_values = form_values if form_values is defined and form_values else {} %}
+{% set language_value = form_values.get('language') if form_values else None %}
+{% if not language_value %}
+  {% if pending and pending.language %}
+    {% set language_value = pending.language %}
+  {% else %}
+    {% set language_value = settings_dict.get('language', '') %}
+  {% endif %}
+{% endif %}
+{% if not language_value and options.languages %}
+  {% set sorted_languages = options.languages|dictsort %}
+  {% if sorted_languages %}
+    {% set language_value = sorted_languages[0][0] %}
+  {% endif %}
+{% endif %}
+{% set subtitle_value = form_values.get('subtitle_mode') if form_values else None %}
+{% if not subtitle_value %}
+  {% if pending and pending.subtitle_mode %}
+    {% set subtitle_value = pending.subtitle_mode %}
+  {% else %}
+    {% set subtitle_value = settings_dict.get('subtitle_mode', 'Disabled') %}
+  {% endif %}
+{% endif %}
+{% set generate_flag = form_values.get('generate_epub3') if form_values else None %}
+{% if generate_flag is not none %}
+  {% set generate_epub3 = True %}
+{% else %}
+  {% set generate_epub3 = pending.generate_epub3 if pending else settings_dict.get('generate_epub3', False) %}
+{% endif %}
+{% set chunk_level_value = form_values.get('chunk_level') if form_values else None %}
+{% if not chunk_level_value %}
+  {% if pending and pending.chunk_level %}
+    {% set chunk_level_value = pending.chunk_level %}
+  {% else %}
+    {% set chunk_level_value = settings_dict.get('chunk_level', 'paragraph') %}
+  {% endif %}
+{% endif %}
+{% set analysis_threshold_value = form_values.get('speaker_analysis_threshold') if form_values else None %}
+{% if not analysis_threshold_value %}
+  {% if pending and pending.speaker_analysis_threshold %}
+    {% set analysis_threshold_value = pending.speaker_analysis_threshold %}
+  {% else %}
+    {% set analysis_threshold_value = settings_dict.get('speaker_analysis_threshold', 3) %}
+  {% endif %}
+{% endif %}
+{% set chapter_delay_value = form_values.get('chapter_intro_delay') if form_values else None %}
+{% if not chapter_delay_value %}
+  {% if pending and pending.chapter_intro_delay is not none %}
+    {% set chapter_delay_value = pending.chapter_intro_delay %}
+  {% else %}
+    {% set chapter_delay_value = settings_dict.get('chapter_intro_delay', 0.5) %}
+  {% endif %}
+{% endif %}
+{% set read_intro_value = form_values.get('read_title_intro') if form_values else None %}
+{% if read_intro_value is not none %}
+  {% set read_title_intro = ((read_intro_value|string)|lower) in ['true', '1', 'yes', 'on'] %}
+{% else %}
+  {% if pending is not none %}
+    {% set read_title_intro = pending.read_title_intro %}
+  {% else %}
+    {% set read_title_intro = settings_dict.get('read_title_intro', False) %}
+  {% endif %}
+{% endif %}
+{% set read_outro_value = form_values.get('read_closing_outro') if form_values else None %}
+{% if read_outro_value is not none %}
+  {% set read_closing_outro = ((read_outro_value|string)|lower) in ['true', '1', 'yes', 'on'] %}
+{% else %}
+  {% if pending is not none %}
+    {% set read_closing_outro = pending.read_closing_outro %}
+  {% else %}
+    {% set read_closing_outro = settings_dict.get('read_closing_outro', True) %}
+  {% endif %}
+{% endif %}
+{% set normalize_caps_value = form_values.get('normalize_chapter_opening_caps') if form_values else None %}
+{% if normalize_caps_value is not none %}
+  {% set normalize_chapter_opening_caps = ((normalize_caps_value|string)|lower) in ['true', '1', 'yes', 'on'] %}
+{% else %}
+  {% if pending is not none %}
+    {% set normalize_chapter_opening_caps = pending.normalize_chapter_opening_caps %}
+  {% else %}
+    {% set normalize_chapter_opening_caps = settings_dict.get('normalize_chapter_opening_caps', True) %}
+  {% endif %}
+{% endif %}
+{% set selected_config = form_values.get('speaker_config') if form_values else None %}
+{% if selected_config is none %}
+  {% if pending and pending.applied_speaker_config %}
+    {% set selected_config = pending.applied_speaker_config %}
+  {% else %}
+    {% set selected_config = '' %}
+  {% endif %}
+{% endif %}
+{% set narrator_speed_value = form_values.get('speed') if form_values else None %}
+{% if narrator_speed_value is none %}
+  {% if pending and pending.speed %}
+    {% set narrator_speed_value = pending.speed %}
+  {% else %}
+    {% set narrator_speed_value = settings_dict.get('default_speed', 1.0) %}
+  {% endif %}
+{% endif %}
+{% set narrator_speed = narrator_speed_value|float if narrator_speed_value is not none else 1.0 %}
+{% set speed_display = '%.2f'|format(narrator_speed if narrator_speed else 1.0) %}
+{% set form_profile = form_values.get('voice_profile') if form_values else None %}
+{% set form_voice = form_values.get('voice') if form_values else None %}
+{% set form_formula = form_values.get('voice_formula') if form_values else None %}
+{% set narrator_profile = None %}
+{% if form_profile is not none and form_profile != '' %}
+  {% set narrator_profile = form_profile %}
+{% elif pending and pending.voice_profile %}
+  {% set narrator_profile = pending.voice_profile %}
+{% else %}
+  {% set narrator_profile = '' %}
+{% endif %}
+{% set narrator_voice = None %}
+{% if form_voice %}
+  {% set narrator_voice = form_voice %}
+{% elif pending and pending.voice %}
+  {% set narrator_voice = pending.voice %}
+{% else %}
+  {% set narrator_voice = settings_dict.get('default_voice', options.voices[0] if options.voices else '') %}
+{% endif %}
+{% if (not narrator_profile) and narrator_voice and narrator_voice[:8]|lower == 'profile:' %}
+  {% set narrator_profile = narrator_voice[8:]|trim %}
+  {% set narrator_voice = '' %}
+{% endif %}
+{% set normalization_overrides = pending.normalization_overrides if pending and pending.normalization_overrides else {} %}
+{% set voice_formula_value = '' %}
+{% set profile_value = narrator_profile if narrator_profile else '__standard' %}
+{% if profile_value == '__formula' %}
+  {% if form_formula %}
+    {% set voice_formula_value = form_formula %}
+  {% elif pending and pending.voice %}
+    {% set voice_formula_value = pending.voice %}
+  {% endif %}
+{% elif profile_value not in ['__standard', '', None] %}
+  {% set voice_formula_value = '' %}
+{% else %}
+  {% if form_formula %}
+    {% set profile_value = '__formula' %}
+    {% set voice_formula_value = form_formula %}
+  {% elif narrator_voice and ('+' in narrator_voice or '*' in narrator_voice) %}
+    {% set profile_value = '__formula' %}
+    {% set voice_formula_value = narrator_voice %}
+  {% else %}
+    {% set profile_value = '__standard' %}
+    {% set voice_formula_value = '' %}
+  {% endif %}
+{% endif %}
+{% if profile_value == '__formula' and not voice_formula_value %}
+  {% if pending and pending.voice %}
+    {% set voice_formula_value = pending.voice %}
+  {% endif %}
+{% endif %}
+{% if profile_value != '__standard' and profile_value != '__formula' %}
+  {% set narrator_voice = '' %}
+{% endif %}
+{% if not narrator_voice and options.voices %}
+  {% set narrator_voice = options.voices[0] %}
+{% endif %}
+
+{% if error %}
+  <div class="alert alert--error">{{ error }}</div>
+{% endif %}
+{% if notice %}
+  <div class="alert alert--info">{{ notice }}</div>
+{% endif %}
+<form action="{{ url_for('main.wizard_upload') if not readonly else '#' }}"
+      method="post"
+      id="new-job-book-form"
+      class="upload-form"
+      data-role="wizard-form"
+  data-wizard-form="true"
+  data-step="book"
+  data-pending-id="{{ pending.id if pending else '' }}"
+      {% if not readonly %}enctype="multipart/form-data"{% endif %}>
+  <input type="hidden" name="pending_id" value="{{ pending.id if pending else '' }}">
+  <div class="modal__body wizard-card__body upload-form__sections">
+    <section class="form-section">
+      <h3 class="form-section__title">Manuscript &amp; subtitles</h3>
+      <div class="field-grid field-grid--compact">
+        <div class="field field--file field--span-2">
+          <label for="source_file">Source file</label>
+          <input type="file" id="source_file" name="source_file" accept=".txt,.pdf,.epub,.md,.markdown" {{ 'disabled' if readonly else '' }}>
+          {% if pending %}
+          <p class="hint">Current file: {{ pending.original_filename }}</p>
+          {% endif %}
+        </div>
+        <div class="field">
+          <label for="language">Language</label>
+          <select id="language" name="language" {{ 'disabled' if readonly else '' }}>
+            {% for key, label in options.languages.items() %}
+            <option value="{{ key }}" {% if key == language_value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="subtitle_mode">Subtitle mode</label>
+          <select id="subtitle_mode" name="subtitle_mode" {{ 'disabled' if readonly else '' }}>
+            {% set subtitle_options = ['Disabled', 'Sentence', 'Sentence + Comma', 'Sentence + Highlighting'] %}
+            {% for option in subtitle_options %}
+            <option value="{{ option }}" {% if subtitle_value == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+            {% for i in range(1, 11) %}
+            {% set label = i ~ ' ' ~ ('word' if i == 1 else 'words') %}
+            <option value="{{ label }}" {% if subtitle_value == label %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field field--stack field--span-2">
+          <span class="field__caption">Additional outputs</span>
+          <label class="toggle-pill">
+            <input type="checkbox" name="generate_epub3" value="true" {% if generate_epub3 %}checked{% endif %} {{ 'disabled' if readonly else '' }}>
+            <span>Generate EPUB 3 (experimental)</span>
+          </label>
+          <p class="hint">Creates a synchronized EPUB alongside audio output.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="form-section">
+      <h3 class="form-section__title">Book Metadata</h3>
+      <div class="field-grid field-grid--compact">
+        <div class="field field--span-2">
+          <label for="meta_title">Title</label>
+          <input type="text" id="meta_title" name="meta_title" value="{{ metadata.get('title', '') }}" {{ 'disabled' if readonly else '' }}>
+        </div>
+        <div class="field field--span-2">
+          <label for="meta_subtitle">Subtitle</label>
+          <input type="text" id="meta_subtitle" name="meta_subtitle" value="{{ metadata.get('subtitle', '') }}" {{ 'disabled' if readonly else '' }}>
+        </div>
+        <div class="field field--span-2">
+          <label for="meta_author">Author(s)</label>
+          <input type="text" id="meta_author" name="meta_author" value="{{ metadata.get('authors', '') or metadata.get('author', '') }}" {{ 'disabled' if readonly else '' }}>
+          <p class="hint">Comma separated for multiple authors</p>
+        </div>
+        <div class="field">
+          <label for="meta_series">Series</label>
+          <input type="text" id="meta_series" name="meta_series" value="{{ metadata.get('series', '') or metadata.get('series_name', '') }}" {{ 'disabled' if readonly else '' }}>
+        </div>
+        <div class="field">
+          <label for="meta_series_index">Series Index</label>
+          <input type="text" id="meta_series_index" name="meta_series_index" value="{{ metadata.get('series_index', '') or metadata.get('series_sequence', '') }}" {{ 'disabled' if readonly else '' }}>
+        </div>
+        <div class="field field--span-2">
+          <label for="meta_publisher">Publisher</label>
+          <input type="text" id="meta_publisher" name="meta_publisher" value="{{ metadata.get('publisher', '') }}" {{ 'disabled' if readonly else '' }}>
+        </div>
+        <div class="field field--span-2">
+            <label for="meta_description">Description</label>
+            <textarea id="meta_description" name="meta_description" rows="3" {{ 'disabled' if readonly else '' }}>{{ metadata.get('description', '') or metadata.get('summary', '') }}</textarea>
+        </div>
+         <div class="field field--stack field--span-2">
+          <label class="toggle-pill">
+            <input type="hidden" name="remove_cover" value="false">
+            <input type="checkbox" name="remove_cover" value="true" {{ 'disabled' if readonly else '' }}>
+            <span>Remove Cover Image</span>
+          </label>
+          {% if pending and pending.cover_image_path %}
+            <p class="hint">Cover image currently exists.</p>
+          {% else %}
+             <p class="hint">No cover image found.</p>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <section class="form-section">
+      <h3 class="form-section__title">Narrator defaults</h3>
+      <div class="form-section__layout form-section__layout--split">
+        <div class="form-section__group">
+          <div class="field">
+            <label for="voice_profile">Voice profile</label>
+            <select id="voice_profile" name="voice_profile" data-role="voice-profile" {{ 'disabled' if readonly else '' }}>
+              <option value="__standard" {% if profile_value == '__standard' %}selected{% endif %}>Standard voice</option>
+              <option value="__formula" {% if profile_value == '__formula' %}selected{% endif %}>Custom voice formula</option>
+              {% if options.voice_profile_options %}
+              <optgroup label="Saved mixes">
+                {% for profile in options.voice_profile_options %}
+                <option value="{{ profile.name }}" data-language="{{ profile.language }}" data-formula="{{ profile.formula|e }}" {% if profile_value == profile.name %}selected{% endif %}>{{ profile.name }}{% if profile.language %} ({{ profile.language|upper }}){% endif %}</option>
+                {% endfor %}
+              </optgroup>
+              {% endif %}
+            </select>
+          </div>
+          <div class="field" data-role="voice-field" {% if profile_value != '__standard' %}hidden aria-hidden="true"{% endif %}>
+            <label for="voice">Voice</label>
+            <select id="voice" name="voice" data-role="voice-select" data-default="{{ narrator_voice or settings_dict.get('default_voice', '') }}" {{ 'disabled' if readonly else '' }}>
+              {% for voice in options.voices %}
+              <option value="{{ voice }}" {% if narrator_voice == voice and profile_value == '__standard' %}selected{% endif %}>{{ voice }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field" data-conditional="formula" data-role="formula-field" {% if profile_value != '__formula' %}hidden aria-hidden="true"{% endif %}>
+            <label for="voice_formula">Custom voice formula</label>
+            <input type="text" id="voice_formula" name="voice_formula" placeholder="af_nova*0.4+am_liam*0.6" data-role="voice-formula" value="{{ voice_formula_value }}" {{ 'disabled' if readonly else '' }}>
+          </div>
+        </div>
+        <div class="form-section__group">
+          <div class="field field--slider">
+            <label for="speed">Speed <span class="tag" id="speed_value">{{ speed_display }}×</span></label>
+            <input type="range" id="speed" name="speed" min="0.6" max="1.4" step="0.05" value="{{ speed_display }}" {{ 'disabled' if readonly else '' }} oninput="document.getElementById('speed_value').textContent = Number.parseFloat(this.value).toFixed(2) + '×';">
+          </div>
+          <div class="field field--with-action field--preview" data-role="voice-preview">
+            <div class="field__label-row">
+              <span class="field__label">Preview</span>
+              <button type="button" class="button button--ghost button--small" data-role="voice-preview-button" {{ 'disabled' if readonly else '' }}>Preview voice</button>
+            </div>
+            <p class="hint field__status" data-role="voice-preview-status" aria-live="polite" hidden></p>
+            <audio class="voice-preview__audio" data-role="voice-preview-audio" controls preload="none" hidden></audio>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="form-section">
+      <h3 class="form-section__title">Text normalization</h3>
+      <div class="field-grid field-grid--compact">
+        <div class="field field--stack field--span-2">
+          <span class="field__label">Apostrophe strategy</span>
+          <div class="choices choices--inline">
+            {% for option in options.apostrophe_modes %}
+            <label class="radio-pill">
+              <input type="radio" name="normalization_apostrophe_mode" value="{{ option.value }}" {% if normalization_overrides.get('normalization_apostrophe_mode', settings_dict.get('normalization_apostrophe_mode', 'spacy')) == option.value %}checked{% endif %} {{ 'disabled' if readonly else '' }}>
+              <span>{{ option.label }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="field field--stack field--span-2">
+          <label for="normalization_numbers_year_style">Year pronunciation style</label>
+          <select id="normalization_numbers_year_style" name="normalization_numbers_year_style" {{ 'disabled' if readonly else '' }}>
+            <option value="american" {% if normalization_overrides.get('normalization_numbers_year_style', settings_dict.get('normalization_numbers_year_style', 'american')) == 'american' %}selected{% endif %}>American (1990 -> nineteen ninety)</option>
+            <option value="off" {% if normalization_overrides.get('normalization_numbers_year_style', settings_dict.get('normalization_numbers_year_style', 'american')) == 'off' %}selected{% endif %}>Off (read as number)</option>
+          </select>
+        </div>
+        {% for group in options.normalization_groups %}
+        {% for option in group.options %}
+        <div class="field field--stack">
+          <label class="toggle-pill">
+            <input type="hidden" name="{{ option.key }}" value="false">
+            <input type="checkbox" name="{{ option.key }}" value="true" {% if normalization_overrides.get(option.key, settings_dict.get(option.key, True)) %}checked{% endif %} {{ 'disabled' if readonly else '' }}>
+            <span>{{ option.label }}</span>
+          </label>
+        </div>
+        {% endfor %}
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="form-section">
+      <h3 class="form-section__title">Entities &amp; casting</h3>
+      <div class="field-grid field-grid--compact">
+        <div class="field field--stack field--span-2">
+          <label for="speaker_config">Speaker preset</label>
+          <select id="speaker_config" name="speaker_config" {{ 'disabled' if readonly else '' }}>
+            <option value="">None</option>
+            {% for config in options.speaker_configs %}
+            <option value="{{ config.name }}" {% if selected_config == config.name %}selected{% endif %}>{{ config.name }} · {{ config.speakers|length }} speaker{% if config.speakers|length != 1 %}s{% endif %}</option>
+            {% endfor %}
+          </select>
+          <p class="hint">Reuse a saved roster to keep character voices consistent.</p>
+        </div>
+        <div class="field">
+          <label for="chunk_level">Chunk granularity</label>
+          <select id="chunk_level" name="chunk_level" {{ 'disabled' if readonly else '' }}>
+            {% for option in options.chunk_levels %}
+            <option value="{{ option.value }}" {% if chunk_level_value == option.value %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+          </select>
+          <p class="hint">Paragraphs work well for long-form narration; sentences give finer subtitle sync.</p>
+        </div>
+        <div class="field">
+          <label for="speaker_analysis_threshold">Minimum mentions</label>
+          <input type="number" min="1" max="25" id="speaker_analysis_threshold" name="speaker_analysis_threshold" value="{{ analysis_threshold_value }}" {{ 'disabled' if readonly else '' }}>
+          <p class="hint">Entities appearing less often fall back to the narrator voice.</p>
+        </div>
+        <div class="field">
+          <label for="chapter_intro_delay">Pause after chapter titles (seconds)</label>
+          <input type="number" step="0.1" min="0" id="chapter_intro_delay" name="chapter_intro_delay" value="{{ '%.2f'|format(chapter_delay_value|float if chapter_delay_value is not none else 0.5) }}" {{ 'disabled' if readonly else '' }}>
+          <p class="hint">Set to 0 to disable the pause after speaking each chapter title.</p>
+        </div>
+        <div class="field field--stack">
+          <label class="toggle-pill">
+            <input type="hidden" name="read_title_intro" value="false">
+            <input type="checkbox" name="read_title_intro" value="true" {% if read_title_intro %}checked{% endif %} {{ 'disabled' if readonly else '' }}>
+            <span>Read title and authors before narration</span>
+          </label>
+          <p class="hint">When enabled, the narrator speaks the book title and author list before chapter one begins.</p>
+        </div>
+        <div class="field field--stack">
+          <label class="toggle-pill">
+            <input type="hidden" name="read_closing_outro" value="false">
+            <input type="checkbox" name="read_closing_outro" value="true" {% if read_closing_outro %}checked{% endif %} {{ 'disabled' if readonly else '' }}>
+            <span>Read closing outro after narration</span>
+          </label>
+          <p class="hint">Adds a short "The end" statement after the final chapter, including series details when available.</p>
+        </div>
+        <div class="field field--stack">
+          <label class="toggle-pill">
+            <input type="hidden" name="normalize_chapter_opening_caps" value="false">
+            <input type="checkbox" name="normalize_chapter_opening_caps" value="true" {% if normalize_chapter_opening_caps %}checked{% endif %} {{ 'disabled' if readonly else '' }}>
+            <span>Normalize ALL CAPS chapter openings</span>
+          </label>
+          <p class="hint">Converts opening sentences written in uppercase to sentence case while keeping acronyms like AI intact.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+  <footer class="modal__footer wizard-card__footer">
+    <div class="wizard-card__footer-actions">
+      <button type="button" class="button button--ghost" data-role="wizard-cancel" data-pending-id="{{ pending.id if pending else '' }}">Cancel</button>
+    </div>
+    <div class="wizard-card__footer-actions">
+      {% if readonly %}
+      <button type="button" class="button" data-role="wizard-back" data-target-step="chapters" data-pending-id="{{ pending.id if pending else '' }}">Return to chapters</button>
+      {% else %}
+      <button type="submit" class="button" data-step-target="chapters">Chapter selection</button>
+      {% endif %}
+    </div>
+  </footer>
+</form>

@@ -1,0 +1,58 @@
+# Docker Compose for Abogen Web UI (Flask-based interface)
+# 
+# This configuration runs the web-based Flask UI for Abogen.
+# For the Qt desktop UI, see the upstream project's docker configuration.
+#
+# Usage:
+#   docker compose -f docker-compose.webui.yml up --build
+#
+# Or set as default:
+#   docker compose up --build
+#
+services:
+  abogen-webui:
+    build:
+      context: .
+      dockerfile: abogen/webui/Dockerfile
+      args:
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu124}
+        TORCH_VERSION: ${TORCH_VERSION:-}
+    image: abogen-webui:latest
+    user: "${ABOGEN_UID:-1000}:${ABOGEN_GID:-1000}"
+    ports:
+      - "${ABOGEN_PORT:-8808}:8808"
+    volumes:
+      - ${ABOGEN_DATA:-./data}:/data
+      - ${ABOGEN_SETTINGS_DIR:-./config}:/config
+      - ${ABOGEN_OUTPUT_DIR:-./storage/output}:/data/outputs
+      - ${ABOGEN_TEMP_DIR:-./storage/tmp}:/data/cache
+    environment:
+      ABOGEN_HOST: 0.0.0.0
+      ABOGEN_PORT: 8808
+      ABOGEN_SETTINGS_DIR: "/config"
+      ABOGEN_UPLOAD_ROOT: /data/uploads
+      ABOGEN_OUTPUT_DIR: "/data/outputs"
+      ABOGEN_OUTPUT_ROOT: "/data/outputs"
+      ABOGEN_TEMP_DIR: "/data/cache"
+      ABOGEN_VOICE_CACHE_DIR: "/data/voice-cache"
+      HF_HOME: "/data/huggingface"
+      HUGGINGFACE_HUB_CACHE: "/data/huggingface/hub"
+      HOME: "/tmp/abogen-home"
+    # --- GPU support -----------------------------------------------------
+    # These settings assume the NVIDIA Container Toolkit is installed.
+    # Leave them in place for GPU acceleration; comment out the entire block
+    # below if you are deploying to a CPU-only host.
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          devices:
+            - capabilities: [gpu]
+              # driver: nvidia
+              # count: all
+    # Runtime flag is only honored by legacy docker-compose (v1) CLI.
+    # Uncomment if you're still using it:
+    # runtime: nvidia
+    restart: unless-stopped

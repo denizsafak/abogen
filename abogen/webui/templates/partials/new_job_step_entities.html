@@ -1,0 +1,610 @@
+{% set embed_scripts = embed_scripts if embed_scripts is defined else True %}
+{% set recognition_enabled = settings.enable_entity_recognition if settings is defined and settings.enable_entity_recognition is not none else True %}
+<form method="post"
+      action="{{ url_for('main.wizard_finish', pending_id=pending.id) }}"
+      class="prepare-form"
+      id="prepare-form"
+      data-role="prepare-form"
+  data-wizard-form="true"
+  data-step="entities"
+  data-pending-id="{{ pending.id }}"
+      data-analyze-url="{{ url_for('entities.analyze_entities', pending_id=pending.id) }}"
+      data-entities-url="{{ url_for('entities.get_entities', pending_id=pending.id) }}"
+      data-manual-list-url="{{ url_for('entities.list_manual_overrides', pending_id=pending.id) }}"
+      data-manual-upsert-url="{{ url_for('entities.upsert_override', pending_id=pending.id) }}"
+      data-manual-delete-url-template="{{ url_for('entities.delete_override', pending_id=pending.id, override_id='__OVERRIDE_ID__') }}"
+      data-manual-search-url="{{ url_for('entities.search_candidates', pending_id=pending.id) }}"
+      data-language="{{ pending.language }}"
+      data-base-voice="{{ pending.voice }}"
+      data-speed="{{ '%.2f'|format(pending.speed) }}"
+  data-use-gpu="{{ 'true' if pending.use_gpu else 'false' }}"
+  data-entities-enabled="{{ 'true' if recognition_enabled else 'false' }}">
+  <input type="hidden" name="active_step" value="entities" data-role="active-step-input">
+
+  <div class="wizard-hidden-inputs" aria-hidden="true">
+    <input type="hidden" name="chunk_level" value="{{ pending.chunk_level }}">
+    <input type="hidden" name="speaker_analysis_threshold" value="{{ pending.speaker_analysis_threshold }}">
+    <input type="hidden" name="chapter_intro_delay" value="{{ '%.2f'|format(pending.chapter_intro_delay) }}">
+    <input type="hidden" name="read_title_intro" value="{{ 'true' if pending.read_title_intro else 'false' }}">
+  <input type="hidden" name="normalize_chapter_opening_caps" value="{{ 'true' if pending.normalize_chapter_opening_caps else 'false' }}">
+    {% if pending.generate_epub3 %}
+      <input type="hidden" name="generate_epub3" value="true">
+    {% endif %}
+    {% for chapter in pending.chapters %}
+      {% set idx = loop.index0 %}
+      {% set is_enabled = chapter.enabled is not defined or chapter.enabled %}
+      {% set selected_option = '__default' %}
+      {% if chapter.voice_profile %}
+        {% set selected_option = 'profile:' ~ chapter.voice_profile %}
+      {% elif chapter.voice %}
+        {% set selected_option = 'voice:' ~ chapter.voice %}
+      {% elif chapter.voice_formula %}
+        {% set selected_option = 'formula' %}
+      {% endif %}
+      {% if is_enabled %}
+        <input type="hidden" name="chapter-{{ idx }}-enabled" value="on">
+      {% endif %}
+      <input type="hidden" name="chapter-{{ idx }}-title" value="{{ chapter.title }}">
+      <input type="hidden" name="chapter-{{ idx }}-voice" value="{{ selected_option }}">
+      <input type="hidden" name="chapter-{{ idx }}-formula" value="{{ chapter.voice_formula or '' }}">
+    {% endfor %}
+  </div>
+
+  <div class="modal__body wizard-card__body">
+    {% if error %}
+      <div class="alert alert--error">{{ error }}</div>
+    {% endif %}
+    {% if notice %}
+      <div class="alert alert--info">{{ notice }}</div>
+    {% endif %}
+
+    <div class="entity-tabs" data-role="entity-tabs">
+      {% if not recognition_enabled %}
+      <div class="alert alert--info entity-tabs__notice">
+        Entity recognition is disabled in Settings. Enable it to populate detected people and entities automatically.
+      </div>
+      {% endif %}
+      <div class="entity-tabs__nav" role="tablist" aria-label="Entity categories">
+        <button type="button"
+                class="entity-tabs__tab is-active"
+                data-role="entity-tab"
+                data-panel="people"
+                id="entity-tab-people"
+                aria-controls="entity-panel-people"
+                aria-selected="true"
+                role="tab">
+          People
+        </button>
+        <button type="button"
+                class="entity-tabs__tab"
+                data-role="entity-tab"
+                data-panel="entities"
+                id="entity-tab-entities"
+                aria-controls="entity-panel-entities"
+                aria-selected="false"
+                role="tab">
+          Entities
+        </button>
+        <button type="button"
+                class="entity-tabs__tab"
+                data-role="entity-tab"
+                data-panel="manual"
+                id="entity-tab-manual"
+                aria-controls="entity-panel-manual"
+                aria-selected="false"
+                role="tab">
+          Manual Overrides
+        </button>
+        <div class="entity-tabs__status" data-role="global-entity-spinner" hidden>
+          <span class="spinner spinner--sm"></span>
+          <span class="entity-tabs__status-text">Scanning text...</span>
+        </div>
+      </div>
+
+      <div class="entity-tabs__panels">
+        <section class="entity-tabs__panel is-active"
+                 data-role="entity-panel"
+                 data-panel="people"
+                 id="entity-panel-people"
+                 role="tabpanel"
+                 aria-labelledby="entity-tab-people">
+          <section class="prepare-speaker-config">
+            <div class="prepare-speaker-config__header">
+              <h2>Speaker configuration</h2>
+              <p class="hint">Reuse saved presets to keep character voices consistent between projects.</p>
+            </div>
+            <div class="prepare-speaker-config__grid">
+              <label class="field prepare-speaker-config__field" for="applied_speaker_config">
+                <span>Saved preset</span>
+                <select id="applied_speaker_config" name="applied_speaker_config">
+                  <option value="">None</option>
+                  {% for config in options.speaker_configs %}
+                  <option value="{{ config.name }}" {% if pending.applied_speaker_config == config.name %}selected{% endif %}>
+                    {{ config.name }} · {{ config.speakers|length }} speaker{% if config.speakers|length != 1 %}s{% endif %}
+                  </option>
+                  {% endfor %}
+                </select>
+                <p class="hint">Presets are saved from previous jobs.</p>
+              </label>
+              <div class="prepare-speaker-config__actions">
+                <button type="submit"
+                        class="button button--ghost"
+                        name="apply_speaker_config"
+                        data-role="submit-speaker-analysis"
+                        value="1"
+                        formaction="{{ url_for('entities.analyze_entities', pending_id=pending.id) }}"
+                        formmethod="post"
+                        formnovalidate
+                        {% if not options.speaker_configs %}disabled{% endif %}>
+                  Apply preset
+                </button>
+                <label class="toggle-pill">
+                  <input type="checkbox" name="save_speaker_config" value="1">
+                  <span>Save roster updates back to preset</span>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          {% if pending.speakers %}
+          <div class="prepare-speakers">
+            <h2>Speaker settings</h2>
+            <p class="hint">Set pronunciations, lock specific voices, and audition sample paragraphs to hear casting choices.</p>
+            <ul class="speaker-list">
+              {% for speaker_id, speaker in pending.speakers.items() %}
+              {% set pronunciation_text = speaker.pronunciation or speaker.label %}
+              {% set selected_voice = speaker.resolved_voice or speaker.voice %}
+              {% set seen = namespace(values=[]) %}
+              {% set sample_quotes = speaker.sample_quotes or [] %}
+              {% set detected_gender = speaker.detected_gender or speaker.gender or 'unknown' %}
+              {% set current_gender = speaker.gender or detected_gender %}
+              {% set gender_label = 'Either' if current_gender == 'either' else (current_gender|title if current_gender != 'unknown' else 'Unknown') %}
+              {% set detected_label = 'Either' if detected_gender == 'either' else (detected_gender|title if detected_gender != 'unknown' else 'Unknown') %}
+              <li class="speaker-list__item"
+                  data-speaker-id="{{ speaker_id }}"
+                  data-default-pronunciation="{{ pronunciation_text }}">
+                <div class="speaker-line speaker-list__header">
+                  <span class="speaker-list__name">{{ speaker.label }}</span>
+                  <button type="button"
+                          class="icon-button speaker-list__preview"
+                          data-role="speaker-preview"
+                          data-speaker-id="{{ speaker_id }}"
+                          data-preview-source="pronunciation"
+                          data-preview-text="{{ pronunciation_text|e }}"
+                          data-language="{{ pending.language }}"
+                          data-voice="{{ selected_voice or pending.voice }}"
+                          data-speed="{{ '%.2f'|format(pending.speed) }}"
+                          data-use-gpu="{{ 'true' if pending.use_gpu else 'false' }}"
+                          aria-label="Preview pronunciation for {{ speaker.label }}"
+                          title="Preview pronunciation">
+                    🔊
+                  </button>
+                </div>
+                <template data-role="speaker-samples">{{ sample_quotes | tojson }}</template>
+                <div class="speaker-list__meta">
+                  <div class="speaker-gender" data-role="speaker-gender" data-speaker-id="{{ speaker_id }}">
+                    <button type="button"
+                            class="chip speaker-gender__pill"
+                            data-role="gender-pill"
+                            data-current="{{ current_gender }}">
+                      {{ gender_label }} voice
+                    </button>
+                    <div class="speaker-gender__menu" data-role="gender-menu" hidden>
+                      <p class="hint">Detected: {{ detected_label }}</p>
+                      <div class="speaker-gender__options">
+                        <button type="button" class="chip" data-role="gender-option" data-value="female">Female</button>
+                        <button type="button" class="chip" data-role="gender-option" data-value="male">Male</button>
+                        <button type="button" class="chip" data-role="gender-option" data-value="either">Either</button>
+                        <button type="button" class="chip" data-role="gender-option" data-value="{{ detected_gender }}" {% if detected_gender == current_gender %}data-state="active"{% endif %}>
+                          Use detected ({{ detected_label }})
+                        </button>
+                      </div>
+                    </div>
+                    <input type="hidden" name="speaker-{{ speaker_id }}-gender" value="{{ current_gender }}" data-role="gender-input">
+                    <input type="hidden" name="speaker-{{ speaker_id }}-detected-gender" value="{{ detected_gender }}">
+                  </div>
+                  {% if speaker.get('analysis_count') %}
+                  <span class="badge badge--muted">{{ speaker.analysis_count }} lines · {{ speaker.analysis_confidence|default('low')|title }} confidence</span>
+                  {% endif %}
+                </div>
+                <label class="speaker-list__field" for="speaker-{{ speaker_id }}-pronunciation">
+                  <span>Pronunciation</span>
+                  <input type="text"
+                         id="speaker-{{ speaker_id }}-pronunciation"
+                         name="speaker-{{ speaker_id }}-pronunciation"
+                         value="{{ pronunciation_text }}"
+                         data-role="speaker-pronunciation"
+                         placeholder="{{ speaker.label }}">
+                </label>
+                <div class="speaker-list__controls">
+                  <div class="speaker-list__selection">
+                    <label class="speaker-list__field" for="speaker-{{ speaker_id }}-voice">
+                      <span>Assigned voice</span>
+                      <select id="speaker-{{ speaker_id }}-voice"
+                              name="speaker-{{ speaker_id }}-voice"
+                              data-role="speaker-voice"
+                              data-default-voice="{{ pending.voice }}">
+                        <option value="" {% if not selected_voice %}selected{% endif %}>Use narrator voice ({{ pending.voice }})</option>
+                        <option value="__custom_mix" data-role="custom-mix-option" {% if speaker.voice_formula %}selected{% else %}hidden disabled{% endif %}>
+                          Custom mix
+                        </option>
+                        {% if options.voice_profile_options %}
+                        <optgroup label="Saved speakers">
+                          {% for profile in options.voice_profile_options %}
+                          {% set profile_value = 'speaker:' ~ profile.name %}
+                          {% set provider_label = 'Supertonic' if profile.provider == 'supertonic' else 'Kokoro' %}
+                          <option value="{{ profile_value }}" {% if selected_voice == profile_value %}selected{% endif %}>
+                            {{ profile.name }} · {{ provider_label }}{% if profile.language %} · {{ profile.language|upper }}{% endif %}
+                          </option>
+                          {% endfor %}
+                        </optgroup>
+                        {% endif %}
+                        {% if speaker.recommended_voices %}
+                        <optgroup label="Recommended">
+                          {% for voice_id in speaker.recommended_voices[:6] %}
+                            {% if voice_id not in seen.values %}
+                              {% set voice_meta = options.voice_catalog_map.get(voice_id) or {} %}
+                              <option value="{{ voice_id }}" {% if selected_voice == voice_id %}selected{% endif %}>
+                                {{ voice_meta.display_name or voice_id }} · {{ voice_meta.language_label or voice_id[0]|upper }} · {{ voice_meta.gender or 'Unknown' }}
+                              </option>
+                              {% set _ = seen.values.append(voice_id) %}
+                            {% endif %}
+                          {% endfor %}
+                        </optgroup>
+                        {% endif %}
+                        <optgroup label="All voices">
+                          {% for voice in options.voice_catalog %}
+                            {% if voice.id not in seen.values %}
+                            <option value="{{ voice.id }}"
+                                    {% if selected_voice == voice.id %}selected{% endif %}>
+                              {{ voice.display_name }} · {{ voice.language_label }} · {{ voice.gender }}
+                            </option>
+                            {% endif %}
+                          {% endfor %}
+                        </optgroup>
+                      </select>
+                    </label>
+                    <button type="button"
+                            class="button button--ghost button--small"
+                            data-role="open-voice-browser"
+                            data-speaker-id="{{ speaker_id }}">
+                      Browse voices
+                    </button>
+                    <button type="button"
+                            class="button button--ghost button--small"
+                            data-role="generate-voice"
+                            data-speaker-id="{{ speaker_id }}">
+                      Generate voice
+                    </button>
+                    <button type="button"
+                            class="button button--ghost button--small"
+                            data-role="speaker-preview"
+                            data-preview-kind="generated"
+                            data-speaker-id="{{ speaker_id }}"
+                            data-preview-source="generated"
+                            data-preview-text="{{ pronunciation_text|e }}"
+                            data-language="{{ pending.language }}"
+                            data-voice="{{ speaker.voice_formula or selected_voice or pending.voice }}"
+                            data-speed="{{ '%.2f'|format(pending.speed) }}"
+                            data-use-gpu="{{ 'true' if pending.use_gpu else 'false' }}"
+                            {% if not speaker.voice_formula %}hidden{% endif %}>
+                      Preview generated
+                    </button>
+                  </div>
+                  <div class="speaker-list__mix" data-role="speaker-mix" {% if not speaker.voice_formula %}hidden{% endif %}>
+                    <span class="tag">Custom mix</span>
+                    <span data-role="speaker-mix-label">{{ speaker.voice_formula or '' }}</span>
+                    <div class="speaker-list__mix-actions">
+                      <button type="button"
+                              class="button button--ghost button--small"
+                              data-role="speaker-preview"
+                              data-preview-source="mix"
+                              data-speaker-id="{{ speaker_id }}"
+                              data-preview-text="{{ pronunciation_text|e }}"
+                              data-language="{{ pending.language }}"
+                              data-voice="{{ speaker.voice_formula or selected_voice or pending.voice }}"
+                              data-speed="{{ '%.2f'|format(pending.speed) }}"
+                              data-use-gpu="{{ 'true' if pending.use_gpu else 'false' }}">
+                        Preview mix
+                      </button>
+                      <button type="button" class="button button--ghost button--small" data-role="clear-mix">Clear</button>
+                    </div>
+                  </div>
+                  <input type="hidden" name="speaker-{{ speaker_id }}-formula" value="{{ speaker.voice_formula or '' }}" data-role="speaker-formula">
+                </div>
+                <details class="speaker-list__samples" {% if not sample_quotes %}data-state="empty"{% endif %}>
+                  <summary>Sample paragraphs</summary>
+                  {% if sample_quotes %}
+                    {% set first_sample = sample_quotes[0] if sample_quotes|length > 0 else None %}
+                    {% set first_excerpt = first_sample.excerpt if first_sample is mapping else first_sample %}
+                    {% set first_hint = first_sample.gender_hint if first_sample is mapping else '' %}
+                    <article class="speaker-sample" data-role="speaker-sample">
+                      <p data-role="sample-text">{{ first_excerpt }}</p>
+                      <p class="hint" data-role="sample-hint" {% if not first_hint %}hidden{% endif %}>{{ first_hint }}</p>
+                      <div class="speaker-sample__actions">
+                        <button type="button"
+                                class="button button--ghost button--small"
+                                data-role="speaker-preview"
+                                data-preview-source="sample"
+                                data-speaker-id="{{ speaker_id }}"
+                                data-preview-text="{{ first_excerpt }}"
+                                data-language="{{ pending.language }}"
+                                data-voice="{{ selected_voice or pending.voice }}"
+                                data-speed="{{ '%.2f'|format(pending.speed) }}"
+                                data-use-gpu="{{ 'true' if pending.use_gpu else 'false' }}">
+                          Preview with assigned voice
+                        </button>
+                        <button type="button"
+                                class="button button--ghost button--small"
+                                data-role="open-voice-browser"
+                                data-speaker-id="{{ speaker_id }}"
+                                data-sample-index="0">
+                          Preview in voice browser
+                        </button>
+                        {% if sample_quotes|length > 1 %}
+                        <button type="button"
+                                class="button button--ghost button--small"
+                                data-role="speaker-next-sample">
+                          Show another example
+                        </button>
+                        {% endif %}
+                      </div>
+                    </article>
+                  {% else %}
+                    <p class="hint">No paragraphs captured yet. Continue from Step 2 to gather dialogue samples automatically.</p>
+                  {% endif %}
+                </details>
+                {% if speaker.recommended_voices %}
+                <div class="speaker-list__recommendations">
+                  <span class="hint">Suggested:</span>
+                  {% for voice_id in speaker.recommended_voices[:6] %}
+                    {% set voice_meta = options.voice_catalog_map.get(voice_id) or {} %}
+                    <button type="button"
+                            class="chip"
+                            data-role="recommended-voice"
+                            data-voice="{{ voice_id }}"
+                            title="{{ voice_meta.display_name or voice_id }} · {{ voice_meta.language_label or voice_id[0]|upper }} · {{ voice_meta.gender or 'Unknown' }}">
+                      {{ voice_meta.display_name or voice_id }}
+                    </button>
+                  {% endfor %}
+                </div>
+                {% endif %}
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% else %}
+          <p class="hint">No additional speakers detected yet. The narrator voice will be used for all dialogue.</p>
+          {% endif %}
+
+          <section class="entity-summary entity-summary--people" data-role="people-summary">
+            <header class="entity-summary__header">
+              <div class="entity-summary__titles">
+                <h2>Detected people</h2>
+                <p class="hint">Characters surfaced by entity recognition. Filter by mention count to focus on recurring names.</p>
+              </div>
+              <div class="entity-summary__filters">
+                <label class="field field--inline" for="people-mention-filter">
+                  <span>Minimum mentions</span>
+                  <select id="people-mention-filter" data-role="entity-filter-people">
+                    <option value="0">All</option>
+                    <option value="1">1+</option>
+                    <option value="2">2+</option>
+                    <option value="5">5+</option>
+                    <option value="10">10+</option>
+                  </select>
+                </label>
+              </div>
+            </header>
+            <dl class="entity-summary__stats" data-role="people-stats"></dl>
+            <ol class="entity-summary__list" data-role="entity-list-people"></ol>
+          </section>
+        </section>
+
+        <section class="entity-tabs__panel"
+                 data-role="entity-panel"
+                 data-panel="entities"
+                 id="entity-panel-entities"
+                 role="tabpanel"
+                 aria-labelledby="entity-tab-entities"
+                 hidden>
+          <div class="entity-summary" data-role="entities-summary">
+            <header class="entity-summary__header">
+              <div class="entity-summary__titles">
+                <h2>Detected entities</h2>
+                <p class="hint">Assign pronunciations and voices for recurring names and terminology across the manuscript.</p>
+              </div>
+              <div class="entity-summary__filters">
+                <label class="field field--inline" for="entities-mention-filter">
+                  <span>Minimum mentions</span>
+                  <select id="entities-mention-filter" data-role="entity-filter-entities">
+                    <option value="0">All</option>
+                    <option value="1">1+</option>
+                    <option value="2">2+</option>
+                    <option value="5">5+</option>
+                    <option value="10">10+</option>
+                  </select>
+                </label>
+                <label class="field field--inline" for="entities-kind-filter">
+                  <span>Entity type</span>
+                  <select id="entities-kind-filter" data-role="entity-filter-kind">
+                    <option value="all">All</option>
+                  </select>
+                </label>
+                <div class="entity-summary__refresh-group">
+                  <span class="spinner spinner--sm spinner--muted" data-role="entities-spinner" aria-hidden="true" hidden></span>
+                  <button type="button" class="button button--ghost button--small" data-role="entities-refresh" {% if not recognition_enabled %}disabled aria-disabled="true"{% endif %}>Refresh</button>
+                </div>
+              </div>
+            </header>
+            <dl class="entity-summary__stats" data-role="entity-stats"></dl>
+            <ol class="entity-summary__list" data-role="entity-list-entities"></ol>
+            <template data-role="entity-row-template">
+              <li class="entity-summary__item" data-role="entity-row">
+                <header class="entity-summary__item-header">
+                  <div>
+                    <h3 class="entity-summary__label" data-role="entity-label"></h3>
+                    <p class="entity-summary__kind" data-role="entity-kind"></p>
+                  </div>
+                  <div class="entity-summary__actions">
+                    <span class="badge badge--muted" data-role="entity-count"></span>
+                    <button type="button" class="button button--ghost button--small" data-role="speaker-preview" data-entity-preview="true" hidden>Preview</button>
+                    <button type="button" class="button button--ghost button--small" data-role="entity-add-override">Add manual override</button>
+                  </div>
+                </header>
+                <div class="entity-inline-override" data-role="inline-override" hidden>
+                  <div class="entity-inline-override__fields">
+                    <label class="field" data-role="inline-override-pronunciation-label">
+                      <span>Pronunciation</span>
+                      <input type="text" data-role="manual-override-pronunciation" value="">
+                    </label>
+                    <label class="field">
+                      <span>Assigned voice</span>
+                      <select data-role="manual-override-voice" data-default-voice="{{ pending.voice }}">
+                        <option value="">Use narrator voice ({{ pending.voice }})</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="entity-inline-override__actions">
+                    <div class="entity-inline-override__buttons">
+                      <button type="button" class="button button--ghost button--small" data-role="speaker-preview" data-preview-source="manual">Preview</button>
+                      <button type="button" class="button button--ghost button--small" data-role="inline-override-save">Save</button>
+                    </div>
+                    <button type="button" class="button button--ghost button--small" data-role="inline-override-remove">Remove override</button>
+                  </div>
+                </div>
+                <div class="entity-summary__samples" data-role="entity-samples"></div>
+              </li>
+            </template>
+          </div>
+        </section>
+
+        <section class="entity-tabs__panel"
+                 data-role="entity-panel"
+                 data-panel="manual"
+                 id="entity-panel-manual"
+                 role="tabpanel"
+                 aria-labelledby="entity-tab-manual"
+                 hidden>
+          <div class="manual-overrides" data-role="manual-overrides">
+            <header class="manual-overrides__header">
+              <div class="manual-overrides__copy">
+                <h2>Manual overrides</h2>
+                <p class="hint">Search tokens from the book or add custom entries. Set pronunciations and assign voices to ensure previews and conversions use your preferred delivery.</p>
+              </div>
+              <div class="manual-overrides__header-actions">
+                <span class="manual-overrides__status" data-role="manual-override-status" aria-live="polite"></span>
+                <button type="button" class="button button--ghost button--small" data-role="manual-override-save-all">Save overrides</button>
+              </div>
+            </header>
+            <div class="manual-overrides__search">
+              <label class="field" for="manual-override-query">
+                <span>Search manuscript tokens</span>
+                <input type="search" id="manual-override-query" data-role="manual-override-query" placeholder="Search by name or phrase">
+              </label>
+              <div class="manual-overrides__search-actions">
+                <button type="button" class="button button--ghost" data-role="manual-override-search">Search</button>
+                <button type="button" class="button button--ghost" data-role="manual-override-add-custom">Add custom token</button>
+              </div>
+              <ul class="manual-overrides__results" data-role="manual-override-results"></ul>
+            </div>
+            <div class="manual-overrides__list" data-role="manual-override-list"></div>
+            <template data-role="manual-override-template">
+              <article class="manual-override" data-override-id="">
+                <header class="manual-override__header">
+                  <div>
+                    <h3 class="manual-override__label" data-role="override-label"></h3>
+                    <p class="manual-override__notes" data-role="override-notes"></p>
+                  </div>
+                  <div class="manual-override__actions">
+                    <button type="button" class="button button--ghost button--small" data-role="speaker-preview" data-preview-source="manual">Preview</button>
+                    <button type="button" class="button button--ghost button--small" data-role="manual-override-delete">Remove</button>
+                  </div>
+                </header>
+                <div class="manual-override__body">
+                  <label class="field" data-role="manual-override-pronunciation-label">
+                    <span>Pronunciation</span>
+                    <input type="text" data-role="manual-override-pronunciation" value="">
+                  </label>
+                  <label class="field">
+                    <span>Assigned voice</span>
+                    <select data-role="manual-override-voice" data-default-voice="{{ pending.voice }}">
+                      <option value="">Use narrator voice ({{ pending.voice }})</option>
+                    </select>
+                  </label>
+                  <div class="manual-override__meta" data-role="manual-override-meta"></div>
+                </div>
+              </article>
+            </template>
+            <p class="manual-overrides__empty" data-role="manual-overrides-empty" hidden>No overrides yet. Use search or add a custom entry to begin.</p>
+
+            <section class="manual-overrides__section" data-role="heteronym-overrides">
+              <header class="manual-overrides__header">
+                <div class="manual-overrides__copy">
+                  <h2>Heteronyms</h2>
+                  <p class="hint">Review sentences that contain a word with multiple pronunciations. The suggested option is selected by default. Hover the highlighted word for examples and use Preview to audition each pronunciation.</p>
+                </div>
+              </header>
+              <div class="manual-overrides__list" data-role="heteronym-override-list"></div>
+              <template data-role="heteronym-override-template">
+                <article class="manual-override" data-entry-id="">
+                  <header class="manual-override__header">
+                    <div>
+                      <h3 class="manual-override__label" data-role="heteronym-sentence"></h3>
+                      <p class="manual-override__notes" data-role="heteronym-notes"></p>
+                    </div>
+                  </header>
+                  <div class="manual-override__body" data-role="heteronym-options"></div>
+                </article>
+              </template>
+              <p class="manual-overrides__empty" data-role="heteronym-overrides-empty" hidden>No heteronyms found in the current selection.</p>
+            </section>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <footer class="modal__footer wizard-card__footer">
+    <div class="wizard-card__footer-actions">
+      <button type="button" class="button button--ghost" data-role="wizard-back" data-target-step="chapters" data-pending-id="{{ pending.id }}">Previous</button>
+      <button type="button" class="button button--ghost" data-role="wizard-cancel" data-pending-id="{{ pending.id }}">Cancel</button>
+    </div>
+    <div class="wizard-card__footer-actions">
+      <button type="submit" class="button" data-step-target="finalize">Queue conversion</button>
+    </div>
+  </footer>
+</form>
+
+<div class="modal" data-role="voice-modal" hidden>
+  <div class="modal__overlay" data-role="voice-modal-close" tabindex="-1"></div>
+  <div class="modal__content voice-browser" role="dialog" aria-modal="true" aria-labelledby="voice-modal-title">
+    <header class="voice-browser__header">
+      <h2 id="voice-modal-title">Choose a voice</h2>
+      <button type="button" class="icon-button" data-role="voice-modal-close" aria-label="Close voice browser">✕</button>
+    </header>
+    <div class="voice-browser__body">
+      <aside class="voice-browser__filters">
+        <label class="field">
+          <span>Search</span>
+          <input type="search" data-role="voice-filter" placeholder="Search by name, language, or tag">
+        </label>
+        <div class="voice-browser__chips" data-role="voice-filter-chips"></div>
+      </aside>
+      <section class="voice-browser__results" data-role="voice-results"></section>
+    </div>
+  </div>
+</div>
+
+<script id="entity-summary-data" type="application/json">{{ pending.entity_summary or {} | tojson }}</script>
+<script id="entity-cache-key" type="application/json">{{ pending.entity_cache_key or '' | tojson }}</script>
+<script id="manual-overrides-data" type="application/json">{{ pending.manual_overrides or [] | tojson }}</script>
+<script id="pronunciation-overrides-data" type="application/json">{{ pending.pronunciation_overrides or [] | tojson }}</script>
+<script id="heteronym-overrides-data" type="application/json">{{ pending.heteronym_overrides or [] | tojson }}</script>
+<script id="voice-catalog-data" type="application/json">{{ options.voice_catalog | tojson }}</script>
+<script id="voice-language-map" type="application/json">{{ options.languages | tojson }}</script>
+{% if embed_scripts %}
+<script type="module" src="{{ url_for('static', filename='speakers.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='prepare.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='dashboard.js') }}"></script>
+{% endif %}

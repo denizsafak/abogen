@@ -1,0 +1,64 @@
+# Docker Compose for Abogen
+#
+# This configuration runs the Flask-based Web UI for Abogen.
+# The Web UI provides a browser-based interface for audiobook generation.
+#
+# Usage:
+#   docker compose up --build
+#
+# Access the web interface at http://localhost:8808
+#
+# Network modes:
+#   - Set ABOGEN_NETWORK_MODE=host in .env to use host networking
+#     (required for accessing LAN resources like Calibre OPDS)
+#   - Leave unset or use "bridge" for isolated container networking
+#
+services:
+  abogen:
+    build:
+      context: .
+      dockerfile: abogen/webui/Dockerfile
+      args:
+        TORCH_INDEX_URL: ${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu126}
+        TORCH_VERSION: ${TORCH_VERSION:-}
+        USE_GPU: ${USE_GPU:-true}
+    image: abogen:latest
+    user: "${ABOGEN_UID:-1000}:${ABOGEN_GID:-1000}"
+    network_mode: ${ABOGEN_NETWORK_MODE:-bridge}
+    ports:
+      - "${ABOGEN_PORT:-8808}:8808"
+    volumes:
+      - ${ABOGEN_DATA:-./data}:/data
+      - ${ABOGEN_SETTINGS_DIR:-./config}:/config
+      - ${ABOGEN_OUTPUT_DIR:-./storage/output}:/data/outputs
+      - ${ABOGEN_TEMP_DIR:-./storage/tmp}:/data/cache
+    environment:
+      ABOGEN_HOST: 0.0.0.0
+      ABOGEN_PORT: 8808
+      ABOGEN_SETTINGS_DIR: "/config"
+      ABOGEN_UPLOAD_ROOT: /data/uploads
+      ABOGEN_OUTPUT_DIR: "/data/outputs"
+      ABOGEN_OUTPUT_ROOT: "/data/outputs"
+      ABOGEN_TEMP_DIR: "/data/cache"
+      ABOGEN_VOICE_CACHE_DIR: "/data/voice-cache"
+      HF_HOME: "/data/huggingface"
+      HUGGINGFACE_HUB_CACHE: "/data/huggingface/hub"
+      HOME: "/tmp/abogen-home"
+    # --- GPU support -----------------------------------------------------
+    # These settings assume the NVIDIA Container Toolkit is installed.
+    # Leave them in place for GPU acceleration; comment out the entire block
+    # below if you are deploying to a CPU-only host.
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          devices:
+            - capabilities: [gpu]
+              # driver: nvidia
+              # count: all
+    # Runtime flag is only honored by legacy docker-compose (v1) CLI.
+    # Uncomment if you're still using it:
+    # runtime: nvidia
+    restart: unless-stopped

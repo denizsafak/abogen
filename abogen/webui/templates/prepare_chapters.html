@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Prepare · {{ pending.original_filename }}{% endblock %}
+
+{% set is_multi_speaker = pending.speaker_mode == 'multi' %}
+{% set total_steps = 3 if is_multi_speaker else 2 %}
+
+{% block content %}
+<section class="wizard-page wizard-page--modal" data-step="chapters">
+  <div class="modal modal--wizard" data-role="wizard-modal" data-open="true">
+    <div class="modal__overlay" aria-hidden="true"></div>
+    <div class="modal__content card card--modal wizard-card" role="dialog" aria-modal="true" aria-labelledby="prepare-chapters-title">
+      <header class="modal__header wizard-card__header">
+        <div class="wizard-card__headline">
+          <nav class="step-indicator" aria-label="Audiobook workflow">
+            <button type="button"
+                    class="step-indicator__item is-complete"
+                    data-role="open-upload-modal">
+              <span class="step-indicator__index">1</span>
+              <span class="step-indicator__label">Upload &amp; settings</span>
+            </button>
+            <a class="step-indicator__item is-active"
+               aria-current="step"
+               href="{{ url_for('main.wizard_step', pending_id=pending.id, step='chapters') }}">
+              <span class="step-indicator__index">2</span>
+              <span class="step-indicator__label">Chapters</span>
+            </a>
+            {% if is_multi_speaker %}
+            <a class="step-indicator__item"
+               href="{{ url_for('main.wizard_step', pending_id=pending.id, step='entities') }}">
+              <span class="step-indicator__index">3</span>
+              <span class="step-indicator__label">Entities</span>
+            </a>
+            {% endif %}
+          </nav>
+          <h2 class="modal__title" id="prepare-chapters-title">Select chapters</h2>
+          <p class="hint">Choose which chapters to convert. We'll analyse entities automatically when you continue.</p>
+        </div>
+        <div class="wizard-card__aside">
+          <p class="wizard-card__filename" title="{{ pending.original_filename }}">{{ pending.original_filename }}</p>
+        </div>
+      </header>
+      <form method="post"
+            action="{{ url_for('main.wizard_finish', pending_id=pending.id) }}"
+            class="prepare-form"
+            id="prepare-form"
+            data-speaker-mode="{{ pending.speaker_mode }}"
+            data-analyze-url="{{ url_for('main.wizard_update', pending_id=pending.id) }}">
+      <input type="hidden" name="active_step" value="chapters" data-role="active-step-input">
+      <div class="wizard-hidden-inputs" aria-hidden="true">
+        <input type="hidden" name="chunk_level" value="{{ pending.chunk_level }}">
+        <input type="hidden" name="speaker_mode" value="{{ pending.speaker_mode }}">
+        <input type="hidden" name="speaker_analysis_threshold" value="{{ pending.speaker_analysis_threshold }}">
+        <input type="hidden" name="chapter_intro_delay" value="{{ '%.2f'|format(pending.chapter_intro_delay) }}">
+        <input type="hidden" name="read_title_intro" value="{{ 'true' if pending.read_title_intro else 'false' }}">
+    <input type="hidden" name="read_closing_outro" value="{{ 'true' if pending.read_closing_outro else 'false' }}">
+  <input type="hidden" name="normalize_chapter_opening_caps" value="{{ 'true' if pending.normalize_chapter_opening_caps else 'false' }}">
+        {% if pending.generate_epub3 %}
+          <input type="hidden" name="generate_epub3" value="true">
+        {% endif %}
+      </div>
+
+        <div class="modal__body wizard-card__body">
+        {% if error %}
+          <div class="alert alert--error">{{ error }}</div>
+        {% endif %}
+        {% if notice %}
+          <div class="alert alert--info">{{ notice }}</div>
+        {% endif %}
+
+        <section class="form-section">
+          <div class="form-section__title-row">
+            <h3 class="form-section__title">Detected chapters</h3>
+            <p class="hint">Toggle chapters on or off, rename them, and override the voice per chapter if needed.</p>
+          </div>
+          <div class="chapter-grid">
+            {% for chapter in pending.chapters %}
+              {% set is_enabled = chapter.enabled is not defined or chapter.enabled %}
+              {% set selected_option = '__default' %}
+              {% if chapter.voice_profile %}
+                {% set selected_option = 'profile:' ~ chapter.voice_profile %}
+              {% elif chapter.voice %}
+                {% set selected_option = 'voice:' ~ chapter.voice %}
+              {% elif chapter.voice_formula %}
+                {% set selected_option = 'formula' %}
+              {% endif %}
+              <article class="chapter-card"
+                       data-role="chapter-row"
+                       data-disabled="{{ 'false' if is_enabled else 'true' }}"
+                       data-expanded="false">
+                <header class="chapter-card__summary" data-role="chapter-summary">
+                  <label class="chapter-card__checkbox">
+                    <input type="checkbox"
+                           name="chapter-{{ loop.index0 }}-enabled"
+                           data-role="chapter-enabled"
+                           {% if is_enabled %}checked{% endif %}>
+                    <span>Chapter {{ loop.index }} · {{ chapter.title }}</span>
+                  </label>
+                  <button type="button"
+                          class="chapter-card__toggle"
+                          data-role="chapter-toggle"
+                          aria-expanded="false"
+                          aria-label="Toggle chapter details">
+                    <span class="chapter-card__toggle-icon" aria-hidden="true">&#9662;</span>
+                  </button>
+                </header>
+       <div class="chapter-card__details"
+         data-role="chapter-details">
+                  <div class="chapter-card__field">
+                    <label for="chapter-{{ loop.index0 }}-title">Title</label>
+                    <input type="text" id="chapter-{{ loop.index0 }}-title" name="chapter-{{ loop.index0 }}-title" value="{{ chapter.title }}">
+                  </div>
+                  <div class="chapter-card__preview">
+                    <details>
+                      <summary>Preview full text</summary>
+                      <pre>{{ chapter.text[:2000] }}{% if chapter.text|length > 2000 %}…{% endif %}</pre>
+                    </details>
+                  </div>
+                  <div class="chapter-card__field">
+                    <label for="chapter-{{ loop.index0 }}-voice">Voice override</label>
+                    <select id="chapter-{{ loop.index0 }}-voice" name="chapter-{{ loop.index0 }}-voice" data-role="voice-select">
+                      <option value="__default" {% if selected_option == '__default' %}selected{% endif %}>Use job default</option>
+                      <optgroup label="Voices">
+                        {% for voice in options.voices %}
+                          <option value="voice:{{ voice }}" {% if selected_option == 'voice:' ~ voice %}selected{% endif %}>{{ voice }}</option>
+                        {% endfor %}
+                      </optgroup>
+                      {% if options.voice_profile_options %}
+                      <optgroup label="Profiles">
+                        {% for profile in options.voice_profile_options %}
+                          <option value="profile:{{ profile.name }}" {% if selected_option == 'profile:' ~ profile.name %}selected{% endif %}>{{ profile.name }}{% if profile.language %} · {{ profile.language|upper }}{% endif %}</option>
+                        {% endfor %}
+                      </optgroup>
+                      {% endif %}
+                      <option value="formula" {% if selected_option == 'formula' %}selected{% endif %}>Custom formula…</option>
+                    </select>
+                    <input type="text"
+                           name="chapter-{{ loop.index0 }}-formula"
+                           class="chapter-card__formula"
+                           data-role="formula-input"
+                           placeholder="af_nova*0.4+am_liam*0.6"
+                           value="{{ chapter.voice_formula or '' }}"
+                           {% if selected_option != 'formula' %}hidden aria-hidden="true"{% else %}aria-hidden="false"{% endif %}>
+                  </div>
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        </section>
+        </div>
+        <footer class="modal__footer wizard-card__footer">
+          <div class="wizard-card__footer-actions">
+            <button type="button" class="button button--ghost" data-role="wizard-previous">Previous</button>
+            <button type="submit" class="button button--ghost" form="cancel-form">Cancel</button>
+          </div>
+          <div class="wizard-card__footer-actions">
+            {% if is_multi_speaker %}
+            <button type="submit"
+                    class="button"
+                    data-role="submit-speaker-analysis"
+                    data-step-toggle="analysis"
+                    formaction="{{ url_for('main.wizard_update', pending_id=pending.id) }}"
+                    formmethod="post">
+              Continue to entities
+            </button>
+            {% endif %}
+            <button type="submit" class="button" data-step-toggle="finalize"{% if is_multi_speaker %} hidden aria-hidden="true"{% endif %}>
+              Queue conversion
+            </button>
+          </div>
+        </footer>
+      </form>
+      <form method="post" action="{{ url_for('main.wizard_cancel', pending_id=pending.id) }}" id="cancel-form"></form>
+    </div>
+  </div>
+</section>
+{% with pending=pending, readonly=True, active_step='chapters' %}
+  {% include "partials/upload_modal.html" %}
+{% endwith %}
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script id="voice-sample-texts" type="application/json">{{ options.sample_voice_texts | tojson }}</script>
+  <script id="voice-catalog-data" type="application/json">{{ options.voice_catalog | tojson }}</script>
+  <script id="voice-language-map" type="application/json">{{ options.languages | tojson }}</script>
+  <script type="module" src="{{ url_for('static', filename='speakers.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='prepare.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='dashboard.js') }}"></script>
+{% endblock %}

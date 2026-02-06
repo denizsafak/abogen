@@ -27,10 +27,11 @@ def main():
             version = None
     if version:
         print(f"🔖 Package version: {version}")
-    
+
     # Check if build module is installed, install if not
     # Temporarily remove script_dir from sys.path to avoid importing local build.py
     import sys
+
     original_path = sys.path[:]
     try:
         sys.path = [p for p in sys.path if os.path.abspath(p) != script_dir]

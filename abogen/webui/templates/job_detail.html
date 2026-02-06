@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Job · {{ job.original_filename }}{% endblock %}
+
+{% block content %}
+<section class="card">
+  <div class="card__title">{{ job.original_filename }}</div>
+  <div class="grid grid--two">
+    <article>
+      <h2>Settings</h2>
+      <ul>
+        <li><strong>Voice:</strong> {{ job.voice }}</li>
+        <li><strong>Language:</strong> {{ options.languages.get(job.language, job.language) }}</li>
+        {% if job.voice_profile %}
+        <li><strong>Voice profile:</strong> {{ job.voice_profile }}</li>
+        {% endif %}
+        <li><strong>Speed:</strong> {{ '%.2f' | format(job.speed) }}×</li>
+        <li><strong>Subtitle mode:</strong> {{ job.subtitle_mode }}</li>
+        <li><strong>Audio format:</strong> {{ job.output_format }}</li>
+        <li><strong>Subtitle format:</strong> {{ job.subtitle_format }}</li>
+        <li><strong>GPU:</strong> {{ 'Yes' if job.use_gpu else 'No' }}</li>
+        <li><strong>Save chapters separately:</strong> {{ 'Yes' if job.save_chapters_separately else 'No' }}</li>
+        <li><strong>Merge at end:</strong> {{ 'Yes' if job.merge_chapters_at_end else 'No' }}</li>
+        <li><strong>Separate chapter format:</strong> {{ job.separate_chapters_format|upper }}</li>
+        <li><strong>Silence between chapters:</strong> {{ '%.1f'|format(job.silence_between_chapters) }}s</li>
+        <li><strong>Chapter intro delay:</strong> {{ '%.1f'|format(job.chapter_intro_delay) }}s</li>
+        <li><strong>Title intro:</strong> {{ 'Yes' if job.read_title_intro else 'No' }}</li>
+  <li><strong>Closing outro:</strong> {{ 'Yes' if job.read_closing_outro else 'No' }}</li>
+        <li><strong>Normalize chapter openings:</strong> {{ 'Yes' if job.normalize_chapter_opening_caps else 'No' }}</li>
+        <li><strong>Prefix chapter titles:</strong> {{ 'Yes' if job.auto_prefix_chapter_titles else 'No' }}</li>
+        <li><strong>Max words per subtitle:</strong> {{ job.max_subtitle_words }}</li>
+        <li><strong>Project folder:</strong> {{ 'Yes' if job.save_as_project else 'No' }}</li>
+        <li><strong>Chunk granularity:</strong> {{ job.chunk_level|replace('_', ' ')|title }}</li>
+        <li><strong>Speaker analysis threshold:</strong> {{ job.speaker_analysis_threshold }}</li>
+        <li><strong>Generate EPUB 3:</strong> {{ 'Yes' if job.generate_epub3 else 'No' }}</li>
+      </ul>
+    </article>
+    <article>
+      <h2>Status</h2>
+      <p><span class="badge badge--{{ job.status.value }}">{{ job.status.value|title }}</span></p>
+      <p>Created: {{ job.created_at|datetimeformat }}</p>
+      <p>Started: {{ job.started_at|datetimeformat }}</p>
+      <p>Finished: {{ job.finished_at|datetimeformat }}</p>
+      <p>Characters: {{ job.processed_characters }} / {{ job.total_characters or '—' }}</p>
+  {% set flags = downloads or {} %}
+  {% if flags.get('m4b') %}
+  <p><a class="button" href="{{ url_for('jobs.download_file', job_id=job.id, file_type='audio') }}">Download M4B</a></p>
+  {% elif flags.get('audio') %}
+  <p><a class="button" href="{{ url_for('jobs.download_file', job_id=job.id, file_type='audio') }}">Download audio</a></p>
+  {% endif %}
+  {% if flags.get('epub3') %}
+  <p><a class="button button--ghost" href="{{ url_for('jobs.job_epub', job_id=job.id) }}">Download EPUB 3</a></p>
+  {% endif %}
+      {% if job.status in [JobStatus.PENDING, JobStatus.RUNNING, JobStatus.PAUSED] %}
+      <form action="{{ url_for('jobs.cancel_job', job_id=job.id) }}" method="post">
+        <button type="submit" class="button button--ghost">Cancel job</button>
+      </form>
+      {% elif job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED] %}
+      <form action="{{ url_for('jobs.retry_job', job_id=job.id) }}" method="post">
+        <button type="submit" class="button">Retry job</button>
+      </form>
+      {% endif %}
+    </article>
+  </div>
+</section>
+
+{% set analysis = job.speaker_analysis or {} %}
+{% if analysis %}
+{% set preview_template = options.speaker_pronunciation_sentence or "This is {{name}} speaking." %}
+<section class="card">
+  <div class="card__title">Speaker analysis</div>
+  <div class="grid grid--two">
+    <article>
+      <h2>Summary</h2>
+      {% set stats = analysis.get('stats', {}) %}
+      <ul>
+        <li><strong>Total chunks:</strong> {{ stats.get('total_chunks', '—') }}</li>
+        <li><strong>Explicit dialogue chunks:</strong> {{ stats.get('explicit_chunks', '—') }}</li>
+        <li><strong>Active speakers:</strong> {{ stats.get('active_speakers', '—') }}</li>
+        <li><strong>Unique speakers observed:</strong> {{ stats.get('unique_speakers', '—') }}</li>
+        <li><strong>Suppressed speakers:</strong> {{ stats.get('suppressed', 0) }}</li>
+      </ul>
+    </article>
+    <article>
+      <h2>Detected speakers</h2>
+      {% set speakers = analysis.get('speakers', {}) %}
+      {% set narrator_id = analysis.get('narrator', 'narrator') %}
+      {% if speakers %}
+      <ul>
+        {% for speaker_id, payload in speakers.items() if speaker_id != narrator_id and not payload.get('suppressed') %}
+        {% set spoken_name = payload.get('pronunciation') or payload.get('label') or speaker_id|replace('_', ' ')|title %}
+        {% set preview_text = preview_template | replace("{{name}}", spoken_name) %}
+        <li>
+          <div class="speaker-line">
+            <strong>{{ payload.get('label', speaker_id|replace('_', ' ')|title) }}</strong>
+            <button type="button"
+                    class="icon-button speaker-list__preview"
+                    data-role="speaker-preview"
+                    data-job-id="{{ job.id }}"
+                    data-speaker-id="{{ speaker_id }}"
+                    data-preview-text="{{ preview_text|e }}"
+                    data-language="{{ job.language }}"
+                    data-voice="{{ payload.get('resolved_voice') or payload.get('voice_formula') or payload.get('voice') or job.voice }}"
+                    data-speed="{{ '%.2f'|format(job.speed) }}"
+                    data-use-gpu="{{ 'true' if job.use_gpu else 'false' }}"
+                    aria-label="Preview pronunciation for {{ payload.get('label', speaker_id|replace('_', ' ')|title) }}"
+                    title="Preview pronunciation">
+              <span class="icon-button__glyph" aria-hidden="true">🔊</span>
+              <span class="spinner spinner--sm spinner--muted" aria-hidden="true"></span>
+            </button>
+          </div>
+          <div class="meta">
+            <span>{{ payload.get('count', 0) }} chunks</span>
+            <span>Confidence: {{ payload.get('confidence', 'low')|title }}</span>
+            {% if payload.get('pronunciation') %}
+            <span>Pronunciation: {{ payload.get('pronunciation') }}</span>
+            {% endif %}
+          </div>
+          {% set quotes = payload.get('sample_quotes', []) %}
+          {% if quotes %}
+          <details>
+            <summary>Sample quotes</summary>
+            <ul>
+              {% for quote in quotes %}
+              <li>{{ quote }}</li>
+              {% endfor %}
+            </ul>
+          </details>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p>No additional speakers detected.</p>
+      {% endif %}
+      {% set suppressed = analysis.get('suppressed_details') or analysis.get('suppressed', []) %}
+      {% if suppressed %}
+      <p class="muted">
+        Suppressed speakers:
+        {% if suppressed[0] is string %}
+          {{ suppressed | join(', ') }}
+        {% else %}
+          {{ suppressed | map(attribute='label') | join(', ') }}
+        {% endif %}
+      </p>
+      {% endif %}
+    </article>
+  </div>
+</section>
+{% endif %}
+
+{% include "partials/logs_section.html" %}
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script type="module" src="{{ url_for('static', filename='speakers.js') }}"></script>
+{% endblock %}

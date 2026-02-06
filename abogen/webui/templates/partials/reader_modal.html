@@ -1,0 +1,19 @@
+<div class="modal" data-role="reader-modal" hidden>
+  <div class="modal__overlay" data-role="reader-modal-close" tabindex="-1"></div>
+  <div class="modal__content card card--modal reader-modal" role="dialog" aria-modal="true" aria-labelledby="reader-modal-title">
+    <header class="modal__header">
+      <div class="modal__heading">
+        <h2 class="modal__title" id="reader-modal-title">Read &amp; listen</h2>
+        <p class="hint" data-role="reader-modal-hint">Preview synchronized narration directly in your browser.</p>
+      </div>
+      <button type="button" class="icon-button" data-role="reader-modal-close" aria-label="Close reader">✕</button>
+    </header>
+    <div class="modal__body reader-modal__body">
+      <iframe title="EPUB reader"
+              class="reader-modal__frame"
+              data-role="reader-frame"
+              allow="autoplay"
+              loading="lazy"></iframe>
+    </div>
+  </div>
+</div>

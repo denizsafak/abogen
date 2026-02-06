@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}abogen · Dashboard{% endblock %}
+
+{% block content %}
+<style>
+  .stats-overview {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+  .stat-card {
+    background: var(--bg-surface, #fff);
+    border: 1px solid var(--border-subtle, #ddd);
+    border-radius: var(--radius-md, 8px);
+    padding: 1rem;
+    flex: 1;
+    min-width: 120px;
+    text-align: center;
+    box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.05));
+  }
+  .stat-card__value {
+    display: block;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-main, #333);
+    line-height: 1.2;
+  }
+  .stat-card__label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-muted, #666);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 0.25rem;
+  }
+</style>
+
+<section class="stats-overview">
+  <div class="stat-card">
+    <span class="stat-card__value">{{ stats.total }}</span>
+    <span class="stat-card__label">Total Jobs</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-card__value">{{ stats.completed }}</span>
+    <span class="stat-card__label">Converted</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-card__value">{{ stats.running }}</span>
+    <span class="stat-card__label">Converting</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-card__value">{{ stats.pending }}</span>
+    <span class="stat-card__label">Pending</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-card__value">{{ stats.failed }}</span>
+    <span class="stat-card__label">Failed</span>
+  </div>
+</section>
+
+<section class="card card--workflow">
+  <h1 class="card__title">Create a New Audiobook</h1>
+  <p class="card__subtitle">Kick off a fresh conversion with your manuscript or pasted text. You can fine-tune chapters and entities in the next steps.</p>
+  <div class="upload-card__dropzone" data-role="upload-dropzone" tabindex="0" role="button" aria-label="Open upload settings or drop a manuscript file">
+    <div class="upload-card__dropzone-content">
+      <span class="upload-card__icon" aria-hidden="true">&uarr;</span>
+      <p class="upload-card__headline">Drop your manuscript to begin</p>
+      <p class="upload-card__hint">Drag &amp; drop a supported file here, or click to choose one in the next step.</p>
+      <p class="upload-card__filename" data-role="upload-dropzone-filename" hidden></p>
+      <button type="button" class="button" data-role="open-upload-modal">Open upload &amp; settings</button>
+      {% if opds_available %}
+          <div class="wizard-card__body">
+      <p>Upload an EPUB or text file to begin.</p>
+      <a class="button button--ghost" href="{{ url_for('books.find_books_page') }}">Browse Calibre library</a>
+    </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% with pending=None, readonly=False, active_step='settings' %}
+  {% include "partials/upload_modal.html" %}
+{% endwith %}
+
+{% include "partials/reader_modal.html" %}
+
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script id="voice-sample-texts" type="application/json">{{ options.sample_voice_texts | tojson }}</script>
+  <script type="module" src="{{ url_for('static', filename='dashboard.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='prepare.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='speakers.js') }}"></script>
+{% endblock %}
