@@ -291,6 +291,8 @@ abogen-web
 ```
 Then open http://localhost:8808 and drag in your documents. Jobs run in the background worker and the browser updates automatically.
 
+<img title="Abogen in action" src='https://raw.githubusercontent.com/denizsafak/abogen/refs/heads/main/demo/abogen-webui.png'> 
+
 ## `Using the web UI`
 1. Upload a document (drag & drop or use the upload button).
 2. Choose voice, language, speed, subtitle style, and output format.
