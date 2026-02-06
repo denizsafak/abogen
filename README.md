@@ -303,7 +303,7 @@ Then open http://localhost:8808 and drag in your documents. Jobs run in the back
 Multiple jobs can run sequentially; the worker processes them in order.
 
 ## `Container image`
-A lightweight Dockerfile lives in `abogen/Dockerfile`.
+You can build a lightweight container image directly from the repository root:
 
 ```bash
 docker build -t abogen .
