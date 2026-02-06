@@ -20,19 +20,6 @@ https://github.com/user-attachments/assets/094ba3df-7d66-494a-bc31-0e4b41d0b865
 
 > This demo was generated in just 5 seconds, producing ∼1 minute of audio with perfectly synced subtitles. To create a similar video, see [the demo guide](https://github.com/denizsafak/abogen/tree/main/demo).
 
-## Interfaces
-
-Abogen offers **two interfaces**, but currently they have different feature sets. The **Web UI** contains newer features that are still being integrated into the desktop application.
-
-| Command | Interface | Features |
-|---------|-----------|----------|
-| `abogen` | PyQt6 Desktop GUI | Stable core features |
-| `abogen-web` | Flask Web UI | Core features + **Supertonic TTS**, **LLM Normalization**, **Audiobookshelf Integration** and more! |
-
-> **Note:** The Web UI (developed by [@jeremiahsb](https://github.com/jeremiahsb)) is under active development. We are working to integrate these new features into the PyQt desktop app. until then, the Web UI provides the most feature-rich experience.
-
-> Special thanks to [@jeremiahsb](https://github.com/jeremiahsb) for making this possible!
-
 ## `How to install?` <a href="https://pypi.org/project/abogen/" target="_blank"><img src="https://img.shields.io/pypi/pyversions/abogen" alt="Abogen Compatible PyPi Python Versions" align="right" style="margin-top:6px;"></a>
 
 ### `Windows`
@@ -179,10 +166,23 @@ pip3 install --pre torch torchvision torchaudio --index-url https://download.pyt
 
 > Special thanks to [@hg000125](https://github.com/hg000125) for his contribution in [#23](https://github.com/denizsafak/abogen/issues/23). AMD GPU support is possible thanks to his work.
 
----
+
+## Interfaces
+
+Abogen offers **two interfaces**, but currently they have different feature sets. The **Web UI** contains newer features that are still being integrated into the desktop application.
+
+| Command | Interface | Features |
+|---------|-----------|----------|
+| `abogen` | PyQt6 Desktop GUI | Stable core features |
+| `abogen-web` | Flask Web UI | Core features + **Supertonic TTS**, **LLM Normalization**, **Audiobookshelf Integration** and more! |
+
+> **Note:** The Web UI is under active development. We are working to integrate these new features into the PyQt desktop app. until then, the Web UI provides the most feature-rich experience.
+
+> Special thanks to [@jeremiahsb](https://github.com/jeremiahsb) for making this possible! I was honestly surprised by his [massive contribution](https://github.com/denizsafak/abogen/pull/120) (>55,000 lines!) that brought the entire Web UI to life.
+
 # 🖥️ Desktop Application (PyQt)
 
-## `How to run?` (Desktop)
+## `How to run?`
 
 You can simply run this command to start Abogen Desktop GUI:
 
@@ -193,7 +193,7 @@ abogen
 > [!TIP]
 > If you installed Abogen using the Windows installer `(WINDOWS_INSTALL.bat)`, It should have created a shortcut in the same folder, or your desktop. You can run it from there. If you lost the shortcut, Abogen is located in `python_embedded/Scripts/abogen.exe`. You can run it from there directly.
 
-## `How to use?` (Desktop)
+## `How to use?`
 1) Drag and drop any ePub, PDF, text, markdown, or subtitle file (or use the built-in text editor)
 2) Configure the settings:
     - Set speech speed
@@ -282,7 +282,7 @@ Abogen will process each item in the queue automatically, saving outputs as conf
 ---
 # 🌐 Web Application (WebUI)
 
-## `How to run?` (Web)
+## `How to run?`
 
 Run this command to start the Web UI:
 
