@@ -310,7 +310,7 @@ for /f %%i in ('%PYTHON_CONSOLE_PATH% -c "from abogen.is_nvidia import check; pr
 echo.
 echo Checking CUDA availability...
 if /I "%IS_NVIDIA%"=="true" (
-    for /f %%i in ('%PYTHON_CONSOLE_PATH% -c "from torch.cuda import is_available; print(is_available())"') do set cuda_available=%%i
+    for /f %%i in ('%PYTHON_CONSOLE_PATH% %PROJECTFOLDER%\check_cuda.py') do set cuda_available=%%i
 
     if "%cuda_available%"=="False" (
         echo "Installing PyTorch with CUDA (12.8) support..."
