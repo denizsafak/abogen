@@ -5,50 +5,63 @@ build-backend = "hatchling.build"
 [project]
 name = "abogen"
 description = "Generate audiobooks from EPUBs, PDFs and text with synchronized captions."
-authors = [
-    { name="Deniz Şafak", email="denizsafak98@gmail.com" }
-]
+authors = [{ name = "Deniz Şafak", email = "denizsafak98@gmail.com" }]
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10, <3.13"
-keywords = ["audiobook", "epub", "pdf", "text-to-speech", "subtitle", "tts", "kokoro", "accessibility", "book-converter", "voice-synthesis", "multilingual", "chapter-management", "subtitles", "content-creation", "media-generation"]
+keywords = [
+  "audiobook",
+  "epub",
+  "pdf",
+  "text-to-speech",
+  "subtitle",
+  "tts",
+  "kokoro",
+  "accessibility",
+  "book-converter",
+  "voice-synthesis",
+  "multilingual",
+  "chapter-management",
+  "subtitles",
+  "content-creation",
+  "media-generation",
+]
 dependencies = [
-    "pip",
-    "kokoro>=0.9.4",
-    "misaki[zh]>=0.9.4",
-    "supertonic>=0.1.0",
-    "ebooklib>=0.19",
-    "beautifulsoup4>=4.13.4",
-    "spacy>=3.8.7,<4.0",
-    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
-    "PyMuPDF>=1.25.5",
-    "platformdirs>=4.3.7",
-    "soundfile>=0.13.1",
-    "mutagen>=1.47.0",
-    "pygame>=2.6.1",
-    "charset_normalizer>=3.4.1",
-    "chardet>=5.2.0",
-    "python-dotenv>=1.0.1",
-    "static_ffmpeg>=2.13",
-    "Markdown>=3.9",
-    "Flask>=3.0.3",
-    "numpy>=1.24.0",
-    "gpustat>=1.1.1",
-    "num2words>=0.5.13",
-    "httpx>=0.27.0",
-    "PyQt6>=6.5.0"
+  "pip",
+  "kokoro>=0.9.4",
+  "misaki[zh]>=0.9.4",
+  "supertonic>=0.1.0",
+  "ebooklib>=0.19",
+  "beautifulsoup4>=4.13.4",
+  "spacy>=3.8.7,<4.0",
+  "PyMuPDF>=1.25.5",
+  "platformdirs>=4.3.7",
+  "soundfile>=0.13.1",
+  "mutagen>=1.47.0",
+  "pygame>=2.6.1",
+  "charset_normalizer>=3.4.1",
+  "chardet>=5.2.0",
+  "python-dotenv>=1.0.1",
+  "static_ffmpeg>=2.13",
+  "Markdown>=3.9",
+  "Flask>=3.0.3",
+  "numpy>=1.24.0",
+  "gpustat>=1.1.1",
+  "num2words>=0.5.13",
+  "httpx>=0.27.0",
+  "PyQt6>=6.5.0",
 ]
 
 classifiers = [
-    "Intended Audience :: End Users/Desktop",
-    "Topic :: Multimedia :: Sound/Audio :: Conversion",
-    "Topic :: Multimedia :: Sound/Audio :: Sound Synthesis",
-    "Topic :: Multimedia :: Sound/Audio :: Speech",
-    "Topic :: Text Processing",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Operating System :: OS Independent"
+  "Intended Audience :: End Users/Desktop",
+  "Topic :: Multimedia :: Sound/Audio :: Conversion",
+  "Topic :: Multimedia :: Sound/Audio :: Sound Synthesis",
+  "Topic :: Multimedia :: Sound/Audio :: Speech",
+  "Topic :: Text Processing",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
 ]
 
 dynamic = ["version"]
@@ -73,21 +86,18 @@ abogen-pyqt = "abogen.pyqt.main:main"
 
 [tool.hatch.build.targets.sdist]
 exclude = [
-    "/.github",
-    "/demo",
-    "/abogen/resources",
-    "/abogen/assets/create_shortcuts.bat",
-    "WINDOWS_INSTALL.bat",
+  "/.github",
+  "/demo",
+  "/abogen/resources",
+  "/abogen/assets/create_shortcuts.bat",
+  "WINDOWS_INSTALL.bat",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["abogen"]
 
 [tool.hatch.build]
-include = [
-    "abogen/webui/templates/**",
-    "abogen/webui/static/**",
-]
+include = ["abogen/webui/templates/**", "abogen/webui/static/**"]
 
 [tool.hatch.version]
 path = "abogen/VERSION"
@@ -95,8 +105,8 @@ pattern = "^(?P<version>.+)$"
 
 [tool.pytest.ini_options]
 filterwarnings = [
-    "ignore:builtin type .* has no __module__ attribute:DeprecationWarning",
-    "ignore:Importing 'parser.split_arg_string' is deprecated:DeprecationWarning"
+  "ignore:builtin type .* has no __module__ attribute:DeprecationWarning",
+  "ignore:Importing 'parser.split_arg_string' is deprecated:DeprecationWarning",
 ]
 
 # --- OPTIONAL DEPENDENCIES ---
@@ -118,7 +128,7 @@ dev = ["build", "pytest"]
 [tool.uv.sources]
 kokoro = [
   { git = "https://github.com/hexgrad/kokoro.git", marker = "sys_platform == 'darwin'" },
-  { index = "pypi", marker = "sys_platform != 'darwin'" }
+  { index = "pypi", marker = "sys_platform != 'darwin'" },
 ]
 
 # --- TORCH CONFIGURATION ---
@@ -134,13 +144,13 @@ torch = [
   { index = "pytorch-cuda-126", marker = "extra == 'cuda126' and extra != 'rocm' and extra != 'cuda130'" },
 
   # CUDA 12.8 (NVIDIA)
-  { index = "pytorch-cuda-128", marker = "extra == 'cuda' and extra != 'rocm' and extra != 'cuda130' and extra != 'cuda126'" }
+  { index = "pytorch-cuda-128", marker = "extra == 'cuda' and extra != 'rocm' and extra != 'cuda130' and extra != 'cuda126'" },
 ]
 
 # --- TRITON CONFIGURATION ---
 
 pytorch-triton-rocm = [
-  { index = "pytorch-rocm-64-nightly", marker = "extra == 'rocm'" }
+  { index = "pytorch-rocm-64-nightly", marker = "extra == 'rocm'" },
 ]
 
 # --- INDEX DEFINITIONS ---

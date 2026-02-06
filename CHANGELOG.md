@@ -1,6 +1,5 @@
-# Unreleased
-
 # 1.3.0
+- Special thanks to [@jeremiahsb](https://github.com/jeremiahsb) for his [massive contribution](https://github.com/denizsafak/abogen/pull/120) (>55k lines!) that brought the Web UI, EPUB 3 pipeline, and core architectural improvements to life.
 - Added an EPUB 3 packaging pipeline that builds media-overlay EPUBs from generated audio and chunk metadata.
 - Persisted chunk timing metadata in job artifacts and exercised the exporter with automated tests.
 - Added Flask-based Web UI (`abogen-web`) for Docker and headless server deployments.
