@@ -96,8 +96,6 @@ exclude = [
 [tool.hatch.build.targets.wheel]
 packages = ["abogen"]
 
-[tool.hatch.build]
-include = ["abogen/webui/templates/**", "abogen/webui/static/**"]
 
 [tool.hatch.version]
 path = "abogen/VERSION"
