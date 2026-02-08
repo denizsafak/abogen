@@ -74,7 +74,7 @@ from abogen.subtitle_utils import (
     calculate_text_length,
 )
 
-from abogen.conversion import ConversionThread, VoicePreviewThread, PlayAudioThread
+from abogen.pyqt.conversion import ConversionThread, VoicePreviewThread, PlayAudioThread, ChapterOptionsDialog, TimestampDetectionDialog
 from abogen.pyqt.book_handler import HandlerDialog
 from abogen.constants import (
     PROGRAM_NAME,
@@ -2991,8 +2991,6 @@ class abogen(QWidget):
         """Show dialog to ask user about chapter processing options when chapters are detected in a .txt file"""
         # Check if this is a timestamp detection (-1) or chapter detection
         if chapter_count == -1:
-            from abogen.conversion import TimestampDetectionDialog
-
             dialog = TimestampDetectionDialog(parent=self)
             dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
 
@@ -3007,8 +3005,6 @@ class abogen(QWidget):
             return
 
         # Normal chapter detection
-        from abogen.conversion import ChapterOptionsDialog
-
         dialog = ChapterOptionsDialog(chapter_count, parent=self)
         dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
 
