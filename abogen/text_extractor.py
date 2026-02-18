@@ -1023,8 +1023,13 @@ class EpubExtractor:
         if not html:
             return ""
         soup = BeautifulSoup(html, "html.parser")
-        for tag in soup.find_all(["p", "div"]):
+
+        # Add line breaks after block-level elements to ensure pauses in speech
+        for tag in soup.find_all(
+            ["p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote"]
+        ):
             tag.append("\n\n")
+
         for ol in soup.find_all("ol"):
             start_attr = ol.get("start")
             try:
