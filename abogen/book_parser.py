@@ -915,7 +915,11 @@ class EpubParser(BaseBookParser):
 
             if slice_html.strip():
                 slice_soup = BeautifulSoup(slice_html, "html.parser")
-                for tag in slice_soup.find_all(["p", "div"]):
+
+                # Add line breaks after block-level elements to ensure pauses in speech
+                for tag in slice_soup.find_all(
+                    ["p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote"]
+                ):
                     tag.append("\n\n")
 
                 for ol in slice_soup.find_all("ol"):
