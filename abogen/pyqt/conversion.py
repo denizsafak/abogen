@@ -42,6 +42,10 @@ from abogen.subtitle_utils import (
     get_sample_voice_text,
     sanitize_name_for_os,
     _CHAPTER_MARKER_SEARCH_PATTERN,
+    _VOICE_MARKER_PATTERN,
+    _VOICE_MARKER_SEARCH_PATTERN,
+    split_text_by_voice_markers,
+    validate_voice_name,
 )
 
 class CountdownDialog(QDialog):
@@ -296,6 +300,31 @@ class ConversionThread(QThread):
         self.use_spacy_segmentation = True  # Default, will be overridden from GUI
         # Set split pattern based on language and subtitle mode
         self.split_pattern = self._get_split_pattern(lang_code, subtitle_mode)
+        self.voice_cache = {}  # Cache for loaded voices
+
+    def load_voice_cached(self, voice_name, tts):
+        """Load voice with caching to avoid reloading same voice.
+
+        Args:
+            voice_name: Voice name or formula string
+            tts: TTS pipeline instance
+
+        Returns:
+            Loaded voice tensor or voice name string
+        """
+        # Check cache first
+        if voice_name in self.voice_cache:
+            return self.voice_cache[voice_name]
+
+        # Load voice
+        if "*" in voice_name:
+            loaded_voice = get_new_voice(tts, voice_name, self.use_gpu)
+        else:
+            loaded_voice = voice_name
+
+        # Cache it
+        self.voice_cache[voice_name] = loaded_voice
+        return loaded_voice
 
     def _stream_audio_in_chunks(
         self, segments, process_func, progress_prefix="Processing"
@@ -524,6 +553,26 @@ class ConversionThread(QThread):
             # Clean up text using utility function
             text = clean_text(text)
 
+            # Apply word substitutions if enabled
+            if getattr(self, "word_substitutions_enabled", False):
+                from abogen.word_substitution import apply_word_substitutions
+
+                self.log_updated.emit("Applying word substitutions...")
+
+                substitutions_list = getattr(self, "word_substitutions_list", "")
+                case_sensitive = getattr(self, "case_sensitive_substitutions", False)
+                replace_caps = getattr(self, "replace_all_caps", False)
+                replace_nums = getattr(self, "replace_numerals", False)
+                fix_punct = getattr(self, "fix_nonstandard_punctuation", False)
+
+                text = apply_word_substitutions(
+                    text,
+                    substitutions_list,
+                    case_sensitive,
+                    replace_caps,
+                    replace_nums,
+                    fix_punct,
+                )
 
             # --- Chapter splitting logic ---
             # Use pre-compiled pattern for better performance
@@ -549,6 +598,42 @@ class ConversionThread(QThread):
             else:
                 chapters = [("text", text)]
             total_chapters = len(chapters)
+
+            # --- Voice marker splitting logic ---
+            # Split each chapter by voice markers, preserving voice state across chapters
+            chapters_with_voices = []
+            current_voice = self.voice  # Start with default voice
+            total_valid_markers = 0
+            total_invalid_markers = 0
+
+            for chapter_name, chapter_text in chapters:
+                # Use current_voice as the starting voice for this chapter
+                voice_segments, last_voice, valid_count, invalid_count = split_text_by_voice_markers(chapter_text, current_voice)
+                chapters_with_voices.append((chapter_name, voice_segments))
+
+                # Update current_voice so next chapter continues with this voice
+                current_voice = last_voice
+
+                # Track total valid/invalid markers
+                total_valid_markers += valid_count
+                total_invalid_markers += invalid_count
+
+            # Log voice marker information with accurate counts
+            total_markers = total_valid_markers + total_invalid_markers
+            if total_markers > 0:
+                if total_invalid_markers == 0:
+                    # All markers were valid
+                    self.log_updated.emit(
+                        (f"\nDetected {total_markers} voice marker(s) - all valid", "grey")
+                    )
+                else:
+                    # Some markers were invalid
+                    self.log_updated.emit(
+                        (f"\nDetected {total_markers} voice marker(s) - {total_valid_markers} valid, {total_invalid_markers} invalid (using previous voice)", "orange")
+                    )
+
+            # Replace chapters with the new structure
+            chapters = chapters_with_voices
 
             # For text files with chapters, prompt user for options if not already set
             is_txt_file = not self.is_direct_text and (
@@ -842,7 +927,7 @@ class ConversionThread(QThread):
                 ]
                 srt_index = 1  # SRT numbering fix for chapter-only mode
             # Instead of processing the whole text, process by chapter
-            for chapter_idx, (chapter_name, chapter_text) in enumerate(chapters, 1):
+            for chapter_idx, (chapter_name, voice_segments) in enumerate(chapters, 1):
                 chapter_out_path = None
                 chapter_out_file = None
                 chapter_ffmpeg_proc = None
@@ -862,11 +947,6 @@ class ConversionThread(QThread):
                 if merge_chapters_at_end:
                     chapter_time["start"] = current_time
 
-                # Check if the voice is a formula and load it if necessary
-                if "*" in self.voice:
-                    loaded_voice = get_new_voice(tts, self.voice, self.use_gpu)
-                else:
-                    loaded_voice = self.voice
                 # Prepare per-chapter output file if needed
                 if save_chapters_separately and total_chapters > 1:
                     # First pass: keep alphanumeric, spaces, hyphens, and underscores
@@ -986,286 +1066,302 @@ class ConversionThread(QThread):
                     chapter_subtitle_path = None
                     chapter_subtitle_file = None
 
-                # Determine if spaCy segmentation should be used for PRE-TTS segmentation
-                # Only non-English languages use spaCy for pre-segmentation
-                # English uses spaCy only for subtitle generation (post-TTS)
-                # spaCy is disabled when subtitle mode is "Disabled" or "Line"
-                # spaCy is also disabled when input is a subtitle file
-                is_subtitle_input = (
-                    not self.is_direct_text
-                    and self.file_name
-                    and os.path.splitext(self.file_name)[1].lower()
-                    in [".srt", ".ass", ".vtt"]
-                )
-                use_spacy = (
-                    getattr(self, "use_spacy_segmentation", False)
-                    and self.subtitle_mode not in ["Disabled", "Line"]
-                    and not is_subtitle_input
-                )
-                spacy_sentences = None
-                active_split_pattern = self.split_pattern
-                spacing_pattern = r"\s*" if self.lang_code in ["z", "j"] else r"\s+"
 
-                # Pre-load spaCy model for English if it will be needed for subtitle generation
-                if (
-                    use_spacy
-                    and self.lang_code in ["a", "b"]
-                    and self.subtitle_mode in ["Sentence", "Sentence + Comma"]
-                ):
-                    from abogen.spacy_utils import get_spacy_model
-
-                    nlp = get_spacy_model(
-                        self.lang_code,
-                        log_callback=lambda msg: self.log_updated.emit(msg),
-                    )
-                    if nlp:
+                # Process each voice segment within the chapter
+                for segment_idx, (voice_name, segment_text) in enumerate(voice_segments):
+                    # Load voice for this segment (with caching)
+                    try:
+                        loaded_voice = self.load_voice_cached(voice_name, tts)
+                        if segment_idx > 0:
+                            voice_display = voice_name if len(voice_name) < 50 else voice_name[:47] + "..."
+                            self.log_updated.emit((f"  → Voice: {voice_display}", "grey"))
+                    except Exception:
                         self.log_updated.emit(
-                            (
-                                "\nUsing spaCy for sentence segmentation (only for subtitles)...",
-                                "grey",
-                            )
+                            (f"⚠ Voice loading error for '{voice_name}', continuing with previous", "orange")
                         )
+                        if segment_idx == 0:
+                            loaded_voice = self.load_voice_cached(self.voice, tts)
 
-                if use_spacy and self.lang_code not in ["a", "b"]:
-                    # Non-English: use spaCy for pre-TTS segmentation
-                    self.log_updated.emit(
-                        ("\nUsing spaCy for sentence segmentation (pre-TTS)...", "grey")
+                    # Determine if spaCy segmentation should be used for PRE-TTS segmentation
+                    # Only non-English languages use spaCy for pre-segmentation
+                    # English uses spaCy only for subtitle generation (post-TTS)
+                    # spaCy is disabled when subtitle mode is "Disabled" or "Line"
+                    # spaCy is also disabled when input is a subtitle file
+                    is_subtitle_input = (
+                        not self.is_direct_text
+                        and self.file_name
+                        and os.path.splitext(self.file_name)[1].lower()
+                        in [".srt", ".ass", ".vtt"]
                     )
-                    from abogen.spacy_utils import segment_sentences
-
-                    spacy_sentences = segment_sentences(
-                        chapter_text,
-                        self.lang_code,
-                        log_callback=lambda msg: self.log_updated.emit(msg),
+                    use_spacy = (
+                        getattr(self, "use_spacy_segmentation", False)
+                        and self.subtitle_mode not in ["Disabled", "Line"]
+                        and not is_subtitle_input
                     )
-                    if spacy_sentences:
-                        self.log_updated.emit(
-                            (
-                                f"\nspaCy: Text segmented into {len(spacy_sentences)} sentences...",
-                                "grey",
-                            )
-                        )
-                        # For Sentence + Comma mode, still split on commas within spaCy sentences
-                        if self.subtitle_mode == "Sentence + Comma":
-                            active_split_pattern = r"(?<=[{}]){}|\n+".format(
-                                self.PUNCTUATION_COMMAS, spacing_pattern
-                            )
-                        else:
-                            active_split_pattern = (
-                                "\n"  # Use newline splitting for Sentence mode
-                            )
-                    else:
-                        self.log_updated.emit(
-                            ("\nspaCy: Fallback to default segmentation...", "grey")
-                        )
+                    spacy_sentences = None
+                    active_split_pattern = self.split_pattern
+                    spacing_pattern = r"\s*" if self.lang_code in ["z", "j"] else r"\s+"
 
-                # Process text - either as spaCy sentences or as single text
-                text_segments = spacy_sentences if spacy_sentences else [chapter_text]
-
-                # Print active split pattern used by the TTS engine once for this batch
-                try:
-                    print(f"Using split pattern: {active_split_pattern!r}")
-                except Exception:
-                    # Print must never break processing
-                    print("Using split pattern: (unprintable)")
-
-                for text_segment in text_segments:
-                    for result in tts(
-                        text_segment,
-                        voice=loaded_voice,
-                        speed=self.speed,
-                        split_pattern=active_split_pattern,
+                    # Pre-load spaCy model for English if it will be needed for subtitle generation
+                    if (
+                        use_spacy
+                        and self.lang_code in ["a", "b"]
+                        and self.subtitle_mode in ["Sentence", "Sentence + Comma"]
                     ):
-                        # Print the result for debugging
-                        # print(f"Result: {result}")
-                        if self.cancel_requested:
-                            if chapter_out_file:
-                                chapter_out_file.close()
-                            if merged_out_file:
-                                merged_out_file.close()
-                            self.conversion_finished.emit("Cancelled", None)
-                            return
-                        current_segment += 1
-                        grapheme_len = len(result.graphemes)
-                        self.processed_char_count += grapheme_len
-                        # Log progress with both character counts and the graphemes content
-                        self.log_updated.emit(
-                            f"\n{self.processed_char_count:,}/{self.total_char_count:,}: {result.graphemes}"
+                        from abogen.spacy_utils import get_spacy_model
+
+                        nlp = get_spacy_model(
+                            self.lang_code,
+                            log_callback=lambda msg: self.log_updated.emit(msg),
                         )
+                        if nlp:
+                            self.log_updated.emit(
+                                (
+                                    "\nUsing spaCy for sentence segmentation (only for subtitles)...",
+                                    "grey",
+                                )
+                            )
 
-                        chunk_dur = len(result.audio) / rate
-                        chunk_start = current_time
-                        # Write audio directly to merged file ONLY if merging
-                        if merge_chapters_at_end and merged_out_file:
-                            merged_out_file.write(result.audio)
-                        elif merge_chapters_at_end and ffmpeg_proc:
-                            if hasattr(result.audio, "numpy"):
-                                audio_bytes = (
-                                    result.audio.numpy().astype("float32").tobytes()
+                    if use_spacy and self.lang_code not in ["a", "b"]:
+                        # Non-English: use spaCy for pre-TTS segmentation
+                        self.log_updated.emit(
+                            ("\nUsing spaCy for sentence segmentation (pre-TTS)...", "grey")
+                        )
+                        from abogen.spacy_utils import segment_sentences
+
+                        spacy_sentences = segment_sentences(
+                            segment_text,
+                            self.lang_code,
+                            log_callback=lambda msg: self.log_updated.emit(msg),
+                        )
+                        if spacy_sentences:
+                            self.log_updated.emit(
+                                (
+                                    f"\nspaCy: Text segmented into {len(spacy_sentences)} sentences...",
+                                    "grey",
+                                )
+                            )
+                            # For Sentence + Comma mode, still split on commas within spaCy sentences
+                            if self.subtitle_mode == "Sentence + Comma":
+                                active_split_pattern = r"(?<=[{}]){}|\n+".format(
+                                    self.PUNCTUATION_COMMAS, spacing_pattern
                                 )
                             else:
-                                audio_bytes = result.audio.astype("float32").tobytes()
-                            ffmpeg_proc.stdin.write(audio_bytes)
-                        if chapter_out_file:
-                            chapter_out_file.write(result.audio)
-                        elif chapter_ffmpeg_proc:
-                            if hasattr(result.audio, "numpy"):
-                                audio_bytes = (
-                                    result.audio.numpy().astype("float32").tobytes()
+                                active_split_pattern = (
+                                    "\n"  # Use newline splitting for Sentence mode
                                 )
-                            else:
-                                audio_bytes = result.audio.astype("float32").tobytes()
-                            chapter_ffmpeg_proc.stdin.write(audio_bytes)
-                        # Subtitle logic
-                        if self.subtitle_mode != "Disabled":
-                            tokens_list = getattr(result, "tokens", [])
+                        else:
+                            self.log_updated.emit(
+                                ("\nspaCy: Fallback to default segmentation...", "grey")
+                            )
 
-                            # Fallback for languages without token support (non-English)
-                            # Create a single token representing the entire segment duration
-                            if not tokens_list and result.graphemes:
+                    # Process text - either as spaCy sentences or as single text
+                    text_segments = spacy_sentences if spacy_sentences else [segment_text]
 
-                                class FakeToken:
-                                    def __init__(self, text, start, end):
-                                        self.text = text
-                                        self.start_ts = start
-                                        self.end_ts = end
-                                        self.whitespace = ""
+                    # Print active split pattern used by the TTS engine once for this batch
+                    try:
+                        print(f"Using split pattern: {active_split_pattern!r}")
+                    except Exception:
+                        # Print must never break processing
+                        print("Using split pattern: (unprintable)")
 
-                                tokens_list = [
-                                    FakeToken(result.graphemes, 0, chunk_dur)
-                                ]
+                    for text_segment in text_segments:
+                        for result in tts(
+                            text_segment,
+                            voice=loaded_voice,
+                            speed=self.speed,
+                            split_pattern=active_split_pattern,
+                        ):
+                            # Print the result for debugging
+                            # print(f"Result: {result}")
+                            if self.cancel_requested:
+                                if chapter_out_file:
+                                    chapter_out_file.close()
+                                if merged_out_file:
+                                    merged_out_file.close()
+                                self.conversion_finished.emit("Cancelled", None)
+                                return
+                            current_segment += 1
+                            grapheme_len = len(result.graphemes)
+                            self.processed_char_count += grapheme_len
+                            # Log progress with both character counts and the graphemes content
+                            self.log_updated.emit(
+                                f"\n{self.processed_char_count:,}/{self.total_char_count:,}: {result.graphemes}"
+                            )
 
-                            tokens_with_timestamps = []
-                            chapter_tokens_with_timestamps = []
+                            chunk_dur = len(result.audio) / rate
+                            chunk_start = current_time
+                            # Write audio directly to merged file ONLY if merging
+                            if merge_chapters_at_end and merged_out_file:
+                                merged_out_file.write(result.audio)
+                            elif merge_chapters_at_end and ffmpeg_proc:
+                                if hasattr(result.audio, "numpy"):
+                                    audio_bytes = (
+                                        result.audio.numpy().astype("float32").tobytes()
+                                    )
+                                else:
+                                    audio_bytes = result.audio.astype("float32").tobytes()
+                                ffmpeg_proc.stdin.write(audio_bytes)
+                            if chapter_out_file:
+                                chapter_out_file.write(result.audio)
+                            elif chapter_ffmpeg_proc:
+                                if hasattr(result.audio, "numpy"):
+                                    audio_bytes = (
+                                        result.audio.numpy().astype("float32").tobytes()
+                                    )
+                                else:
+                                    audio_bytes = result.audio.astype("float32").tobytes()
+                                chapter_ffmpeg_proc.stdin.write(audio_bytes)
+                            # Subtitle logic
+                            if self.subtitle_mode != "Disabled":
+                                tokens_list = getattr(result, "tokens", [])
 
-                            # Process every token, regardless of text or timestamps
-                            for tok in tokens_list:
-                                tokens_with_timestamps.append(
-                                    {
-                                        "start": chunk_start + (tok.start_ts or 0),
-                                        "end": chunk_start + (tok.end_ts or 0),
-                                        "text": tok.text,
-                                        "whitespace": tok.whitespace,
-                                    }
-                                )
-                                if chapter_out_file or chapter_ffmpeg_proc:
-                                    chapter_tokens_with_timestamps.append(
+                                # Fallback for languages without token support (non-English)
+                                # Create a single token representing the entire segment duration
+                                if not tokens_list and result.graphemes:
+
+                                    class FakeToken:
+                                        def __init__(self, text, start, end):
+                                            self.text = text
+                                            self.start_ts = start
+                                            self.end_ts = end
+                                            self.whitespace = ""
+
+                                    tokens_list = [
+                                        FakeToken(result.graphemes, 0, chunk_dur)
+                                    ]
+
+                                tokens_with_timestamps = []
+                                chapter_tokens_with_timestamps = []
+
+                                # Process every token, regardless of text or timestamps
+                                for tok in tokens_list:
+                                    tokens_with_timestamps.append(
                                         {
-                                            "start": chapter_current_time
-                                            + (tok.start_ts or 0),
-                                            "end": chapter_current_time
-                                            + (tok.end_ts or 0),
+                                            "start": chunk_start + (tok.start_ts or 0),
+                                            "end": chunk_start + (tok.end_ts or 0),
                                             "text": tok.text,
                                             "whitespace": tok.whitespace,
                                         }
                                     )
-                            # Process tokens according to subtitle mode
-                            # Global subtitle processing ONLY if merging
+                                    if chapter_out_file or chapter_ffmpeg_proc:
+                                        chapter_tokens_with_timestamps.append(
+                                            {
+                                                "start": chapter_current_time
+                                                + (tok.start_ts or 0),
+                                                "end": chapter_current_time
+                                                + (tok.end_ts or 0),
+                                                "text": tok.text,
+                                                "whitespace": tok.whitespace,
+                                            }
+                                        )
+                                # Process tokens according to subtitle mode
+                                # Global subtitle processing ONLY if merging
+                                if merge_chapters_at_end:
+                                    # Incremental subtitle writing for merged output
+                                    new_entries = []
+                                    self._process_subtitle_tokens(
+                                        tokens_with_timestamps,
+                                        new_entries,
+                                        self.max_subtitle_words,
+                                        fallback_end_time=chunk_start + chunk_dur,
+                                    )
+                                    if merged_subtitle_file:
+                                        subtitle_format = getattr(
+                                            self, "subtitle_format", "srt"
+                                        )
+                                        if "ass" in subtitle_format:
+                                            for start, end, text in new_entries:
+                                                start_time = self._ass_time(start)
+                                                end_time = self._ass_time(end)
+                                                # Use karaoke effect for highlighting mode
+                                                effect = (
+                                                    "karaoke"
+                                                    if self.subtitle_mode
+                                                    == "Sentence + Highlighting"
+                                                    else ""
+                                                )
+                                                merged_subtitle_file.write(
+                                                    f"Dialogue: 0,{start_time},{end_time},Default,,{merged_subtitle_margin},{merged_subtitle_margin},0,{effect},{merged_subtitle_alignment_tag}{text}\n"
+                                                )
+                                        else:
+                                            for entry in new_entries:
+                                                start, end, text = entry
+                                                merged_subtitle_file.write(
+                                                    f"{merged_srt_index}\n{self._srt_time(start)} --> {self._srt_time(end)}\n{text}\n\n"
+                                                )
+                                                merged_srt_index += 1
+                                # Per-chapter subtitle processing for both file and ffmpeg_proc
+                                if chapter_out_file or chapter_ffmpeg_proc:
+                                    new_chapter_entries = []
+                                    self._process_subtitle_tokens(
+                                        chapter_tokens_with_timestamps,
+                                        new_chapter_entries,
+                                        self.max_subtitle_words,
+                                        fallback_end_time=chapter_current_time + chunk_dur,
+                                    )
+                                    if chapter_subtitle_file:
+                                        subtitle_format = getattr(
+                                            self, "subtitle_format", "srt"
+                                        )
+                                        if "ass" in subtitle_format:
+                                            for start, end, text in new_chapter_entries:
+                                                start_time = self._ass_time(start)
+                                                end_time = self._ass_time(end)
+                                                # Use karaoke effect for highlighting mode
+                                                effect = (
+                                                    "karaoke"
+                                                    if self.subtitle_mode
+                                                    == "Sentence + Highlighting"
+                                                    else ""
+                                                )
+                                                chapter_subtitle_file.write(
+                                                    f"Dialogue: 0,{start_time},{end_time},Default,,{chapter_subtitle_margin},{chapter_subtitle_margin},0,{effect},{chapter_subtitle_alignment_tag}{text}\n"
+                                                )
+                                        else:
+                                            for entry in new_chapter_entries:
+                                                start, end, text = entry
+                                                chapter_subtitle_file.write(
+                                                    f"{chapter_srt_index}\n{self._srt_time(start)} --> {self._srt_time(end)}\n{text}\n\n"
+                                                )
+                                                chapter_srt_index += 1
                             if merge_chapters_at_end:
-                                # Incremental subtitle writing for merged output
-                                new_entries = []
-                                self._process_subtitle_tokens(
-                                    tokens_with_timestamps,
-                                    new_entries,
-                                    self.max_subtitle_words,
-                                    fallback_end_time=chunk_start + chunk_dur,
-                                )
-                                if merged_subtitle_file:
-                                    subtitle_format = getattr(
-                                        self, "subtitle_format", "srt"
-                                    )
-                                    if "ass" in subtitle_format:
-                                        for start, end, text in new_entries:
-                                            start_time = self._ass_time(start)
-                                            end_time = self._ass_time(end)
-                                            # Use karaoke effect for highlighting mode
-                                            effect = (
-                                                "karaoke"
-                                                if self.subtitle_mode
-                                                == "Sentence + Highlighting"
-                                                else ""
-                                            )
-                                            merged_subtitle_file.write(
-                                                f"Dialogue: 0,{start_time},{end_time},Default,,{merged_subtitle_margin},{merged_subtitle_margin},0,{effect},{merged_subtitle_alignment_tag}{text}\n"
-                                            )
-                                    else:
-                                        for entry in new_entries:
-                                            start, end, text = entry
-                                            merged_subtitle_file.write(
-                                                f"{merged_srt_index}\n{self._srt_time(start)} --> {self._srt_time(end)}\n{text}\n\n"
-                                            )
-                                            merged_srt_index += 1
-                            # Per-chapter subtitle processing for both file and ffmpeg_proc
-                            if chapter_out_file or chapter_ffmpeg_proc:
-                                new_chapter_entries = []
-                                self._process_subtitle_tokens(
-                                    chapter_tokens_with_timestamps,
-                                    new_chapter_entries,
-                                    self.max_subtitle_words,
-                                    fallback_end_time=chapter_current_time + chunk_dur,
-                                )
-                                if chapter_subtitle_file:
-                                    subtitle_format = getattr(
-                                        self, "subtitle_format", "srt"
-                                    )
-                                    if "ass" in subtitle_format:
-                                        for start, end, text in new_chapter_entries:
-                                            start_time = self._ass_time(start)
-                                            end_time = self._ass_time(end)
-                                            # Use karaoke effect for highlighting mode
-                                            effect = (
-                                                "karaoke"
-                                                if self.subtitle_mode
-                                                == "Sentence + Highlighting"
-                                                else ""
-                                            )
-                                            chapter_subtitle_file.write(
-                                                f"Dialogue: 0,{start_time},{end_time},Default,,{chapter_subtitle_margin},{chapter_subtitle_margin},0,{effect},{chapter_subtitle_alignment_tag}{text}\n"
-                                            )
-                                    else:
-                                        for entry in new_chapter_entries:
-                                            start, end, text = entry
-                                            chapter_subtitle_file.write(
-                                                f"{chapter_srt_index}\n{self._srt_time(start)} --> {self._srt_time(end)}\n{text}\n\n"
-                                            )
-                                            chapter_srt_index += 1
-                        if merge_chapters_at_end:
-                            current_time += chunk_dur
-                            if chapter_out_file or chapter_ffmpeg_proc:
-                                chapter_current_time += chunk_dur
-                        else:
-                            if chapter_out_file or chapter_ffmpeg_proc:
-                                chapter_current_time += chunk_dur
-                        # Calculate percentage based on characters processed
-                        percent = min(
-                            int(
-                                self.processed_char_count / self.total_char_count * 100
-                            ),
-                            99,
-                        )
-
-                        # Calculate ETR based on characters processed
-                        etr_str = "Processing..."
-                        chars_done = self.processed_char_count
-                        elapsed = time.time() - self.etr_start_time
-
-                        # Calculate ETR if enough data is available
-                        if (
-                            chars_done > 0 and elapsed > 0.5
-                        ):  # Check elapsed > 0.5 to avoid instability
-                            avg_time_per_char = elapsed / chars_done
-                            remaining = (
-                                self.total_char_count - self.processed_char_count
+                                current_time += chunk_dur
+                                if chapter_out_file or chapter_ffmpeg_proc:
+                                    chapter_current_time += chunk_dur
+                            else:
+                                if chapter_out_file or chapter_ffmpeg_proc:
+                                    chapter_current_time += chunk_dur
+                            # Calculate percentage based on characters processed
+                            percent = min(
+                                int(
+                                    self.processed_char_count / self.total_char_count * 100
+                                ),
+                                99,
                             )
-                            if remaining > 0:
-                                secs = avg_time_per_char * remaining
-                                h = int(secs // 3600)
-                                m = int((secs % 3600) // 60)
-                                s = int(secs % 60)
-                                etr_str = f"{h:02d}:{m:02d}:{s:02d}"
 
-                        # Update progress more frequently (after each result)
-                        self.progress_updated.emit(percent, etr_str)
+                            # Calculate ETR based on characters processed
+                            etr_str = "Processing..."
+                            chars_done = self.processed_char_count
+                            elapsed = time.time() - self.etr_start_time
+
+                            # Calculate ETR if enough data is available
+                            if (
+                                chars_done > 0 and elapsed > 0.5
+                            ):  # Check elapsed > 0.5 to avoid instability
+                                avg_time_per_char = elapsed / chars_done
+                                remaining = (
+                                    self.total_char_count - self.processed_char_count
+                                )
+                                if remaining > 0:
+                                    secs = avg_time_per_char * remaining
+                                    h = int(secs // 3600)
+                                    m = int((secs % 3600) // 60)
+                                    s = int(secs % 60)
+                                    etr_str = f"{h:02d}:{m:02d}:{s:02d}"
+
+                            # Update progress more frequently (after each result)
+                            self.progress_updated.emit(percent, etr_str)
 
                 # Add silence between chapters for merged output (except after the last chapter)
                 if merge_chapters_at_end and chapter_idx < total_chapters:
