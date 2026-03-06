@@ -19,3 +19,10 @@ class QueuedItem:
     save_base_path: str = None
     save_chapters_separately: bool = None
     merge_chapters_at_end: bool = None
+    # Word Substitution fields
+    word_substitutions_enabled: bool = False
+    word_substitutions_list: str = ""
+    case_sensitive_substitutions: bool = False
+    replace_all_caps: bool = False
+    replace_numerals: bool = False
+    fix_nonstandard_punctuation: bool = False

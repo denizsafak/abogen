@@ -35,6 +35,12 @@ OVERRIDE_FIELDS = [
     "replace_single_newlines",
     "use_silent_gaps",
     "subtitle_speed_method",
+    "word_substitutions_enabled",
+    "word_substitutions_list",
+    "case_sensitive_substitutions",
+    "replace_all_caps",
+    "replace_numerals",
+    "fix_nonstandard_punctuation",
 ]
 
 
@@ -473,6 +479,21 @@ class QueueManager(QDialog):
             # subtitle_speed_method
             attrs["subtitle_speed_method"] = getattr(
                 parent, "subtitle_speed_method", "tts"
+            )
+            # word substitutions
+            attrs["word_substitutions_enabled"] = getattr(
+                parent, "word_substitutions_enabled", False
+            )
+            attrs["word_substitutions_list"] = getattr(
+                parent, "word_substitutions_list", ""
+            )
+            attrs["case_sensitive_substitutions"] = getattr(
+                parent, "case_sensitive_substitutions", False
+            )
+            attrs["replace_all_caps"] = getattr(parent, "replace_all_caps", False)
+            attrs["replace_numerals"] = getattr(parent, "replace_numerals", False)
+            attrs["fix_nonstandard_punctuation"] = getattr(
+                parent, "fix_nonstandard_punctuation", False
             )
             # book handler options
             attrs["save_chapters_separately"] = getattr(
