@@ -23,6 +23,7 @@ from abogen.webui.routes.utils.voice import template_options
 from abogen.webui.debug_tts_runner import run_debug_tts_wavs
 from abogen.debug_tts_samples import DEBUG_TTS_SAMPLES
 from abogen.utils import get_user_output_path, load_config
+from abogen.llm_providers import get_provider_presets
 
 settings_bp = Blueprint("settings", __name__)
 
@@ -216,6 +217,7 @@ def settings_page() -> str | ResponseReturnValue:
         save_locations=save_locations,
         default_output_dir=default_output_dir,
         llm_ready=llm_ready(load_settings()),
+        llm_provider_presets=[p.to_dict() for p in get_provider_presets()],
         debug_samples=DEBUG_TTS_SAMPLES,
         debug_manifest=debug_manifest,
     )

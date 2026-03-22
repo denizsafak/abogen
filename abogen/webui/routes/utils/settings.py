@@ -196,6 +196,7 @@ def settings_defaults() -> Dict[str, Any]:
         "speaker_analysis_threshold": _DEFAULT_ANALYSIS_THRESHOLD,
         "speaker_pronunciation_sentence": "This is {{name}} speaking.",
         "speaker_random_languages": [],
+        "llm_provider": "",
         "llm_base_url": llm_env_defaults.get("llm_base_url", ""),
         "llm_api_key": llm_env_defaults.get("llm_api_key", ""),
         "llm_model": llm_env_defaults.get("llm_model", ""),
@@ -344,7 +345,7 @@ def normalize_setting_value(key: str, value: Any, defaults: Dict[str, Any]) -> A
     if key == "llm_prompt":
         candidate = str(value or "").strip()
         return candidate if candidate else defaults[key]
-    if key in {"llm_base_url", "llm_api_key", "llm_model"}:
+    if key in {"llm_provider", "llm_base_url", "llm_api_key", "llm_model"}:
         return str(value or "").strip()
     if key == "speaker_random_languages":
         if isinstance(value, (list, tuple, set)):
