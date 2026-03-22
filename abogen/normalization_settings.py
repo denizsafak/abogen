@@ -27,6 +27,7 @@ _LEGACY_REWRITE_ONLY_PROMPT = (
 )
 
 _SETTINGS_DEFAULTS: Dict[str, Any] = {
+    "llm_provider": "",
     "llm_base_url": "",
     "llm_api_key": "",
     "llm_model": "",

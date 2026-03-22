@@ -385,11 +385,22 @@ docker run --rm \
 ## `LLM-assisted text normalization`
 Abogen can hand tricky apostrophes and contractions to an OpenAI-compatible large language model. Configure it from **Settings → LLM**:
 
-1. Enter the base URL for your endpoint (Ollama, OpenAI proxy, etc.) and an API key if required. Use the server root (for Ollama: `http://localhost:11434`)—Abogen appends `/v1/...` automatically, but it also accepts inputs that already end in `/v1`.
-2. Click **Refresh models** to load the catalog, pick a default model, and adjust the timeout or prompt template.
+1. Pick a **Provider** from the dropdown (MiniMax, OpenAI, DeepSeek, Ollama) to auto-fill the endpoint and available models, or choose *Custom endpoint* to enter any OpenAI-compatible URL manually.
+2. Enter an API key if required, then click **Refresh models** to load the catalog. Pick a default model and adjust the timeout or prompt template.
 3. Use the preview box to test the prompt, then save the settings. The Normalization panel can synthesize a short audio preview with the current configuration.
 
-When you are running inside Docker or a CI pipeline, seed the form automatically with `ABOGEN_LLM_*` variables in your `.env` file. The `.env.example` file includes sample values for a local Ollama server.
+### Supported providers
+
+| Provider | Base URL | Models |
+|----------|----------|--------|
+| **MiniMax** | `https://api.minimax.io/v1` | MiniMax-M2.7, MiniMax-M2.5-highspeed, … |
+| **OpenAI** | `https://api.openai.com/v1` | gpt-4o, gpt-4o-mini, … |
+| **DeepSeek** | `https://api.deepseek.com/v1` | deepseek-chat, deepseek-reasoner |
+| **Ollama** | `http://localhost:11434/v1` | *(local models)* |
+
+Any service that exposes `/v1/chat/completions` (e.g. LM Studio, vLLM, text-generation-webui) also works via *Custom endpoint*.
+
+When you are running inside Docker or a CI pipeline, seed the form automatically with `ABOGEN_LLM_*` variables in your `.env` file. The `.env.example` file includes sample values for a local Ollama server and MiniMax Cloud.
 
 ## `Audiobookshelf integration`
 Abogen can push finished audiobooks directly into Audiobookshelf. Configure this under **Settings → Integrations → Audiobookshelf** by providing:
