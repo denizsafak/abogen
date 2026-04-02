@@ -31,6 +31,7 @@ dependencies = [
   "kokoro>=0.9.4",
   "misaki[zh]>=0.9.4",
   "supertonic>=0.1.0",
+  "camb-sdk",
   "ebooklib>=0.19",
   "beautifulsoup4>=4.13.4",
   "spacy>=3.8.7,<4.0",

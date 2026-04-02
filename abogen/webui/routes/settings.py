@@ -51,6 +51,19 @@ def update_settings() -> ResponseReturnValue:
         current["supertonic_speed"] = max(0.7, min(2.0, float(form.get("supertonic_speed", current.get("supertonic_speed", 1.0)))))
     except (TypeError, ValueError):
         pass
+    camb_model = (form.get("camb_model") or "").strip().lower()
+    if camb_model in {"mars-flash", "mars-pro", "mars-instruct"}:
+        current["camb_model"] = camb_model
+    try:
+        current["camb_voice_id"] = max(1, int(form.get("camb_voice_id", current.get("camb_voice_id", 147320))))
+    except (TypeError, ValueError):
+        pass
+    camb_api_key = form.get("camb_api_key")
+    if camb_api_key is not None:
+        current["camb_api_key"] = camb_api_key.strip()
+    camb_language = (form.get("camb_language") or "").strip().lower()
+    if camb_language:
+        current["camb_language"] = camb_language
     current["output_format"] = (form.get("output_format") or "mp3").strip()
     current["subtitle_mode"] = (form.get("subtitle_mode") or "Disabled").strip()
     current["subtitle_format"] = (form.get("subtitle_format") or "srt").strip()

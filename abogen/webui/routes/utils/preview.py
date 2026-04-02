@@ -60,6 +60,10 @@ def generate_preview_audio(
     use_gpu: bool,
     tts_provider: str = "kokoro",
     supertonic_total_steps: int = 5,
+    camb_model: str = "mars-flash",
+    camb_voice_id: int = 147320,
+    camb_api_key: Optional[str] = None,
+    camb_language: str = "en-us",
     max_seconds: float = 8.0,
     pronunciation_overrides: Optional[Iterable[Mapping[str, Any]]] = None,
     manual_overrides: Optional[Iterable[Mapping[str, Any]]] = None,
@@ -94,7 +98,7 @@ def generate_preview_audio(
             source_text = text
 
     normalized_text = source_text
-    if provider != "supertonic":
+    if provider not in ("supertonic", "camb"):
         try:
             from abogen.kokoro_text_normalization import normalize_for_pipeline
 
@@ -103,7 +107,28 @@ def generate_preview_audio(
             current_app.logger.exception("Preview normalization failed; using raw text")
             normalized_text = source_text
 
-    if provider == "supertonic":
+    if provider == "camb":
+        from abogen.tts_camb import CambPipeline
+
+        camb_pipeline = CambPipeline(
+            sample_rate=SAMPLE_RATE,
+            api_key=camb_api_key,
+            model=camb_model,
+            voice_id=camb_voice_id,
+            language=camb_language,
+        )
+        voice_id = camb_voice_id
+        try:
+            voice_id = int(voice_spec)
+        except (TypeError, ValueError):
+            pass
+        segments = camb_pipeline(
+            normalized_text,
+            voice=voice_id,
+            speed=speed,
+            split_pattern=SPLIT_PATTERN,
+        )
+    elif provider == "supertonic":
         from abogen.tts_supertonic import SupertonicPipeline
 
         pipeline = SupertonicPipeline(sample_rate=SAMPLE_RATE, auto_download=True, total_steps=supertonic_total_steps)
@@ -177,6 +202,10 @@ def synthesize_preview(
     use_gpu: bool,
     tts_provider: str = "kokoro",
     supertonic_total_steps: int = 5,
+    camb_model: str = "mars-flash",
+    camb_voice_id: int = 147320,
+    camb_api_key: Optional[str] = None,
+    camb_language: str = "en-us",
     max_seconds: float = 8.0,
     pronunciation_overrides: Optional[Iterable[Mapping[str, Any]]] = None,
     manual_overrides: Optional[Iterable[Mapping[str, Any]]] = None,
@@ -191,6 +220,10 @@ def synthesize_preview(
             use_gpu=use_gpu,
             tts_provider=tts_provider,
             supertonic_total_steps=supertonic_total_steps,
+            camb_model=camb_model,
+            camb_voice_id=camb_voice_id,
+            camb_api_key=camb_api_key,
+            camb_language=camb_language,
             max_seconds=max_seconds,
             pronunciation_overrides=pronunciation_overrides,
             manual_overrides=manual_overrides,

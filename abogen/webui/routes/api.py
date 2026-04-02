@@ -63,7 +63,7 @@ def api_save_voice_profile() -> ResponseReturnValue:
     if profile is None:
         # Speaker Studio payload format
         provider = str(payload.get("provider") or "kokoro").strip().lower()
-        if provider not in {"kokoro", "supertonic"}:
+        if provider not in {"kokoro", "supertonic", "camb"}:
             provider = "kokoro"
         if provider == "supertonic":
             profile = {
@@ -72,6 +72,14 @@ def api_save_voice_profile() -> ResponseReturnValue:
                 "voice": payload.get("voice"),
                 "total_steps": payload.get("total_steps") or payload.get("supertonic_total_steps"),
                 "speed": payload.get("speed") or payload.get("supertonic_speed"),
+            }
+        elif provider == "camb":
+            profile = {
+                "provider": "camb",
+                "language": str(payload.get("camb_language") or payload.get("language") or "en-us").strip().lower() or "en-us",
+                "voice_id": payload.get("camb_voice_id") or payload.get("voice_id") or 147320,
+                "model": payload.get("camb_model") or payload.get("model") or "mars-flash",
+                "speed": payload.get("speed") or 1.0,
             }
         else:
             profile = {
@@ -168,7 +176,17 @@ def api_voice_profiles_preview() -> ResponseReturnValue:
     resolved_provider = provider or "kokoro"
 
     profiles = load_profiles()
-    if resolved_provider == "supertonic" and not profile_name:
+    camb_model = str(payload.get("camb_model") or "").strip() or settings.get("camb_model", "mars-flash")
+    camb_voice_id = int(payload.get("camb_voice_id") or settings.get("camb_voice_id", 147320))
+    camb_api_key = str(payload.get("camb_api_key") or "").strip() or settings.get("camb_api_key") or None
+    camb_language = str(payload.get("camb_language") or "").strip() or settings.get("camb_language", "en-us")
+
+    if resolved_provider == "camb" and not profile_name:
+        voice_spec = str(payload.get("camb_voice_id") or payload.get("voice_id") or camb_voice_id)
+        camb_model = str(payload.get("camb_model") or payload.get("model") or camb_model)
+        camb_language = str(payload.get("camb_language") or camb_language)
+        speed = coerce_float(payload.get("speed"), speed)
+    elif resolved_provider == "supertonic" and not profile_name:
         voice_spec = str(payload.get("voice") or payload.get("supertonic_voice") or "M1").strip() or "M1"
         # Allow per-speaker overrides via payload.
         supertonic_total_steps = int(payload.get("supertonic_total_steps") or payload.get("total_steps") or supertonic_total_steps)
@@ -182,6 +200,11 @@ def api_voice_profiles_preview() -> ResponseReturnValue:
         if resolved_provider == "supertonic":
             voice_spec = str(normalized_entry.get("voice") or "M1")
             supertonic_total_steps = int(normalized_entry.get("total_steps") or supertonic_total_steps)
+            speed = float(normalized_entry.get("speed") or speed)
+        elif resolved_provider == "camb":
+            camb_voice_id = int(normalized_entry.get("voice_id") or camb_voice_id)
+            camb_model = str(normalized_entry.get("model") or camb_model)
+            voice_spec = str(camb_voice_id)
             speed = float(normalized_entry.get("speed") or speed)
         else:
             voice_spec = formula_from_profile(normalized_entry) or ""
@@ -209,6 +232,10 @@ def api_voice_profiles_preview() -> ResponseReturnValue:
             use_gpu=use_gpu,
             tts_provider=resolved_provider,
             supertonic_total_steps=supertonic_total_steps,
+            camb_model=camb_model,
+            camb_voice_id=camb_voice_id,
+            camb_api_key=camb_api_key,
+            camb_language=camb_language,
             max_seconds=max_seconds,
         )
     except Exception as exc:
@@ -230,7 +257,12 @@ def api_speaker_preview() -> ResponseReturnValue:
     use_gpu = settings.get("use_gpu", False)
 
     base_spec, speaker_name = split_profile_spec(voice)
-    resolved_provider = tts_provider if tts_provider in {"kokoro", "supertonic"} else ""
+    camb_model = str(payload.get("camb_model") or "").strip() or settings.get("camb_model", "mars-flash")
+    camb_voice_id = int(payload.get("camb_voice_id") or settings.get("camb_voice_id", 147320))
+    camb_api_key = str(payload.get("camb_api_key") or "").strip() or settings.get("camb_api_key") or None
+    camb_language = str(payload.get("camb_language") or "").strip() or settings.get("camb_language", "en-us")
+
+    resolved_provider = tts_provider if tts_provider in {"kokoro", "supertonic", "camb"} else ""
 
     if speaker_name:
         entry = normalize_profile_entry(load_profiles().get(speaker_name))
@@ -239,6 +271,12 @@ def api_speaker_preview() -> ResponseReturnValue:
             if resolved_provider == "supertonic":
                 voice = str(entry.get("voice") or "M1")
                 supertonic_total_steps = int(entry.get("total_steps") or supertonic_total_steps)
+                if speed_value is None:
+                    speed = coerce_float(entry.get("speed"), speed)
+            elif resolved_provider == "camb":
+                camb_voice_id = int(entry.get("voice_id") or camb_voice_id)
+                camb_model = str(entry.get("model") or camb_model)
+                voice = str(camb_voice_id)
                 if speed_value is None:
                     speed = coerce_float(entry.get("speed"), speed)
             elif resolved_provider == "kokoro":
@@ -270,6 +308,10 @@ def api_speaker_preview() -> ResponseReturnValue:
             ,
             tts_provider=resolved_provider,
             supertonic_total_steps=supertonic_total_steps or int(settings.get("supertonic_total_steps") or 5),
+            camb_model=camb_model,
+            camb_voice_id=camb_voice_id,
+            camb_api_key=camb_api_key,
+            camb_language=camb_language,
             pronunciation_overrides=pronunciation_overrides,
             manual_overrides=manual_overrides,
             speakers=speakers,

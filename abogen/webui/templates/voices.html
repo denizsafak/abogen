@@ -7,7 +7,7 @@
   <div class="voice-mixer__header">
     <div>
       <h1 class="card__title">Speaker Studio</h1>
-      <p class="tag">Create and manage speakers for Kokoro and Supertonic.</p>
+      <p class="tag">Create and manage speakers for Kokoro, Supertonic and Camb AI.</p>
     </div>
     <div class="voice-mixer__header-actions">
       <button type="button" class="button button--ghost" data-action="new-profile">New speaker</button>
@@ -54,6 +54,7 @@
             <select id="profile-provider" name="provider" data-role="provider">
               <option value="kokoro">Kokoro</option>
               <option value="supertonic">Supertonic</option>
+              <option value="camb">Camb AI</option>
             </select>
           </div>
           <div class="field voice-editor__language">
@@ -83,6 +84,46 @@
               <input type="range" id="supertonic-speaker-speed" data-role="supertonic-speed" min="0.7" max="2.0" step="0.05" value="1.0">
             </div>
             <p class="hint">Supertonic voice mixing is not implemented yet. Stub target: <a href="https://github.com/Topping1/Supertonic-Voice-Mixer" target="_blank" rel="noreferrer">Supertonic-Voice-Mixer</a>.</p>
+          </div>
+          <div class="voice-editor__provider-panel" data-role="camb-panel" hidden>
+            <div class="field">
+              <label for="camb-voice-id">Voice ID</label>
+              <input type="number" id="camb-voice-id" data-role="camb-voice-id" value="147320" min="1">
+              <p class="hint">Camb AI voice ID. Find voices at <a href="https://studio.camb.ai" target="_blank" rel="noreferrer">studio.camb.ai</a>.</p>
+            </div>
+            <div class="field">
+              <label for="camb-model">Model</label>
+              <select id="camb-model" data-role="camb-model">
+                <option value="mars-flash">mars-flash (low latency)</option>
+                <option value="mars-pro">mars-pro (high quality)</option>
+                <option value="mars-instruct">mars-instruct (fine control)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="camb-language">Language</label>
+              <select id="camb-language" data-role="camb-language">
+                <option value="en-us">English (US)</option>
+                <option value="en-uk">English (UK)</option>
+                <option value="en-au">English (AU)</option>
+                <option value="es-es">Spanish (Spain)</option>
+                <option value="es-mx">Spanish (Mexico)</option>
+                <option value="fr-fr">French</option>
+                <option value="de-de">German</option>
+                <option value="it-it">Italian</option>
+                <option value="pt-br">Portuguese (Brazil)</option>
+                <option value="ja-jp">Japanese</option>
+                <option value="ko-kr">Korean</option>
+                <option value="zh-cn">Chinese (Simplified)</option>
+                <option value="hi-in">Hindi</option>
+                <option value="ar-sa">Arabic</option>
+                <option value="nl-nl">Dutch</option>
+                <option value="pl-pl">Polish</option>
+                <option value="ru-ru">Russian</option>
+                <option value="tr-tr">Turkish</option>
+                <option value="vi-vn">Vietnamese</option>
+                <option value="th-th">Thai</option>
+              </select>
+            </div>
           </div>
         </div>
         <div class="voice-editor__summary">
