@@ -9,6 +9,7 @@ from abogen.pyqt.queue_manager_gui import QueueManager
 from abogen.pyqt.queued_item import QueuedItem
 import abogen.hf_tracker as hf_tracker
 import hashlib  # Added for cache path generation
+from abogen.tts_supertonic import SUPERTONIC_AVAILABLE_LANGS, DEFAULT_SUPERTONIC_VOICES
 from PyQt6.QtWidgets import (
     QApplication,
     QWidget,
@@ -970,6 +971,9 @@ class abogen(QWidget):
         self.fix_nonstandard_punctuation = self.config.get(
             "fix_nonstandard_punctuation", False
         )
+        self.tts_provider_config = self.config.get("tts_provider", "kokoro")
+        self.supertonic_language_config = self.config.get("supertonic_language", "en")
+        self.supertonic_total_steps_config = self.config.get("supertonic_total_steps", 5)
         self._pending_close_event = None
         self.gpu_ok = False  # Initialize GPU availability status
 
@@ -1018,6 +1022,14 @@ class abogen(QWidget):
                 else:
                     self.mixed_voice_state = entry
                     self.selected_lang = entry[0][0] if entry and entry[0] else None
+        # Restore TTS provider and supertonic settings from config
+        provider_text = "SuperTonic" if self.tts_provider_config == "supertonic" else "Kokoro"
+        idx_st = self.provider_combo.findText(provider_text)
+        if idx_st >= 0:
+            self.provider_combo.setCurrentIndex(idx_st)
+        self.st_lang_combo.setCurrentText(self.supertonic_language_config)
+        self.st_steps_spin.setValue(self.supertonic_total_steps_config)
+
         if self.save_option == "Choose output folder" and self.selected_output_folder:
             self.save_path_label.setText(self.selected_output_folder)
             self.save_path_row_widget.show()
@@ -1107,6 +1119,50 @@ class abogen(QWidget):
         speed_layout.addWidget(self.speed_label)
         controls_layout.addLayout(speed_layout)
         self.speed_slider.valueChanged.connect(self.update_speed_label)
+
+        # TTS Provider selection
+        provider_layout = QHBoxLayout()
+        provider_layout.setSpacing(7)
+        provider_label = QLabel("TTS Engine:", self)
+        provider_layout.addWidget(provider_label)
+        self.provider_combo = QComboBox(self)
+        self.provider_combo.addItem("Kokoro", "kokoro")
+        self.provider_combo.addItem("SuperTonic", "supertonic")
+        self.provider_combo.setStyleSheet("QComboBox { min-height: 20px; padding: 6px 12px; }")
+        self.provider_combo.currentIndexChanged.connect(self.on_provider_changed)
+        provider_layout.addWidget(self.provider_combo)
+        controls_layout.addLayout(provider_layout)
+
+        # SuperTonic-specific controls (language + steps), hidden by default
+        self.supertonic_row = QWidget()
+        supertonic_row_layout = QHBoxLayout(self.supertonic_row)
+        supertonic_row_layout.setContentsMargins(0, 0, 0, 0)
+        supertonic_row_layout.setSpacing(7)
+
+        st_lang_label = QLabel("Language:", self)
+        supertonic_row_layout.addWidget(st_lang_label)
+        self.st_lang_combo = QComboBox(self)
+        for code in SUPERTONIC_AVAILABLE_LANGS:
+            self.st_lang_combo.addItem(code, code)
+        self.st_lang_combo.setCurrentText("en")
+        self.st_lang_combo.setStyleSheet("QComboBox { min-height: 20px; padding: 6px 12px; }")
+        self.st_lang_combo.currentTextChanged.connect(self._on_st_lang_changed)
+        supertonic_row_layout.addWidget(self.st_lang_combo)
+
+        st_steps_label = QLabel("Steps:", self)
+        supertonic_row_layout.addWidget(st_steps_label)
+        self.st_steps_spin = QSpinBox(self)
+        self.st_steps_spin.setMinimum(1)
+        self.st_steps_spin.setMaximum(10)
+        self.st_steps_spin.setValue(5)
+        self.st_steps_spin.setFixedWidth(60)
+        self.st_steps_spin.valueChanged.connect(self._on_st_steps_changed)
+        supertonic_row_layout.addWidget(self.st_steps_spin)
+
+        supertonic_row_layout.addStretch()
+        self.supertonic_row.hide()
+        controls_layout.addWidget(self.supertonic_row)
+
         # Voice selection
         voice_layout = QHBoxLayout()
         voice_layout.setSpacing(7)
@@ -1764,6 +1820,12 @@ class abogen(QWidget):
         Update the enabled state of subtitle options based on the selected language.
         For non-English languages, only sentence-based and line-based modes are supported.
         """
+        provider = self.provider_combo.currentData()
+        if provider == "supertonic":
+            self.subtitle_combo.setEnabled(False)
+            self.subtitle_format_combo.setEnabled(False)
+            return
+
         # Check if current file is a subtitle file
         is_subtitle_input = False
         if self.selected_file and self.selected_file.lower().endswith(
@@ -1823,6 +1885,48 @@ class abogen(QWidget):
         # Enable/disable subtitle options based on language
         self.update_subtitle_options_availability()
 
+    def on_provider_changed(self, index):
+        provider = self.provider_combo.itemData(index)
+        self.config["tts_provider"] = provider
+        save_config(self.config)
+        is_supertonic = provider == "supertonic"
+
+        # Show/hide SuperTonic controls
+        self.supertonic_row.setVisible(is_supertonic)
+
+        # Update subtitles availability
+        self.update_subtitle_options_availability()
+
+        # Repopulate voice list
+        self.populate_profiles_in_voice_combo()
+
+        # Clear/reset mixed voice state when switching provider
+        if is_supertonic:
+            self.mixed_voice_state = None
+            self.btn_voice_formula_mixer.setEnabled(False)
+            self.voice_combo.setToolTip(
+                "SuperTonic voices:\n"
+                "M1-M5 = Male voices\n"
+                "F1-F5 = Female voices"
+            )
+        else:
+            self.btn_voice_formula_mixer.setEnabled(True)
+            self.voice_combo.setToolTip(
+                "The first character represents the language:\n"
+                '"a" => American English\n"b" => British English\n"e" => Spanish\n"f" => French\n"h" => Hindi\n"i" => Italian\n"j" => Japanese\n"p" => Brazilian Portuguese\n"z" => Mandarin Chinese\nThe second character represents the gender:\n"m" => Male\n"f" => Female'
+            )
+
+    def _on_st_lang_changed(self, lang):
+        self.config["supertonic_language"] = lang
+        save_config(self.config)
+        if self.provider_combo.currentData() == "supertonic":
+            self.selected_lang = lang
+            self.update_subtitle_options_availability()
+
+    def _on_st_steps_changed(self, steps):
+        self.config["supertonic_total_steps"] = steps
+        save_config(self.config)
+
     def on_voice_combo_changed(self, index):
         data = self.voice_combo.itemData(index)
         if isinstance(data, str) and data.startswith("profile:"):
@@ -1831,10 +1935,24 @@ class abogen(QWidget):
             from abogen.voice_profiles import load_profiles
 
             entry = load_profiles().get(pname, {})
-            # set mixed voices and language
             if isinstance(entry, dict):
-                self.mixed_voice_state = entry.get("voices", [])
-                self.selected_lang = entry.get("language")
+                entry_provider = str(entry.get("provider", "")).strip().lower()
+                if entry_provider == "supertonic":
+                    # Switch provider to SuperTonic if not already
+                    if self.provider_combo.currentData() != "supertonic":
+                        self.provider_combo.setCurrentIndex(1)
+                    self.mixed_voice_state = None
+                    self.selected_lang = entry.get("language", self.st_lang_combo.currentText())
+                    # Sync supertonic controls from profile
+                    profile_steps = entry.get("total_steps")
+                    if profile_steps is not None:
+                        self.st_steps_spin.setValue(int(profile_steps))
+                    profile_lang = entry.get("language")
+                    if profile_lang and profile_lang in SUPERTONIC_AVAILABLE_LANGS:
+                        self.st_lang_combo.setCurrentText(profile_lang)
+                else:
+                    self.mixed_voice_state = entry.get("voices", [])
+                    self.selected_lang = entry.get("language")
             else:
                 self.mixed_voice_state = entry
                 self.selected_lang = entry[0][0] if entry and entry[0] else None
@@ -1847,7 +1965,12 @@ class abogen(QWidget):
         else:
             self.mixed_voice_state = None
             self.selected_profile_name = None
-            self.selected_voice, self.selected_lang = data, data[0]
+            self.selected_voice = data
+            provider = self.provider_combo.currentData()
+            if provider == "supertonic":
+                self.selected_lang = self.st_lang_combo.currentText()
+            else:
+                self.selected_lang = data[0] if data else ""
             self.config["selected_voice"] = data
             if "selected_profile_name" in self.config:
                 del self.config["selected_profile_name"]
@@ -1866,19 +1989,32 @@ class abogen(QWidget):
     def populate_profiles_in_voice_combo(self):
         # preserve current voice or profile
         current = self.voice_combo.currentData()
+        provider = self.provider_combo.currentData()
         self.voice_combo.blockSignals(True)
         self.voice_combo.clear()
-        # re-add profiles
+        # re-add profiles matching current provider
         profile_icon = QIcon(get_resource_path("abogen.assets", "profile.png"))
-        for pname in load_profiles().keys():
-            self.voice_combo.addItem(profile_icon, pname, f"profile:{pname}")
+        for pname, entry in load_profiles().items():
+            entry_provider = ""
+            if isinstance(entry, dict):
+                entry_provider = str(entry.get("provider", "")).strip().lower()
+            if provider == "supertonic":
+                if entry_provider == "supertonic":
+                    self.voice_combo.addItem(profile_icon, pname, f"profile:{pname}")
+            else:
+                if entry_provider != "supertonic":
+                    self.voice_combo.addItem(profile_icon, pname, f"profile:{pname}")
         # re-add voices
-        for v in VOICES_INTERNAL:
-            icon = QIcon()
-            flag_path = get_resource_path("abogen.assets.flags", f"{v[0]}.png")
-            if flag_path and os.path.exists(flag_path):
-                icon = QIcon(flag_path)
-            self.voice_combo.addItem(icon, f"{v}", v)
+        if provider == "supertonic":
+            for v in DEFAULT_SUPERTONIC_VOICES:
+                self.voice_combo.addItem(f"{v}", v)
+        else:
+            for v in VOICES_INTERNAL:
+                icon = QIcon()
+                flag_path = get_resource_path("abogen.assets.flags", f"{v[0]}.png")
+                if flag_path and os.path.exists(flag_path):
+                    icon = QIcon(flag_path)
+                self.voice_combo.addItem(icon, f"{v}", v)
         # restore selection
         idx = -1
         if self.selected_profile_name:
@@ -2069,6 +2205,9 @@ class abogen(QWidget):
             save_base_path=save_base_path,
             save_chapters_separately=getattr(self, "save_chapters_separately", None),
             merge_chapters_at_end=getattr(self, "merge_chapters_at_end", None),
+            tts_provider=self.provider_combo.currentData(),
+            supertonic_language=self.st_lang_combo.currentText(),
+            supertonic_total_steps=self.st_steps_spin.value(),
         )
 
         # Prevent adding duplicate items to the queue
@@ -2212,6 +2351,12 @@ class abogen(QWidget):
                 self.config["replace_numerals"] = self.replace_numerals
                 self.config["fix_nonstandard_punctuation"] = self.fix_nonstandard_punctuation
 
+                # TTS provider settings
+                tts_provider = getattr(queued_item, "tts_provider", "kokoro")
+                self.provider_combo.setCurrentText("SuperTonic" if tts_provider == "supertonic" else "Kokoro")
+                self.st_lang_combo.setCurrentText(getattr(queued_item, "supertonic_language", "en"))
+                self.st_steps_spin.setValue(getattr(queued_item, "supertonic_total_steps", 5))
+
                 # Sync Voice/Profile in config
                 self.config["selected_voice"] = self.selected_voice
                 if "selected_profile_name" in self.config:
@@ -2234,6 +2379,13 @@ class abogen(QWidget):
             self.current_queue_index = 0  # Reset for next time
 
     def get_voice_formula(self) -> str:
+        if self.provider_combo.currentData() == "supertonic":
+            if self.selected_profile_name:
+                from abogen.voice_profiles import load_profiles
+                entry = load_profiles().get(self.selected_profile_name, {})
+                if isinstance(entry, dict):
+                    return str(entry.get("voice", self.selected_voice or "M1"))
+            return self.selected_voice or "M1"
         if self.mixed_voice_state:
             formula_components = [
                 f"{name}*{weight}" for name, weight in self.mixed_voice_state
@@ -2243,6 +2395,8 @@ class abogen(QWidget):
             return self.selected_voice
 
     def get_selected_lang(self, voice_formula) -> str:
+        if self.provider_combo.currentData() == "supertonic":
+            return self.st_lang_combo.currentText()
         if self.selected_profile_name:
             from abogen.voice_profiles import load_profiles
 
@@ -2332,6 +2486,10 @@ class abogen(QWidget):
             # determine selected language: use profile setting if profile selected, else voice code
             selected_lang = self.get_selected_lang(voice_formula)
 
+            tts_provider = self.provider_combo.currentData()
+            supertonic_language = self.st_lang_combo.currentText()
+            supertonic_total_steps = self.st_steps_spin.value()
+
             self.conversion_thread = ConversionThread(
                 self.selected_file,
                 selected_lang,
@@ -2347,8 +2505,11 @@ class abogen(QWidget):
                 total_char_count=self.char_count,
                 use_gpu=self.gpu_ok,
                 from_queue=from_queue,
-                save_base_path=self.displayed_file_path,  # Pass the save base path (original file for EPUB)
-            )  # Use gpu_ok status
+                save_base_path=self.displayed_file_path,
+                tts_provider=tts_provider,
+                supertonic_language=supertonic_language,
+                supertonic_total_steps=supertonic_total_steps,
+            )
             # Pass the displayed file path to the log_updated signal handler in ConversionThread
             self.conversion_thread.display_path = display_path
             # Pass the file size string
@@ -2425,9 +2586,14 @@ class abogen(QWidget):
             # Store gpu_ok status to use when creating the conversion thread
             self.gpu_ok = gpu_ok
             self.update_log((gpu_msg, gpu_ok))
-            self.update_log("Loading modules...")
-            load_thread = LoadPipelineThread(pipeline_loaded_callback)
-            load_thread.start()
+            tts_provider = self.provider_combo.currentData()
+            if tts_provider == "supertonic":
+                # SuperTonic doesn't need KPipeline, call callback directly
+                pipeline_loaded_callback(None, None, None)
+            else:
+                self.update_log("Loading modules...")
+                load_thread = LoadPipelineThread(pipeline_loaded_callback)
+                load_thread.start()
 
         threading.Thread(target=gpu_and_load, daemon=True).start()
 
@@ -2743,6 +2909,16 @@ class abogen(QWidget):
     def _get_preview_cache_path(self):
         """Generate the expected cache path for the current voice settings."""
         speed = self.speed_slider.value() / 100.0
+        provider = self.provider_combo.currentData()
+
+        if provider == "supertonic":
+            voice_to_cache = self.selected_voice or "M1"
+            lang_to_cache = self.st_lang_combo.currentText()
+            steps = self.st_steps_spin.value()
+            cache_dir = get_user_cache_path("preview_cache")
+            filename = f"st_{voice_to_cache}_{lang_to_cache}_steps{steps}_{speed:.2f}.wav"
+            return os.path.join(cache_dir, filename)
+
         voice_to_cache = ""
         lang_to_cache = ""
 
@@ -2847,6 +3023,12 @@ class abogen(QWidget):
         self.btn_voice_formula_mixer.setEnabled(False)  # Disable mixer button
         self.btn_start.setEnabled(False)  # Disable start button during preview
 
+        # For SuperTonic, skip KPipeline loading and use SupertonicPipeline directly
+        if self.provider_combo.currentData() == "supertonic":
+            self.loading_movie.start()
+            self._on_pipeline_loaded_for_preview(None, None, None)
+            return
+
         # Start loading animation - ensure signal connection is always active
         if hasattr(self, "loading_movie"):
             # Disconnect previous connections to avoid multiple connections
@@ -2905,14 +3087,25 @@ class abogen(QWidget):
                     else None
                 )
         else:
-            lang = self.selected_voice[0]
-            voice = self.selected_voice
+            voice = self.selected_voice or ""
+
+        tts_provider = self.provider_combo.currentData()
+        supertonic_language = self.st_lang_combo.currentText()
+        supertonic_total_steps = self.st_steps_spin.value()
+
+        if tts_provider == "supertonic":
+            lang = supertonic_language
+        else:
+            lang = self.selected_voice[0] if self.selected_voice else ""
 
         # use same gpu/cpu logic as in conversion
         gpu_msg, gpu_ok = get_gpu_acceleration(self.use_gpu)
 
         self.preview_thread = VoicePreviewThread(
-            np_module, kpipeline_class, lang, voice, speed, gpu_ok
+            np_module, kpipeline_class, lang, voice, speed, gpu_ok,
+            tts_provider=tts_provider,
+            supertonic_language=supertonic_language,
+            supertonic_total_steps=supertonic_total_steps,
         )
         self.preview_thread.finished.connect(self._play_preview_audio)
         self.preview_thread.error.connect(self._preview_error)

@@ -4,6 +4,7 @@ import ast
 from dataclasses import dataclass
 import logging
 import math
+import os
 import re
 from typing import Any, Iterable, Iterator, Optional
 
@@ -14,6 +15,13 @@ logger = logging.getLogger(__name__)
 
 
 DEFAULT_SUPERTONIC_VOICES = ("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5")
+
+SUPERTONIC_AVAILABLE_LANGS = [
+    "en", "ko", "ja", "ar", "bg", "cs", "da", "de", "el",
+    "es", "et", "fi", "fr", "hi", "hr", "hu", "id", "it",
+    "lt", "lv", "nl", "pl", "pt", "ro", "ru", "sk", "sl",
+    "sv", "tr", "uk", "vi", "na",
+]
 
 
 @dataclass
@@ -166,10 +174,13 @@ class SupertonicPipeline:
         auto_download: bool = True,
         total_steps: int = 5,
         max_chunk_length: int = 300,
+        lang: str = "en",
+        intra_op_num_threads: Optional[int] = None,
     ) -> None:
         self.sample_rate = int(sample_rate)
         self.total_steps = int(total_steps)
         self.max_chunk_length = int(max_chunk_length)
+        self.lang = str(lang or "en")
 
         # Configure GPU providers before importing TTS
         _configure_supertonic_gpu()
@@ -181,7 +192,8 @@ class SupertonicPipeline:
                 "Supertonic is not installed. Install it with `pip install supertonic`."
             ) from exc
 
-        self._tts = TTS(auto_download=auto_download)
+        threads = intra_op_num_threads if intra_op_num_threads is not None else os.cpu_count()
+        self._tts = TTS(auto_download=auto_download, intra_op_num_threads=threads)
 
     def __call__(
         self,
@@ -191,12 +203,14 @@ class SupertonicPipeline:
         speed: float,
         split_pattern: Optional[str] = None,
         total_steps: Optional[int] = None,
+        lang: Optional[str] = None,
     ) -> Iterator[SupertonicSegment]:
         voice_name = (voice or "").strip() or "M1"
         steps = int(total_steps) if total_steps is not None else self.total_steps
         steps = max(2, min(15, steps))
         speed_value = float(speed) if speed is not None else 1.0
         speed_value = max(0.7, min(2.0, speed_value))
+        language = str(lang or self.lang or "en")
 
         style = self._tts.get_voice_style(voice_name=voice_name)
         chunks = _split_text(
@@ -213,6 +227,7 @@ class SupertonicPipeline:
                     wav, duration = self._tts.synthesize(
                         text=chunk_to_speak,
                         voice_style=style,
+                        lang=language,
                         total_steps=steps,
                         speed=speed_value,
                         max_chunk_length=self.max_chunk_length,

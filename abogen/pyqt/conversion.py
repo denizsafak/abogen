@@ -20,6 +20,7 @@ from abogen.constants import (
     SUPPORTED_SOUND_FORMATS,
     SUPPORTED_SUBTITLE_FORMATS,
 )
+from abogen.tts_supertonic import SupertonicPipeline, SUPERTONIC_AVAILABLE_LANGS, DEFAULT_SUPERTONIC_VOICES
 from abogen.voice_formulas import get_new_voice
 import abogen.hf_tracker as hf_tracker
 import static_ffmpeg
@@ -266,7 +267,10 @@ class ConversionThread(QThread):
         use_gpu=True,
         from_queue=False,
         save_base_path=None,
-    ):  # Add use_gpu parameter
+        tts_provider="kokoro",
+        supertonic_language="en",
+        supertonic_total_steps=5,
+    ):
         super().__init__()
         self._chapter_options_event = threading.Event()
         self._timestamp_response_event = threading.Event()
@@ -276,6 +280,9 @@ class ConversionThread(QThread):
         self.lang_code = lang_code
         self.speed = speed
         self.voice = voice
+        self.tts_provider = tts_provider
+        self.supertonic_language = supertonic_language
+        self.supertonic_total_steps = supertonic_total_steps
         self.save_option = save_option
         self.output_folder = output_folder
         self.subtitle_mode = subtitle_mode
@@ -427,6 +434,10 @@ class ConversionThread(QThread):
             )
             self.log_updated.emit(f"- Voice: {self.voice}")
             self.log_updated.emit(f"- Speed: {self.speed}")
+            tts_provider_label = self.tts_provider.capitalize()
+            if self.tts_provider == "supertonic":
+                tts_provider_label += f" (lang={self.supertonic_language}, steps={self.supertonic_total_steps})"
+            self.log_updated.emit(f"- TTS Engine: {tts_provider_label}")
             self.log_updated.emit(f"- Subtitle mode: {self.subtitle_mode}")
             self.log_updated.emit(f"- Output format: {self.output_format}")
             self.log_updated.emit(
@@ -499,9 +510,16 @@ class ConversionThread(QThread):
             else:
                 device = "cpu"
 
-            tts = self.KPipeline(
-                lang_code=self.lang_code, repo_id="hexgrad/Kokoro-82M", device=device
-            )
+            if self.tts_provider == "supertonic":
+                tts = SupertonicPipeline(
+                    sample_rate=24000,
+                    lang=self.supertonic_language,
+                    total_steps=self.supertonic_total_steps,
+                )
+            else:
+                tts = self.KPipeline(
+                    lang_code=self.lang_code, repo_id="hexgrad/Kokoro-82M", device=device
+                )
 
             # Check if the input is a subtitle file or timestamp text file
             is_subtitle_file = False
@@ -2447,6 +2465,9 @@ class VoicePreviewThread(QThread):
         speed,
         use_gpu=False,
         parent=None,
+        tts_provider="kokoro",
+        supertonic_language="en",
+        supertonic_total_steps=5,
     ):
         super().__init__(parent)
         self.np_module = np_module
@@ -2455,6 +2476,9 @@ class VoicePreviewThread(QThread):
         self.voice = voice
         self.speed = speed
         self.use_gpu = use_gpu
+        self.tts_provider = tts_provider
+        self.supertonic_language = supertonic_language
+        self.supertonic_total_steps = supertonic_total_steps
 
         # Cache location for preview audio
         self.cache_dir = get_user_cache_path("preview_cache")
@@ -2464,6 +2488,11 @@ class VoicePreviewThread(QThread):
 
     def _get_cache_path(self):
         """Generate a unique filename for the voice with its parameters"""
+        if self.tts_provider == "supertonic":
+            voice_id = self.voice or "M1"
+            filename = f"st_{voice_id}_{self.supertonic_language}_steps{self.supertonic_total_steps}_{self.speed:.2f}.wav"
+            return os.path.join(self.cache_dir, filename)
+
         # For a voice formula, use a hash of the formula
         if "*" in self.voice:
             voice_id = (
@@ -2478,38 +2507,55 @@ class VoicePreviewThread(QThread):
 
     def run(self):
         print(
-            f"\nVoice: {self.voice}\nLanguage: {self.lang_code}\nSpeed: {self.speed}\nGPU: {self.use_gpu}\n"
+            f"\nVoice: {self.voice}\nLanguage: {self.lang_code}\nSpeed: {self.speed}\nGPU: {self.use_gpu}\nTTS Provider: {self.tts_provider}\n"
         )
 
         # Generate the preview and save to cache
         try:
+            if self.tts_provider == "supertonic":
+                from abogen.tts_supertonic import SupertonicPipeline
 
-            # Set device based on use_gpu setting and platform
-            if self.use_gpu:
-                if platform.system() == "Darwin" and platform.processor() == "arm":
-                    device = "mps"  # Use MPS for Apple Silicon
+                tts = SupertonicPipeline(
+                    sample_rate=24000,
+                    lang=self.supertonic_language,
+                    total_steps=self.supertonic_total_steps,
+                )
+                loaded_voice = self.voice or "M1"
+                sample_text = "Hello, this is a sample of the selected voice."
+                audio_segments = []
+                for result in tts(
+                    sample_text,
+                    voice=loaded_voice,
+                    speed=self.speed,
+                    split_pattern=None,
+                ):
+                    audio_segments.append(result.audio)
+            else:
+                # Set device based on use_gpu setting and platform
+                if self.use_gpu:
+                    if platform.system() == "Darwin" and platform.processor() == "arm":
+                        device = "mps"
+                    else:
+                        device = "cuda"
                 else:
-                    device = "cuda"  # Use CUDA for other platforms
-            else:
-                device = "cpu"
+                    device = "cpu"
 
-            tts = self.kpipeline_class(
-                lang_code=self.lang_code, repo_id="hexgrad/Kokoro-82M", device=device
-            )
-            # Enable voice formula support for preview
-            if "*" in self.voice:
-                loaded_voice = get_new_voice(tts, self.voice, self.use_gpu)
-            else:
-                loaded_voice = self.voice
-            sample_text = get_sample_voice_text(self.lang_code)
-            audio_segments = []
-            for result in tts(
-                sample_text, voice=loaded_voice, speed=self.speed, split_pattern=None
-            ):
-                audio_segments.append(result.audio)
+                tts = self.kpipeline_class(
+                    lang_code=self.lang_code, repo_id="hexgrad/Kokoro-82M", device=device
+                )
+                if "*" in self.voice:
+                    loaded_voice = get_new_voice(tts, self.voice, self.use_gpu)
+                else:
+                    loaded_voice = self.voice
+                sample_text = get_sample_voice_text(self.lang_code)
+                audio_segments = []
+                for result in tts(
+                    sample_text, voice=loaded_voice, speed=self.speed, split_pattern=None
+                ):
+                    audio_segments.append(result.audio)
+
             if audio_segments:
                 audio = self.np_module.concatenate(audio_segments)
-                # Save directly to the cache path
                 sf.write(self.cache_path, audio, 24000)
                 self.temp_wav = self.cache_path
             self.finished.emit()

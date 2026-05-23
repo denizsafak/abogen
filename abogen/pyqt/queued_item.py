@@ -26,3 +26,7 @@ class QueuedItem:
     replace_all_caps: bool = False
     replace_numerals: bool = False
     fix_nonstandard_punctuation: bool = False
+    # TTS Provider fields
+    tts_provider: str = "kokoro"
+    supertonic_language: str = "en"
+    supertonic_total_steps: int = 5
