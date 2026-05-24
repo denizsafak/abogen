@@ -25,7 +25,7 @@ def submit_job(pending: PendingJob) -> str:
         tts_provider=getattr(pending, "tts_provider", "kokoro"),
         voice=pending.voice,
         speed=pending.speed,
-        supertonic_total_steps=getattr(pending, "supertonic_total_steps", 5),
+        supertonic_total_steps=getattr(pending, "supertonic_total_steps", 8),
         use_gpu=pending.use_gpu,
         subtitle_mode=pending.subtitle_mode,
         output_format=pending.output_format,

@@ -30,7 +30,7 @@ dependencies = [
   "pip",
   "kokoro>=0.9.4",
   "misaki[zh]>=0.9.4",
-  "supertonic>=0.1.0",
+  "supertonic>=1.3.1",
   "ebooklib>=0.19",
   "beautifulsoup4>=4.13.4",
   "spacy>=3.8.7,<4.0",
@@ -111,11 +111,11 @@ filterwarnings = [
 
 [project.optional-dependencies]
 # NVIDIA GPU (Windows) (CUDA 12.6)       # uv tool install abogen[cuda126]
-cuda126 = ["torch"]
+cuda126 = ["torch", "onnxruntime-gpu>=1.26.0"]
 # NVIDIA GPU (Windows) (CUDA 12.8)       # uv tool install abogen[cuda]
-cuda = ["torch"]
+cuda = ["torch", "onnxruntime-gpu>=1.26.0"]
 # NVIDIA GPU (Windows) (CUDA 13.0)       # uv tool install abogen[cuda130]
-cuda130 = ["torch"]
+cuda130 = ["torch", "onnxruntime-gpu>=1.26.0"]
 # AMD GPU (Linux) (ROCm 6.4)             # uv tool install abogen[rocm]
 rocm = ["torch", "pytorch-triton-rocm"]
 # Development dependencies               # uv tool install abogen[dev]

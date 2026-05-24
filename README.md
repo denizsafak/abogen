@@ -38,6 +38,8 @@ This method handles everything automatically - installing all dependencies inclu
 #### <b>OPTION 2: Install using uv</b>
 First, [install uv](https://docs.astral.sh/uv/getting-started/installation/) if you haven't already.
 
+The CUDA extras install both GPU-accelerated Kokoro (via PyTorch) and Supertonic (via onnxruntime-gpu).
+
 ```bash
 # For NVIDIA GPUs (CUDA 12.8) - Recommended
 uv tool install --python 3.12 abogen[cuda] --extra-index-url https://download.pytorch.org/whl/cu128 --index-strategy unsafe-best-match
@@ -64,6 +66,9 @@ venv\Scripts\activate
 # For NVIDIA GPUs:
 # We need to use an older version of PyTorch (2.8.0) until this issue is fixed: https://github.com/pytorch/pytorch/issues/166628
 pip install torch==2.8.0+cu128 torchvision==0.23.0+cu128 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+
+# Also install onnxruntime-gpu for Supertonic GPU acceleration:
+pip install onnxruntime-gpu
 
 # For AMD GPUs:
 # Not supported yet, because ROCm is not available on Windows. Use Linux if you have AMD GPU.

@@ -59,7 +59,7 @@ def _supertonic_voice_from_spec(spec: Any, fallback: str) -> str:
     raw = str(spec or "").strip()
     fallback_raw = str(fallback or "").strip()
 
-    # SuperTonic voices are discrete IDs (M1/F3/...). If we see a Kokoro mix
+    # Supertonic voices are discrete IDs (M1/F3/...). If we see a Kokoro mix
     # formula (contains '*' or '+'), ignore it and fall back to a safe voice.
     if not raw or "*" in raw or "+" in raw:
         raw = fallback_raw
@@ -1584,7 +1584,7 @@ def run_conversion_job(job: Job) -> None:
                 pipelines[provider_norm] = SupertonicPipeline(
                     sample_rate=SAMPLE_RATE,
                     auto_download=True,
-                    total_steps=int(getattr(job, "supertonic_total_steps", 5) or 5),
+                    total_steps=int(getattr(job, "supertonic_total_steps", 8) or 8),
                 )
                 return pipelines[provider_norm]
 
@@ -1618,7 +1618,7 @@ def run_conversion_job(job: Job) -> None:
                 provider = str(entry.get("provider") or "kokoro").strip().lower() or "kokoro"
                 if provider == "supertonic":
                     voice = str(entry.get("voice") or getattr(job, "voice", "M1") or "M1").strip() or "M1"
-                    steps = int(entry.get("total_steps") or getattr(job, "supertonic_total_steps", 5) or 5)
+                    steps = int(entry.get("total_steps") or getattr(job, "supertonic_total_steps", 8) or 8)
                     speed = float(entry.get("speed") or getattr(job, "speed", 1.0) or 1.0)
                     return "supertonic", _supertonic_voice_from_spec(voice, getattr(job, "voice", "M1")), speed, steps
                 formula = _formula_from_kokoro_entry(entry)
@@ -1634,7 +1634,7 @@ def run_conversion_job(job: Job) -> None:
             """Resolve a raw voice spec into (provider, resolved_spec, choice, speed, steps).
 
             For Kokoro formulas, `choice` will be a resolved voice tensor (via `voice_formulas`).
-            For SuperTonic, `choice` will be a valid SuperTonic voice id.
+            For Supertonic, `choice` will be a valid Supertonic voice id.
             """
 
             provider, resolved, speed, steps = resolve_voice_target(raw_spec)
@@ -1857,7 +1857,7 @@ def run_conversion_job(job: Job) -> None:
                     voice=voice_name,
                     speed=float(speed_override if speed_override is not None else job.speed),
                     split_pattern=split_pattern,
-                    total_steps=int(supertonic_steps_override if supertonic_steps_override is not None else getattr(job, "supertonic_total_steps", 5)),
+                    total_steps=int(supertonic_steps_override if supertonic_steps_override is not None else getattr(job, "supertonic_total_steps", 8)),
                 )
             else:
                 kokoro_pipeline = get_pipeline("kokoro")
@@ -2448,7 +2448,7 @@ def _load_pipeline(job: Job):
         return SupertonicPipeline(
             sample_rate=SAMPLE_RATE,
             auto_download=True,
-            total_steps=int(getattr(job, "supertonic_total_steps", 5) or 5),
+            total_steps=int(getattr(job, "supertonic_total_steps", 8) or 8),
         )
 
     device = "cpu"
@@ -2610,7 +2610,7 @@ def _build_ffmpeg_command(path: Path, fmt: str, metadata: Optional[Dict[str, str
 def _resolve_voice(pipeline, voice_spec: str, use_gpu: bool):
     if "*" in voice_spec:
         # Voice formulas are a Kokoro-only feature (they require a pipeline that can
-        # load individual Kokoro voices). When running with SuperTonic (or when the
+        # load individual Kokoro voices). When running with Supertonic (or when the
         # pipeline is otherwise unavailable), treat the spec as a plain string and
         # allow downstream provider-specific resolution to choose a safe fallback.
         if pipeline is None or not hasattr(pipeline, "load_single_voice"):

@@ -31,6 +31,7 @@ from abogen.constants import (
     VOICES_INTERNAL,
     SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION,
     LANGUAGE_DESCRIPTIONS,
+    KOKORO_LANG_TO_COUNTRY,
     COLORS,
 )
 import re
@@ -189,8 +190,9 @@ class VoiceMixer(QWidget):
         )  # Center the icons horizontally
 
         # Flag icon
+        country_code = KOKORO_LANG_TO_COUNTRY.get(language_code, language_code)
         flag_icon_path = get_resource_path(
-            "abogen.assets.flags", f"{language_code}.png"
+            "abogen.assets.flags", f"{country_code}.png"
         )
         gender_icon_path = get_resource_path(
             "abogen.assets", "female.png" if is_female else "male.png"
@@ -512,7 +514,8 @@ class VoiceFormulaDialog(QDialog):
         header_row.addWidget(QLabel("Language:"))
         self.language_combo = QComboBox()
         for code, desc in LANGUAGE_OPTIONS:
-            flag = get_resource_path("abogen.assets.flags", f"{code}.png")
+            country_code = KOKORO_LANG_TO_COUNTRY.get(code, code)
+            flag = get_resource_path("abogen.assets.flags", f"{country_code}.png")
             if flag and os.path.exists(flag):
                 self.language_combo.addItem(QIcon(flag), desc, code)
             else:

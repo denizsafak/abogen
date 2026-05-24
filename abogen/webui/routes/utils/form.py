@@ -577,7 +577,7 @@ def apply_book_step_form(
     # NOTE: Do not auto-set a global TTS provider at the book level based on the
     # narrator defaults. Provider is resolved per-speaker/per-chunk from the voice
     # spec (e.g. "speaker:Name" for saved speakers, or a Kokoro mix formula).
-    # This enables mixed-provider conversions (e.g. narrator=SuperTonic, characters=Kokoro).
+    # This enables mixed-provider conversions (e.g. narrator=Supertonic, characters=Kokoro).
     provider_value = str(form.get("tts_provider") or "").strip().lower()
     if provider_value in {"kokoro", "supertonic"}:
         pending.tts_provider = provider_value
@@ -913,6 +913,15 @@ def build_pending_job_from_extraction(
         else:
             normalization_overrides[key] = default_val
 
+    provider_value = str(form.get("tts_provider") or "").strip().lower()
+    if provider_value not in {"kokoro", "supertonic"}:
+        provider_value = settings.get("tts_provider", "kokoro")
+    try:
+        total_steps = int(form.get("supertonic_total_steps", settings.get("supertonic_total_steps", 8)))
+        supertonic_steps = max(2, min(15, total_steps))
+    except (TypeError, ValueError):
+        supertonic_steps = int(settings.get("supertonic_total_steps", 8))
+
     pending = PendingJob(
         id=uuid.uuid4().hex,
         original_filename=original_name,
@@ -928,6 +937,8 @@ def build_pending_job_from_extraction(
         replace_single_newlines=replace_single_newlines,
         subtitle_format=subtitle_format,
         total_characters=total_chars,
+        tts_provider=provider_value,
+        supertonic_total_steps=supertonic_steps,
         save_chapters_separately=save_chapters_separately,
         merge_chapters_at_end=merge_chapters_at_end,
         separate_chapters_format=separate_chapters_format,

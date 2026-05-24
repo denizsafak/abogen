@@ -111,7 +111,7 @@ class Job:
     subtitle_format: str
     created_at: float
     tts_provider: str = "kokoro"
-    supertonic_total_steps: int = 5
+    supertonic_total_steps: int = 8
     save_chapters_separately: bool = False
     merge_chapters_at_end: bool = True
     separate_chapters_format: str = "wav"
@@ -204,7 +204,7 @@ class Job:
             "queue_position": self.queue_position,
             "options": {
                 "tts_provider": getattr(self, "tts_provider", "kokoro"),
-                "supertonic_total_steps": getattr(self, "supertonic_total_steps", 5),
+                "supertonic_total_steps": getattr(self, "supertonic_total_steps", 8,
                 "save_chapters_separately": self.save_chapters_separately,
                 "merge_chapters_at_end": self.merge_chapters_at_end,
                 "separate_chapters_format": self.separate_chapters_format,
@@ -552,7 +552,7 @@ class PendingJob:
     normalization_overrides: Dict[str, Any]
     created_at: float
     tts_provider: str = "kokoro"
-    supertonic_total_steps: int = 5
+    supertonic_total_steps: int = 8
     cover_image_path: Optional[Path] = None
     cover_image_mime: Optional[str] = None
     chapter_intro_delay: float = 0.5
@@ -621,7 +621,7 @@ class ConversionService:
         voice: str,
         speed: float,
         tts_provider: str = "kokoro",
-        supertonic_total_steps: int = 5,
+        supertonic_total_steps: int = 8,
         use_gpu: bool,
         subtitle_mode: str,
         output_format: str,
@@ -674,7 +674,7 @@ class ConversionService:
             voice=voice,
             speed=speed,
             tts_provider=tts_provider,
-            supertonic_total_steps=int(supertonic_total_steps or 5),
+            supertonic_total_steps=int(supertonic_total_steps or 8),
             use_gpu=use_gpu,
             subtitle_mode=subtitle_mode,
             output_format=output_format,
@@ -1147,7 +1147,7 @@ class ConversionService:
             "tts_provider": getattr(job, "tts_provider", "kokoro"),
             "voice": job.voice,
             "speed": job.speed,
-            "supertonic_total_steps": getattr(job, "supertonic_total_steps", 5),
+            "supertonic_total_steps": getattr(job, "supertonic_total_steps", 8,
             "use_gpu": job.use_gpu,
             "subtitle_mode": job.subtitle_mode,
             "output_format": job.output_format,
@@ -1275,7 +1275,7 @@ class ConversionService:
             replace_single_newlines=bool(payload.get("replace_single_newlines", False)),
             subtitle_format=payload.get("subtitle_format", "srt"),
             created_at=float(payload.get("created_at", time.time())),
-            supertonic_total_steps=int(payload.get("supertonic_total_steps", 5)),
+            supertonic_total_steps=int(payload.get("supertonic_total_steps", 8),
             save_chapters_separately=bool(payload.get("save_chapters_separately", False)),
             merge_chapters_at_end=bool(payload.get("merge_chapters_at_end", True)),
             separate_chapters_format=payload.get("separate_chapters_format", "wav"),
