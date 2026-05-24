@@ -2400,15 +2400,7 @@ class abogen(QWidget):
 
     def get_voice_formula(self) -> str:
         if self.provider_combo.currentData() == "supertonic":
-            if self.selected_profile_name:
-                from abogen.voice_profiles import load_profiles
-                entry = load_profiles().get(self.selected_profile_name, {})
-                if isinstance(entry, dict):
-                    return str(entry.get("voice", "M1"))
-            current_data = self.voice_combo.currentData()
-            if current_data and isinstance(current_data, str) and not current_data.startswith("profile:"):
-                return current_data
-            return "M1"
+            return self._get_supertonic_voice()
         if self.mixed_voice_state:
             formula_components = [
                 f"{name}*{weight}" for name, weight in self.mixed_voice_state
@@ -2930,17 +2922,26 @@ class abogen(QWidget):
                 "Open File Error", f"Could not open file:\n{e}"
             )
 
+    def _get_supertonic_voice(self) -> str:
+        """Resolve the effective Supertonic voice from the current combo selection."""
+        if self.selected_profile_name:
+            from abogen.voice_profiles import load_profiles
+            entry = load_profiles().get(self.selected_profile_name, {})
+            if isinstance(entry, dict):
+                return str(entry.get("voice", "M1"))
+            return "M1"
+        current_data = self.voice_combo.currentData()
+        if current_data and isinstance(current_data, str) and not current_data.startswith("profile:"):
+            return current_data
+        return "M1"
+
     def _get_preview_cache_path(self):
         """Generate the expected cache path for the current voice settings."""
         speed = self.speed_slider.value() / 100.0
         provider = self.provider_combo.currentData()
 
         if provider == "supertonic":
-            current_data = self.voice_combo.currentData()
-            if current_data and isinstance(current_data, str) and not current_data.startswith("profile:"):
-                voice_to_cache = current_data
-            else:
-                voice_to_cache = "M1"
+            voice_to_cache = self._get_supertonic_voice()
             lang_to_cache = self.st_lang_combo.currentText()
             steps = self.st_steps_combo.currentData()
             cache_dir = get_user_cache_path("preview_cache")
@@ -3117,10 +3118,7 @@ class abogen(QWidget):
                 )
         else:
             if self.provider_combo.currentData() == "supertonic":
-                current_data = self.voice_combo.currentData()
-                print(f"[DEBUG] voice_combo.currentData() = {current_data!r}")
-                voice = current_data if (current_data and isinstance(current_data, str) and not current_data.startswith("profile:")) else "M1"
-                print(f"[DEBUG] resolved voice = {voice!r}")
+                voice = self._get_supertonic_voice()
             else:
                 voice = self.selected_voice or ""
 
