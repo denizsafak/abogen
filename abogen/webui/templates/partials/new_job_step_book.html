@@ -26,6 +26,26 @@
     {% set subtitle_value = settings_dict.get('subtitle_mode', 'Disabled') %}
   {% endif %}
 {% endif %}
+{% set tts_provider_value = form_values.get('tts_provider') if form_values else None %}
+{% if not tts_provider_value %}
+  {% if pending and pending.tts_provider %}
+    {% set tts_provider_value = pending.tts_provider %}
+  {% else %}
+    {% set tts_provider_value = settings_dict.get('tts_provider', 'kokoro') %}
+  {% endif %}
+{% endif %}
+{% set supertonic_steps_value = form_values.get('supertonic_total_steps') if form_values else None %}
+{% if supertonic_steps_value is none %}
+  {% if pending and pending.supertonic_total_steps is not none %}
+    {% set supertonic_steps_value = pending.supertonic_total_steps %}
+  {% else %}
+    {% set supertonic_steps_value = settings_dict.get('supertonic_total_steps', 8 %}
+  {% endif %}
+{% endif %}
+{% if supertonic_steps_value is not none and supertonic_steps_value is string %}
+  {% set supertonic_steps_value = supertonic_steps_value|int %}
+{% endif %}
+{% set is_supertonic = tts_provider_value == 'supertonic' %}
 {% set generate_flag = form_values.get('generate_epub3') if form_values else None %}
 {% if generate_flag is not none %}
   {% set generate_epub3 = True %}
@@ -273,6 +293,13 @@
       <div class="form-section__layout form-section__layout--split">
         <div class="form-section__group">
           <div class="field">
+            <label for="tts_provider">TTS Engine</label>
+            <select id="tts_provider" name="tts_provider" data-role="tts-provider" {{ 'disabled' if readonly else '' }}>
+              <option value="kokoro" {% if tts_provider_value == 'kokoro' %}selected{% endif %}>Kokoro</option>
+              <option value="supertonic" {% if tts_provider_value == 'supertonic' %}selected{% endif %}>Supertonic</option>
+            </select>
+          </div>
+          <div class="field" data-role="voice-profile-field">
             <label for="voice_profile">Voice profile</label>
             <select id="voice_profile" name="voice_profile" data-role="voice-profile" {{ 'disabled' if readonly else '' }}>
               <option value="__standard" {% if profile_value == '__standard' %}selected{% endif %}>Standard voice</option>
@@ -280,13 +307,13 @@
               {% if options.voice_profile_options %}
               <optgroup label="Saved mixes">
                 {% for profile in options.voice_profile_options %}
-                <option value="{{ profile.name }}" data-language="{{ profile.language }}" data-formula="{{ profile.formula|e }}" {% if profile_value == profile.name %}selected{% endif %}>{{ profile.name }}{% if profile.language %} ({{ profile.language|upper }}){% endif %}</option>
+                <option value="{{ profile.name }}" data-language="{{ profile.language }}" data-formula="{{ profile.formula|e }}" data-provider="{{ profile.provider|default('kokoro')|lower }}" {% if profile_value == profile.name %}selected{% endif %}>{{ profile.name }}{% if profile.language %} ({{ profile.language|upper }}){% endif %}{% if profile.provider and profile.provider|lower != 'kokoro' %} · {{ profile.provider|capitalize }}{% endif %}</option>
                 {% endfor %}
               </optgroup>
               {% endif %}
             </select>
           </div>
-          <div class="field" data-role="voice-field" {% if profile_value != '__standard' %}hidden aria-hidden="true"{% endif %}>
+          <div class="field" data-role="voice-field" data-provider="kokoro" {% if profile_value != '__standard' or is_supertonic %}hidden aria-hidden="true"{% endif %}>
             <label for="voice">Voice</label>
             <select id="voice" name="voice" data-role="voice-select" data-default="{{ narrator_voice or settings_dict.get('default_voice', '') }}" {{ 'disabled' if readonly else '' }}>
               {% for voice in options.voices %}
@@ -294,9 +321,22 @@
               {% endfor %}
             </select>
           </div>
-          <div class="field" data-conditional="formula" data-role="formula-field" {% if profile_value != '__formula' %}hidden aria-hidden="true"{% endif %}>
+          <div class="field" data-role="voice-field" data-provider="supertonic" {% if profile_value != '__standard' or not is_supertonic %}hidden aria-hidden="true"{% endif %}>
+            <label for="voice_st">Supertonic voice</label>
+            <select id="voice_st" name="voice" data-role="voice-select" data-default="{{ narrator_voice or 'M1' }}" {{ 'disabled' if readonly else '' }}>
+              {% for voice in ['M1','M2','M3','M4','M5','F1','F2','F3','F4','F5'] %}
+              <option value="{{ voice }}" {% if narrator_voice == voice and profile_value == '__standard' %}selected{% endif %}>{{ voice }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field" data-conditional="formula" data-role="formula-field" data-provider="kokoro" {% if profile_value != '__formula' or is_supertonic %}hidden aria-hidden="true"{% endif %}>
             <label for="voice_formula">Custom voice formula</label>
             <input type="text" id="voice_formula" name="voice_formula" placeholder="af_nova*0.4+am_liam*0.6" data-role="voice-formula" value="{{ voice_formula_value }}" {{ 'disabled' if readonly else '' }}>
+          </div>
+          <div class="field" data-role="supertonic-steps-field" {% if not is_supertonic %}hidden aria-hidden="true"{% endif %}>
+            <label for="supertonic_total_steps">Supertonic quality (total steps)</label>
+            <input type="number" id="supertonic_total_steps" name="supertonic_total_steps" min="2" max="15" value="{{ supertonic_steps_value }}" {{ 'disabled' if readonly else '' }}>
+            <p class="hint">2 = fastest/lowest quality, 15 = slowest/highest quality.</p>
           </div>
         </div>
         <div class="form-section__group">
@@ -423,3 +463,54 @@
     </div>
   </footer>
 </form>
+
+<script nonce="{{ csp_nonce() if csp_nonce else '' }}">
+(function() {
+  const form = document.querySelector('[data-wizard-form="true"][data-step="book"]');
+  if (!form) return;
+  const providerSelect = form.querySelector('[data-role="tts-provider"]');
+  if (!providerSelect) return;
+
+  function filterProfilesByProvider(provider) {
+    const profileSelect = form.querySelector('[data-role="voice-profile"]');
+    if (!profileSelect) return;
+    const options = profileSelect.querySelectorAll('option[data-provider]');
+    options.forEach(function(opt) {
+      const matches = !opt.dataset.provider || opt.dataset.provider === provider;
+      opt.hidden = !matches;
+      if (opt.selected && opt.hidden) {
+        opt.selected = false;
+      }
+    });
+    if (!profileSelect.value || profileSelect.selectedOptions[0]?.hidden) {
+      const firstVisible = profileSelect.querySelector('option:not([hidden])');
+      if (firstVisible) profileSelect.value = firstVisible.value;
+    }
+    profileSelect.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function syncProviderUI(provider) {
+    var isSupertonic = provider === 'supertonic';
+    form.querySelectorAll('[data-role="voice-field"]').forEach(function(el) {
+      el.hidden = el.dataset.provider !== provider;
+      el.setAttribute('aria-hidden', el.hidden ? 'true' : 'false');
+    });
+    var formulaField = form.querySelector('[data-role="formula-field"]');
+    if (formulaField) {
+      formulaField.hidden = isSupertonic;
+      formulaField.setAttribute('aria-hidden', isSupertonic ? 'true' : 'false');
+    }
+    var stepsField = form.querySelector('[data-role="supertonic-steps-field"]');
+    if (stepsField) {
+      stepsField.hidden = !isSupertonic;
+      stepsField.setAttribute('aria-hidden', isSupertonic ? 'false' : 'true');
+    }
+    filterProfilesByProvider(provider);
+  }
+
+  providerSelect.addEventListener('change', function() {
+    syncProviderUI(providerSelect.value);
+  });
+  syncProviderUI(providerSelect.value);
+})();
+</script>

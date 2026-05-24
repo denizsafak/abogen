@@ -61,6 +61,15 @@
               <p class="hint">Pick a saved speaker from Speaker Studio to use by default for new jobs.</p>
             </div>
 
+            <div class="field">
+              <label for="tts_provider">Default TTS Engine</label>
+              <select id="tts_provider" name="tts_provider">
+                <option value="kokoro" {% if settings.tts_provider == 'kokoro' %}selected{% endif %}>Kokoro</option>
+                <option value="supertonic" {% if settings.tts_provider == 'supertonic' %}selected{% endif %}>Supertonic</option>
+              </select>
+              <p class="hint">Select the default TTS engine for new jobs.</p>
+            </div>
+
             <div class="field field--wide">
               <p class="tag">Kokoro settings</p>
             </div>
