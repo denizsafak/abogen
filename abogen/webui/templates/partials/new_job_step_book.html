@@ -39,7 +39,7 @@
   {% if pending and pending.supertonic_total_steps is not none %}
     {% set supertonic_steps_value = pending.supertonic_total_steps %}
   {% else %}
-    {% set supertonic_steps_value = settings_dict.get('supertonic_total_steps', 8 %}
+    {% set supertonic_steps_value = settings_dict.get('supertonic_total_steps', 8) %}
   {% endif %}
 {% endif %}
 {% if supertonic_steps_value is not none and supertonic_steps_value is string %}
