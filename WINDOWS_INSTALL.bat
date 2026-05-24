@@ -323,6 +323,13 @@ if /I "%IS_NVIDIA%"=="true" (
             pause
             exit /b
         )
+        echo Installing onnxruntime-gpu for Supertonic GPU acceleration...
+        %PYTHON_CONSOLE_PATH% -m uv pip install --system onnxruntime-gpu
+        if errorlevel 1 (
+            echo Failed to install onnxruntime-gpu.
+            pause
+            exit /b
+        )
     ) else (
         echo CUDA is available on NVIDIA GPU.
     )
@@ -345,6 +352,13 @@ if /I "%IS_NVIDIA%"=="true" (
         %PYTHON_CONSOLE_PATH% -m uv pip install --system torch==2.8.0+cu128 torchvision==0.23.0+cu128 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
         if errorlevel 1 (
             echo Failed to install PyTorch.
+            pause
+            exit /b
+        )
+        echo Installing onnxruntime-gpu for Supertonic GPU acceleration...
+        %PYTHON_CONSOLE_PATH% -m uv pip install --system onnxruntime-gpu
+        if errorlevel 1 (
+            echo Failed to install onnxruntime-gpu.
             pause
             exit /b
         )
