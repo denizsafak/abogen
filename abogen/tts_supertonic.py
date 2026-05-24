@@ -163,6 +163,7 @@ def _configure_supertonic_gpu() -> None:
     except Exception as exc:
         logger.warning("Could not configure supertonic GPU providers: %s", exc)
 
+SUPERTONIC_MAX_CHUNK_LENGTH = 500
 
 class SupertonicPipeline:
     """Minimal adapter that mimics Kokoro's pipeline iteration interface."""
@@ -173,7 +174,7 @@ class SupertonicPipeline:
         sample_rate: int,
         auto_download: bool = True,
         total_steps: int = 5,
-        max_chunk_length: int = 300,
+        max_chunk_length: int = SUPERTONIC_MAX_CHUNK_LENGTH,
         lang: str = "en",
         intra_op_num_threads: Optional[int] = None,
     ) -> None:
