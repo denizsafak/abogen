@@ -84,6 +84,8 @@ from abogen.constants import (
     PROGRAM_DESCRIPTION,
     LANGUAGE_DESCRIPTIONS,
     VOICES_INTERNAL,
+    KOKORO_LANG_TO_COUNTRY,
+    SUPERTONIC_LANG_TO_COUNTRY,
     SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION,
     COLORS,
     SUBTITLE_FORMATS,
@@ -1143,7 +1145,10 @@ class abogen(QWidget):
         supertonic_row_layout.addWidget(st_lang_label)
         self.st_lang_combo = QComboBox(self)
         for code in SUPERTONIC_AVAILABLE_LANGS:
-            self.st_lang_combo.addItem(code, code)
+            country_code = SUPERTONIC_LANG_TO_COUNTRY.get(code, code)
+            flag = get_resource_path("abogen.assets.flags", f"{country_code}.png")
+            icon_st = QIcon(flag) if flag and os.path.exists(flag) else QIcon()
+            self.st_lang_combo.addItem(icon_st, code, code)
         self.st_lang_combo.setCurrentText("en")
         self.st_lang_combo.setStyleSheet("QComboBox { min-height: 20px; padding: 6px 12px; }")
         self.st_lang_combo.currentTextChanged.connect(self._on_st_lang_changed)
@@ -2011,7 +2016,8 @@ class abogen(QWidget):
         else:
             for v in VOICES_INTERNAL:
                 icon = QIcon()
-                flag_path = get_resource_path("abogen.assets.flags", f"{v[0]}.png")
+                country_code = KOKORO_LANG_TO_COUNTRY.get(v[0], v[0])
+                flag_path = get_resource_path("abogen.assets.flags", f"{country_code}.png")
                 if flag_path and os.path.exists(flag_path):
                     icon = QIcon(flag_path)
                 self.voice_combo.addItem(icon, f"{v}", v)

@@ -29,6 +29,57 @@ LANGUAGE_DESCRIPTIONS = {
     "z": "Mandarin Chinese",
 }
 
+# Mapping from Kokoro single-letter language codes to ISO 3166-1 alpha-2 country codes
+# Used for loading flag icons
+KOKORO_LANG_TO_COUNTRY = {
+    "a": "us",  # American English -> United States
+    "b": "gb",  # British English -> United Kingdom
+    "e": "es",  # Spanish -> Spain
+    "f": "fr",  # French -> France
+    "h": "in",  # Hindi -> India
+    "i": "it",  # Italian -> Italy
+    "j": "jp",  # Japanese -> Japan
+    "p": "br",  # Brazilian Portuguese -> Brazil
+    "z": "cn",  # Mandarin Chinese -> China
+}
+
+# Mapping from SuperTonic ISO 639-1 language codes to ISO 3166-1 alpha-2 country codes
+# Used for loading flag icons in the SuperTonic language picker
+SUPERTONIC_LANG_TO_COUNTRY = {
+    "en": "gb",
+    "ko": "kr",
+    "ja": "jp",
+    "ar": "ae",
+    "bg": "bg",
+    "cs": "cz",
+    "da": "dk",
+    "de": "de",
+    "el": "gr",
+    "es": "es",
+    "et": "ee",
+    "fi": "fi",
+    "fr": "fr",
+    "hi": "in",
+    "hr": "hr",
+    "hu": "hu",
+    "id": "id",
+    "it": "it",
+    "lt": "lt",
+    "lv": "lv",
+    "nl": "nl",
+    "pl": "pl",
+    "pt": "pt",
+    "ro": "ro",
+    "ru": "ru",
+    "sk": "sk",
+    "sl": "si",
+    "sv": "se",
+    "tr": "tr",
+    "uk": "ua",
+    "vi": "vn",
+    "na": "na",
+}
+
 # Supported sound formats
 SUPPORTED_SOUND_FORMATS = [
     "wav",
