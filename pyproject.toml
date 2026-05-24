@@ -50,6 +50,8 @@ dependencies = [
   "num2words>=0.5.13",
   "httpx>=0.27.0",
   "PyQt6>=6.5.0",
+  "flet>=0.85.1",
+  "msgpack>=1.0.0",
 ]
 
 classifiers = [
@@ -77,11 +79,12 @@ allow-direct-references = true
 
 
 [project.gui-scripts]
-abogen = "abogen.pyqt.main:main"
+abogen = "abogen.frontend.main:main"
 
 [project.scripts]
+abogen-ui = "abogen.frontend.main:main"
+abogen-web = "abogen.frontend.main:main_web"
 abogen-cli = "abogen.webui.app:main"
-abogen-web = "abogen.webui.app:main"
 abogen-pyqt = "abogen.pyqt.main:main"
 
 [tool.hatch.build.targets.sdist]
