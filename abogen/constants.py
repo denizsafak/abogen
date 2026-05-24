@@ -43,8 +43,8 @@ KOKORO_LANG_TO_COUNTRY = {
     "z": "cn",  # Mandarin Chinese -> China
 }
 
-# Mapping from SuperTonic ISO 639-1 language codes to ISO 3166-1 alpha-2 country codes
-# Used for loading flag icons in the SuperTonic language picker
+# Mapping from Supertonic ISO 639-1 language codes to ISO 3166-1 alpha-2 country codes
+# Used for loading flag icons in the Supertonic language picker
 SUPERTONIC_LANG_TO_COUNTRY = {
     "en": "gb",
     "ko": "kr",

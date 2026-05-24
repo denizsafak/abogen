@@ -666,7 +666,7 @@ def resolve_voice_choice(
 
         # Provider-aware behavior:
         # - Kokoro profiles typically represent mixes (formula strings).
-        # - SuperTonic profiles represent a discrete voice id + settings.
+        # - Supertonic profiles represent a discrete voice id + settings.
         #   In that case, we return a speaker reference so downstream can
         #   resolve provider per-speaker and allow mixed-provider casting.
         if provider == "supertonic":

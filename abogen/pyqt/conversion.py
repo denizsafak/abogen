@@ -269,7 +269,7 @@ class ConversionThread(QThread):
         save_base_path=None,
         tts_provider="kokoro",
         supertonic_language="en",
-        supertonic_total_steps=5,
+        supertonic_total_steps=8,
     ):
         super().__init__()
         self._chapter_options_event = threading.Event()
@@ -283,6 +283,7 @@ class ConversionThread(QThread):
         self.tts_provider = tts_provider
         self.supertonic_language = supertonic_language
         self.supertonic_total_steps = supertonic_total_steps
+        self.sample_rate = 44100 if tts_provider == "supertonic" else 24000
         self.save_option = save_option
         self.output_folder = output_folder
         self.subtitle_mode = subtitle_mode
@@ -512,7 +513,7 @@ class ConversionThread(QThread):
 
             if self.tts_provider == "supertonic":
                 tts = SupertonicPipeline(
-                    sample_rate=24000,
+                    sample_rate=self.sample_rate,
                     lang=self.supertonic_language,
                     total_steps=self.supertonic_total_steps,
                 )
@@ -765,7 +766,7 @@ class ConversionThread(QThread):
                 merged_out_path = f"{base_filepath_no_ext}.{self.output_format}"
                 subtitle_entries = []
                 current_time = 0.0
-                rate = 24000
+                rate = self.sample_rate
                 subtitle_mode = self.subtitle_mode
                 self.etr_start_time = time.time()
                 self.processed_char_count = 0
@@ -781,7 +782,7 @@ class ConversionThread(QThread):
                     merged_out_file = sf.SoundFile(
                         merged_out_path,
                         "w",
-                        samplerate=24000,
+                        samplerate=self.sample_rate,
                         channels=1,
                         format=self.output_format,
                     )
@@ -797,62 +798,18 @@ class ConversionThread(QThread):
                     # Prepare ffmpeg command for m4b output
                     cmd = [
                         "ffmpeg",
-                        "-y",
-                        "-thread_queue_size",
-                        "32768",
-                        "-f",
-                        "f32le",
-                        "-ar",
-                        "24000",
-                        "-ac",
-                        "1",
-                        "-i",
-                        "pipe:0",
-                    ]
-                    if cover_path and os.path.exists(cover_path):
-                        cmd.extend(
-                            [
-                                "-i",
-                                cover_path,
-                                "-map",
-                                "0:a",
-                                "-map",
-                                "1",
-                                "-c:v",
-                                "copy",
-                                "-disposition:v",
-                                "attached_pic",
-                            ]
-                        )
-                    cmd.extend(
-                        [
-                            "-c:a",
-                            "aac",
-                            "-q:a",
-                            "2",
-                            "-movflags",
-                            "+faststart+use_metadata_tags",
+                            "-y",
+                            "-thread_queue_size",
+                            "32768",
+                            "-f",
+                            "f32le",
+                            "-ar",
+                            str(self.sample_rate),
+                            "-ac",
+                            "1",
+                            "-i",
+                            "pipe:0",
                         ]
-                    )
-                    cmd += metadata_options
-                    cmd.append(merged_out_path)
-                    ffmpeg_proc = create_process(cmd, stdin=subprocess.PIPE, text=False)
-                elif self.output_format == "opus":
-                    static_ffmpeg.add_paths()
-                    cmd = [
-                        "ffmpeg",
-                        "-y",
-                        "-thread_queue_size",
-                        "32768",
-                        "-f",
-                        "f32le",
-                        "-ar",
-                        "24000",
-                        "-ac",
-                        "1",
-                        "-i",
-                        "pipe:0",
-                    ]
                     cmd.extend(["-c:a", "libopus", "-b:a", "24000"])
                     cmd.append(merged_out_path)
                     ffmpeg_proc = create_process(cmd, stdin=subprocess.PIPE, text=False)
@@ -934,7 +891,7 @@ class ConversionThread(QThread):
                 merged_out_path = None
                 subtitle_entries = []
                 current_time = 0.0
-                rate = 24000
+                rate = self.sample_rate
                 subtitle_mode = self.subtitle_mode
                 self.etr_start_time = time.time()
                 self.processed_char_count = 0
@@ -987,7 +944,7 @@ class ConversionThread(QThread):
                         chapter_out_file = sf.SoundFile(
                             chapter_out_path,
                             "w",
-                            samplerate=24000,
+                            samplerate=self.sample_rate,
                             channels=1,
                             format=separate_chapters_format,
                         )
@@ -1002,7 +959,7 @@ class ConversionThread(QThread):
                             "-f",
                             "f32le",
                             "-ar",
-                            "24000",
+                            str(self.sample_rate),
                             "-ac",
                             "1",
                             "-i",
@@ -1384,7 +1341,7 @@ class ConversionThread(QThread):
                 # Add silence between chapters for merged output (except after the last chapter)
                 if merge_chapters_at_end and chapter_idx < total_chapters:
                     silence_samples = int(
-                        self.silence_duration * 24000
+                        self.silence_duration * self.sample_rate
                     )  # Silence duration at 24,000 Hz
                     silence_audio = self.np.zeros(silence_samples, dtype="float32")
                     silence_bytes = silence_audio.tobytes()
@@ -1615,7 +1572,7 @@ class ConversionThread(QThread):
                 parent_dir, f"{sanitized_base_name}{suffix}"
             )
             merged_out_path = f"{base_filepath_no_ext}.{self.output_format}"
-            rate = 24000
+            rate = self.sample_rate
 
             # Setup audio output
             merged_out_file, ffmpeg_proc = None, None
@@ -2467,7 +2424,7 @@ class VoicePreviewThread(QThread):
         parent=None,
         tts_provider="kokoro",
         supertonic_language="en",
-        supertonic_total_steps=5,
+        supertonic_total_steps=8,
     ):
         super().__init__(parent)
         self.np_module = np_module
@@ -2479,6 +2436,7 @@ class VoicePreviewThread(QThread):
         self.tts_provider = tts_provider
         self.supertonic_language = supertonic_language
         self.supertonic_total_steps = supertonic_total_steps
+        self.sample_rate = 44100 if tts_provider == "supertonic" else 24000
 
         # Cache location for preview audio
         self.cache_dir = get_user_cache_path("preview_cache")
@@ -2516,7 +2474,7 @@ class VoicePreviewThread(QThread):
                 from abogen.tts_supertonic import SupertonicPipeline
 
                 tts = SupertonicPipeline(
-                    sample_rate=24000,
+                    sample_rate=self.sample_rate,
                     lang=self.supertonic_language,
                     total_steps=self.supertonic_total_steps,
                 )
@@ -2556,7 +2514,7 @@ class VoicePreviewThread(QThread):
 
             if audio_segments:
                 audio = self.np_module.concatenate(audio_segments)
-                sf.write(self.cache_path, audio, 24000)
+                sf.write(self.cache_path, audio, self.sample_rate)
                 self.temp_wav = self.cache_path
             self.finished.emit()
         except Exception as e:

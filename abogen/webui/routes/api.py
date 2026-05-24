@@ -162,7 +162,7 @@ def api_voice_profiles_preview() -> ResponseReturnValue:
     formula = str(payload.get("formula") or "").strip()
     profile_name = str(payload.get("profile") or "").strip()
     provider = str(payload.get("tts_provider") or payload.get("provider") or "").strip().lower() or None
-    supertonic_total_steps = int(payload.get("supertonic_total_steps") or payload.get("total_steps") or settings.get("supertonic_total_steps") or 5)
+    supertonic_total_steps = int(payload.get("supertonic_total_steps") or payload.get("total_steps") or settings.get("supertonic_total_steps") or 8)
 
     voice_spec = ""
     resolved_provider = provider or "kokoro"
@@ -224,7 +224,7 @@ def api_speaker_preview() -> ResponseReturnValue:
     speed_value = payload.get("speed")
     speed = coerce_float(speed_value, 1.0)
     tts_provider = str(payload.get("tts_provider") or "").strip().lower()
-    supertonic_total_steps = int(payload.get("supertonic_total_steps") or 5)
+    supertonic_total_steps = int(payload.get("supertonic_total_steps") or 8)
     
     settings = load_settings()
     use_gpu = settings.get("use_gpu", False)
@@ -269,7 +269,7 @@ def api_speaker_preview() -> ResponseReturnValue:
             use_gpu=use_gpu
             ,
             tts_provider=resolved_provider,
-            supertonic_total_steps=supertonic_total_steps or int(settings.get("supertonic_total_steps") or 5),
+            supertonic_total_steps=supertonic_total_steps or int(settings.get("supertonic_total_steps") or 8),
             pronunciation_overrides=pronunciation_overrides,
             manual_overrides=manual_overrides,
             speakers=speakers,

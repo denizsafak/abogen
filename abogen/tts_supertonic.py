@@ -97,7 +97,7 @@ _UNSUPPORTED_CHARS_RE = re.compile(
 
 
 def _parse_unsupported_characters(error: BaseException) -> list[str]:
-    """Best-effort extraction of unsupported characters from SuperTonic errors."""
+    """Best-effort extraction of unsupported characters from Supertonic errors."""
 
     message = " ".join(
         str(part) for part in getattr(error, "args", ()) if part is not None
@@ -221,7 +221,7 @@ class SupertonicPipeline:
             removed: set[str] = set()
             last_exc: Exception | None = None
 
-            # SuperTonic can raise ValueError for unsupported characters; strip and retry.
+            # Supertonic can raise ValueError for unsupported characters; strip and retry.
             for attempt in range(3):
                 try:
                     wav, duration = self._tts.synthesize(
@@ -253,14 +253,14 @@ class SupertonicPipeline:
                     chunk_to_speak = sanitized
                     if not chunk_to_speak:
                         logger.warning(
-                            "SuperTonic: dropped a chunk after removing unsupported characters: %s",
+                            "Supertonic: dropped a chunk after removing unsupported characters: %s",
                             sorted(removed),
                         )
                         break
 
                     if attempt == 0:
                         logger.warning(
-                            "SuperTonic: removed unsupported characters %s and retried.",
+                            "Supertonic: removed unsupported characters %s and retried.",
                             sorted(removed),
                         )
             else:

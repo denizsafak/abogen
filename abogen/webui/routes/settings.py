@@ -43,8 +43,12 @@ def update_settings() -> ResponseReturnValue:
     current["language"] = (form.get("language") or "en").strip()
     current["default_speaker"] = (form.get("default_speaker") or "").strip()
     current["default_voice"] = (form.get("default_voice") or "").strip()
+    provider = str(form.get("tts_provider") or "kokoro").strip().lower()
+    if provider in {"kokoro", "supertonic"}:
+        current["tts_provider"] = provider
     try:
-        current["supertonic_total_steps"] = max(2, min(15, int(form.get("supertonic_total_steps", current.get("supertonic_total_steps", 5)))))
+        total_steps = int(form.get("supertonic_total_steps", current.get("supertonic_total_steps", 8)))
+        current["supertonic_total_steps"] = max(2, min(15, total_steps))
     except (TypeError, ValueError):
         pass
     try:

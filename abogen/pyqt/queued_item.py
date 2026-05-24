@@ -29,4 +29,4 @@ class QueuedItem:
     # TTS Provider fields
     tts_provider: str = "kokoro"
     supertonic_language: str = "en"
-    supertonic_total_steps: int = 5
+    supertonic_total_steps: int = 8
