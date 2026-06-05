@@ -393,7 +393,7 @@ Abogen can hand tricky apostrophes and contractions to an OpenAI-compatible larg
 
 | Provider | Base URL | Models |
 |----------|----------|--------|
-| **MiniMax** | `https://api.minimax.io/v1` | MiniMax-M2.7, MiniMax-M2.5-highspeed, … |
+| **MiniMax** | `https://api.minimax.io/v1` | MiniMax-M3 (default), MiniMax-M2.7, MiniMax-M2.7-highspeed |
 | **OpenAI** | `https://api.openai.com/v1` | gpt-4o, gpt-4o-mini, … |
 | **DeepSeek** | `https://api.deepseek.com/v1` | deepseek-chat, deepseek-reasoner |
 | **Ollama** | `http://localhost:11434/v1` | *(local models)* |

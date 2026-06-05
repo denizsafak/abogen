@@ -42,10 +42,7 @@ _BUILTIN_PRESETS: Tuple[LLMProviderPreset, ...] = (
         api_key_env="MINIMAX_API_KEY",
         api_key_hint="Get your key at https://platform.minimax.io",
         models=(
-            "MiniMax-M1",
-            "MiniMax-Text-01",
-            "MiniMax-M2.5",
-            "MiniMax-M2.5-highspeed",
+            "MiniMax-M3",
             "MiniMax-M2.7",
             "MiniMax-M2.7-highspeed",
         ),

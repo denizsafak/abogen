@@ -23,7 +23,16 @@ def test_minimax_preset_exists():
     assert preset.base_url == "https://api.minimax.io/v1"
     assert preset.api_key_env == "MINIMAX_API_KEY"
     assert len(preset.models) >= 1
+    assert "MiniMax-M3" in preset.models
     assert "MiniMax-M2.7" in preset.models
+    assert "MiniMax-M2.7-highspeed" in preset.models
+    # MiniMax-M3 should be first so the dropdown defaults to it
+    assert preset.models[0] == "MiniMax-M3"
+    # Older models removed
+    assert "MiniMax-M1" not in preset.models
+    assert "MiniMax-Text-01" not in preset.models
+    assert "MiniMax-M2.5" not in preset.models
+    assert "MiniMax-M2.5-highspeed" not in preset.models
 
 
 def test_openai_preset_exists():
