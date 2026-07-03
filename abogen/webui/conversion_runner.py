@@ -41,6 +41,7 @@ from abogen.utils import (
     load_config,
     load_numpy_kpipeline,
 )
+from abogen.tts_backend import KokoroTTSBackend
 from abogen.voice_cache import ensure_voice_assets
 from abogen.voice_formulas import extract_voice_ids, get_new_voice
 from abogen.voice_profiles import load_profiles, normalize_profile_entry
@@ -1594,16 +1595,12 @@ def run_conversion_job(job: Job) -> None:
             device = "cpu"
             if not disable_gpu:
                 device = _select_device()
-            _np, KPipeline = load_numpy_kpipeline()
-            # Try to initialize with the selected device; fall back to CPU if CUDA fails
-            try:
-                pipelines[provider_norm] = KPipeline(lang_code=job.language, repo_id="hexgrad/Kokoro-82M", device=device)
-            except RuntimeError as e:
-                if "CUDA" in str(e) and device != "cpu":
-                    job.add_log(f"CUDA initialization failed, falling back to CPU: {e}", level="warning")
-                    pipelines[provider_norm] = KPipeline(lang_code=job.language, repo_id="hexgrad/Kokoro-82M", device="cpu")
-                else:
-                    raise
+            # Create KokoroTTSBackend instance instead of directly instantiating KPipeline
+            pipelines[provider_norm] = KokoroTTSBackend(
+                lang_code=job.language,
+                repo_id="hexgrad/Kokoro-82M",
+                device=device
+            )
             if not kokoro_cache_ready:
                 _initialize_voice_cache(job)
                 kokoro_cache_ready = True
@@ -1644,8 +1641,8 @@ def run_conversion_job(job: Job) -> None:
                 return provider, resolved, cached, speed, steps
 
             if provider == "kokoro":
-                kokoro_pipeline = get_pipeline("kokoro")
-                choice = _resolve_voice(kokoro_pipeline, resolved, job.use_gpu)
+                kokoro_backend = get_pipeline("kokoro")
+                choice = _resolve_voice(kokoro_backend, resolved, job.use_gpu)
             else:
                 choice = resolved
 
@@ -1774,8 +1771,8 @@ def run_conversion_job(job: Job) -> None:
         voice_cache: Dict[str, Any] = {}
         base_provider, base_voice_resolved, _, _ = resolve_voice_target(base_voice_spec)
         if base_provider == "kokoro" and base_voice_resolved and "*" not in base_voice_resolved:
-            kokoro_pipeline = get_pipeline("kokoro")
-            voice_cache[f"kokoro:{base_voice_resolved}"] = _resolve_voice(kokoro_pipeline, base_voice_resolved, job.use_gpu)
+            kokoro_backend = get_pipeline("kokoro")
+            voice_cache[f"kokoro:{base_voice_resolved}"] = _resolve_voice(kokoro_backend, base_voice_resolved, job.use_gpu)
         processed_chars = 0
         subtitle_index = 1
         current_time = 0.0
@@ -1860,8 +1857,8 @@ def run_conversion_job(job: Job) -> None:
                     total_steps=int(supertonic_steps_override if supertonic_steps_override is not None else getattr(job, "supertonic_total_steps", 5)),
                 )
             else:
-                kokoro_pipeline = get_pipeline("kokoro")
-                segment_iter = kokoro_pipeline(
+                kokoro_backend = get_pipeline("kokoro")
+                segment_iter = kokoro_backend(
                     normalized,
                     voice=voice_choice,
                     speed=float(speed_override if speed_override is not None else job.speed),
@@ -1950,8 +1947,8 @@ def run_conversion_job(job: Job) -> None:
             if chapter_provider == "kokoro":
                 voice_choice = voice_cache.get(chapter_cache_key)
                 if voice_choice is None:
-                    kokoro_pipeline = get_pipeline("kokoro")
-                    voice_choice = _resolve_voice(kokoro_pipeline, chapter_voice_resolved, job.use_gpu)
+                    kokoro_backend = get_pipeline("kokoro")
+                    voice_choice = _resolve_voice(kokoro_backend, chapter_voice_resolved, job.use_gpu)
                     voice_cache[chapter_cache_key] = voice_choice
             else:
                 voice_choice = chapter_voice_resolved
@@ -2095,9 +2092,9 @@ def run_conversion_job(job: Job) -> None:
                         if chunk_provider == "kokoro":
                             chunk_voice_choice = voice_cache.get(chunk_cache_key)
                             if chunk_voice_choice is None:
-                                kokoro_pipeline = get_pipeline("kokoro")
+                                kokoro_backend = get_pipeline("kokoro")
                                 chunk_voice_choice = _resolve_voice(
-                                    kokoro_pipeline,
+                                    kokoro_backend,
                                     chunk_voice_resolved,
                                     job.use_gpu,
                                 )
