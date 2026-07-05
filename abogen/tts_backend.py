@@ -1,10 +1,28 @@
 """
 TTS Backend Interface
 
-This module defines the protocol for TTS backends.
+This module defines the protocol for TTS backends and the
+metadata model that describes a backend implementation.
 """
 
+from dataclasses import dataclass
 from typing import Protocol, List, Dict, Any
+
+
+@dataclass(frozen=True)
+class TTSBackendMetadata:
+    """
+    Immutable metadata describing a TTS backend implementation.
+
+    Attributes:
+        id: Unique backend identifier (e.g. ``"kokoro"``, ``"supertonic"``).
+        name: Human-readable display name.
+        description: Short description of the backend.
+    """
+
+    id: str
+    name: str
+    description: str
 
 
 class TTSBackend(Protocol):
@@ -14,6 +32,10 @@ class TTSBackend(Protocol):
     All TTS backends must implement this interface to be compatible
     with the application.
     """
+
+    @property
+    def metadata(self) -> TTSBackendMetadata:
+        ...
 
     def __init__(self, **kwargs) -> None:
         """
