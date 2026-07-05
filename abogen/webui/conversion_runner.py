@@ -39,15 +39,15 @@ from abogen.utils import (
     get_user_cache_path,
     get_user_output_path,
     load_config,
-    load_numpy_kpipeline,
 )
+from abogen.tts_backends.kokoro import load_numpy_kpipeline
 from abogen.tts_backend import TTSBackend
 from abogen.voice_cache import ensure_voice_assets
 from abogen.voice_formulas import extract_voice_ids, get_new_voice
 from abogen.voice_profiles import load_profiles, normalize_profile_entry
 from abogen.pronunciation_store import increment_usage
 from abogen.llm_client import LLMClientError
-from abogen.tts_supertonic import DEFAULT_SUPERTONIC_VOICES, SupertonicPipeline
+from abogen.tts_backends.supertonic import DEFAULT_SUPERTONIC_VOICES, SupertonicPipeline
 
 from .service import Job, JobStatus
 

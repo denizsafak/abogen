@@ -1,6 +1,6 @@
 import numpy as np
 
-from abogen.tts_supertonic import SupertonicPipeline
+from abogen.tts_backends.supertonic import SupertonicPipeline
 
 
 class _DummyTTS:

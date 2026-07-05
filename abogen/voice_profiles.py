@@ -3,7 +3,7 @@ import os
 from typing import Any, Dict, Iterable, List, Tuple
 
 from abogen.constants import VOICES_INTERNAL
-from abogen.tts_supertonic import DEFAULT_SUPERTONIC_VOICES
+from abogen.tts_backends.supertonic import DEFAULT_SUPERTONIC_VOICES
 from abogen.utils import get_user_config_path
 
 

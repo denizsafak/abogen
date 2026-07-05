@@ -32,7 +32,7 @@ def test_preview_applies_manual_override_before_normalization(monkeypatch):
 
     monkeypatch.setitem(
         __import__("sys").modules,
-        "abogen.tts_supertonic",
+        "abogen.tts_backends.supertonic",
         type("M", (), {"SupertonicPipeline": DummyPipeline}),
     )
 

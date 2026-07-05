@@ -20,7 +20,7 @@ from abogen.constants import (
     VOICES_INTERNAL,
 )
 from abogen.speaker_configs import list_configs
-from abogen.utils import load_numpy_kpipeline
+from abogen.tts_backends.kokoro import load_numpy_kpipeline
 from abogen.webui.conversion_runner import _select_device, _to_float32, SAMPLE_RATE, SPLIT_PATTERN
 
 _preview_pipeline_lock = threading.RLock()
