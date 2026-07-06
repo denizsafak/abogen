@@ -273,3 +273,34 @@ class SupertonicPipeline:
                 audio = _resample_linear(audio, src_rate, self.sample_rate)
 
             yield SupertonicSegment(graphemes=chunk_to_speak, audio=audio)
+
+
+def create_supertonic_backend(**kwargs):
+    """Create a SuperTonic TTS backend instance.
+
+    Args:
+        sample_rate: Audio sample rate. Defaults to 24000.
+        auto_download: Auto-download models. Defaults to True.
+        total_steps: Inference steps. Defaults to 5.
+
+    Returns:
+        SupertonicPipeline instance.
+    """
+    return SupertonicPipeline(
+        sample_rate=kwargs.get("sample_rate", 24000),
+        auto_download=kwargs.get("auto_download", True),
+        total_steps=kwargs.get("total_steps", 5),
+    )
+
+
+from abogen.tts_backend import TTSBackendMetadata
+from abogen.tts_backend_registry import register_backend
+
+register_backend(
+    metadata=TTSBackendMetadata(
+        id="supertonic",
+        name="SuperTonic",
+        description="SuperTonic TTS engine",
+    ),
+    factory=create_supertonic_backend,
+)
