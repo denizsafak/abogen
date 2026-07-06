@@ -20,7 +20,7 @@ from abogen.constants import (
     VOICES_INTERNAL,
 )
 from abogen.speaker_configs import list_configs
-from abogen.tts_backends.kokoro import load_numpy_kpipeline
+from abogen.tts_backend_registry import create_backend
 from abogen.webui.conversion_runner import _select_device, _to_float32, SAMPLE_RATE, SPLIT_PATTERN
 
 _preview_pipeline_lock = threading.RLock()
@@ -741,8 +741,7 @@ def get_preview_pipeline(language: str, device: str):
         pipeline = _preview_pipelines.get(key)
         if pipeline is not None:
             return pipeline
-        _, KPipeline = load_numpy_kpipeline()
-        pipeline = KPipeline(lang_code=language, repo_id="hexgrad/Kokoro-82M", device=device)
+        pipeline = create_backend("kokoro", lang_code=language, device=device)
         _preview_pipelines[key] = pipeline
         return pipeline
 

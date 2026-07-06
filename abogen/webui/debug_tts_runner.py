@@ -15,7 +15,7 @@ from abogen.normalization_settings import build_apostrophe_config
 from abogen.text_extractor import extract_from_path
 from abogen.voice_cache import ensure_voice_assets
 from abogen.webui.conversion_runner import SAMPLE_RATE, SPLIT_PATTERN, _select_device, _to_float32, _resolve_voice, _spec_to_voice_ids
-from abogen.tts_backends.kokoro import load_numpy_kpipeline
+from abogen.tts_backend_registry import create_backend
 
 
 _MARKER_RE = re.compile(re.escape(MARKER_PREFIX) + r"(?P<code>[A-Z0-9_]+)" + re.escape(MARKER_SUFFIX))
@@ -45,8 +45,7 @@ def _load_pipeline(language: str, use_gpu: bool) -> Any:
     device = "cpu"
     if use_gpu:
         device = _select_device()
-    _np, KPipeline = load_numpy_kpipeline()
-    return KPipeline(lang_code=language, repo_id="hexgrad/Kokoro-82M", device=device)
+    return create_backend("kokoro", lang_code=language, device=device)
 
 
 def _extract_cases_from_text(text: str) -> List[Tuple[str, str]]:
