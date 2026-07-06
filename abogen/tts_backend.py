@@ -1,117 +1,65 @@
 """
-Minimal TTS Backend Interface
+TTS Backend Interface
 
-This module defines a minimal interface for TTS backends to enable future
-extensibility while maintaining backward compatibility with existing Kokoro
-implementation.
+This module defines the protocol for TTS backends.
 """
 
-from abc import ABC, abstractmethod
-from typing import Any, Iterator, Optional, Union
+from typing import Protocol, List, Dict, Any
 
 
-class TTSBackend(ABC):
+class TTSBackend(Protocol):
     """
-    Minimal interface for TTS backends.
-    
-    This interface is designed to be minimal and focused on the essential
-    operations needed for text-to-speech conversion.
+    Protocol for TTS backends.
+
+    All TTS backends must implement this interface to be compatible
+    with the application.
     """
 
-    @abstractmethod
-    def __call__(
-        self,
-        text: str,
-        voice: Union[str, Any],
-        speed: float = 1.0,
-        **kwargs: Any
-    ) -> Iterator[Any]:
+    def __init__(self, **kwargs) -> None:
         """
-        Generate speech segments from text.
-        
+        Initialize the TTS backend.
+
         Args:
-            text: Text to convert to speech
-            voice: Voice specification or object
-            speed: Speed multiplier for speech
-            **kwargs: Additional backend-specific parameters
-            
-        Yields:
-            Speech segments (audio data, timing info, etc.)
+            **kwargs: Backend-specific configuration parameters
         """
-        pass
+        ...
 
-
-class KokoroTTSBackend(TTSBackend):
-    """
-    Implementation of TTSBackend using Kokoro.
-    
-    This class provides the concrete implementation that maintains
-    the existing behavior while conforming to the TTSBackend interface.
-    """
-
-    def __init__(self, lang_code: str, repo_id: str = "hexgrad/Kokoro-82M", device: str = "cpu"):
+    def synthesize(self, text: str, **kwargs) -> bytes:
         """
-        Initialize Kokoro backend.
-        
+        Synthesize speech from text.
+
         Args:
-            lang_code: Language code for the model
-            repo_id: Repository ID for the Kokoro model
-            device: Device to run the model on (cpu, cuda, etc.)
-        """
-        self.lang_code = lang_code
-        self.repo_id = repo_id
-        self.device = device
-        self._pipeline = None
+            text: Text to synthesize
+            **kwargs: Additional parameters for synthesis
 
-    def _get_pipeline(self):
-        """Lazy initialization of the Kokoro pipeline."""
-        if self._pipeline is None:
-            from abogen.utils import load_numpy_kpipeline
-            _, KPipeline = load_numpy_kpipeline()
-            try:
-                self._pipeline = KPipeline(
-                    lang_code=self.lang_code,
-                    repo_id=self.repo_id,
-                    device=self.device
-                )
-            except RuntimeError as e:
-                if "CUDA" in str(e) and self.device != "cpu":
-                    # Fall back to CPU if CUDA fails
-                    self._pipeline = KPipeline(
-                        lang_code=self.lang_code,
-                        repo_id=self.repo_id,
-                        device="cpu"
-                    )
-                else:
-                    raise
-        return self._pipeline
+        Returns:
+            Audio data as bytes
+        """
+        ...
 
-    def __call__(
-        self,
-        text: str,
-        voice: Union[str, Any],
-        speed: float = 1.0,
-        split_pattern: str = r"\n+",
-        **kwargs: Any
-    ) -> Iterator[Any]:
+    def get_available_voices(self) -> List[str]:
         """
-        Generate speech segments from text using Kokoro.
-        
-        Args:
-            text: Text to convert to speech
-            voice: Voice specification or object
-            speed: Speed multiplier for speech
-            split_pattern: Pattern to split text into segments
-            **kwargs: Additional parameters passed to the pipeline
-            
-        Yields:
-            Speech segments
+        Get list of available voices.
+
+        Returns:
+            List of voice identifiers
         """
-        pipeline = self._get_pipeline()
-        return pipeline(
-            text,
-            voice=voice,
-            speed=speed,
-            split_pattern=split_pattern,
-            **kwargs
-        )
+        ...
+
+    def get_supported_formats(self) -> List[str]:
+        """
+        Get list of supported audio formats.
+
+        Returns:
+            List of supported audio formats
+        """
+        ...
+
+    def get_info(self) -> Dict[str, Any]:
+        """
+        Get backend information.
+
+        Returns:
+            Dictionary with backend information
+        """
+        ...

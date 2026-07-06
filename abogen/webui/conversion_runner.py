@@ -41,7 +41,7 @@ from abogen.utils import (
     load_config,
     load_numpy_kpipeline,
 )
-from abogen.tts_backend import KokoroTTSBackend
+from abogen.tts_backend import TTSBackend
 from abogen.voice_cache import ensure_voice_assets
 from abogen.voice_formulas import extract_voice_ids, get_new_voice
 from abogen.voice_profiles import load_profiles, normalize_profile_entry
@@ -1595,8 +1595,9 @@ def run_conversion_job(job: Job) -> None:
             device = "cpu"
             if not disable_gpu:
                 device = _select_device()
-            # Create KokoroTTSBackend instance instead of directly instantiating KPipeline
-            pipelines[provider_norm] = KokoroTTSBackend(
+            _np, KPipeline = load_numpy_kpipeline()
+            # Create KPipeline instance directly (conforms to TTSBackend protocol)
+            pipelines[provider_norm] = KPipeline(
                 lang_code=job.language,
                 repo_id="hexgrad/Kokoro-82M",
                 device=device
