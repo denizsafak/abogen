@@ -530,15 +530,19 @@ def prevent_sleep_end():
 
 
 class LoadPipelineThread(Thread):
-    def __init__(self, callback):
+    def __init__(self, callback, lang_code="a", device="cpu"):
         super().__init__()
         self.callback = callback
+        self.lang_code = lang_code
+        self.device = device
 
     def run(self):
         try:
-            from abogen.tts_backends.kokoro import load_numpy_kpipeline
+            from abogen.tts_backend_registry import create_backend
 
-            np_module, kpipeline_class = load_numpy_kpipeline()
-            self.callback(np_module, kpipeline_class, None)
+            backend = create_backend(
+                "kokoro", lang_code=self.lang_code, device=self.device
+            )
+            self.callback(backend, None)
         except Exception as e:
-            self.callback(None, None, str(e))
+            self.callback(None, str(e))

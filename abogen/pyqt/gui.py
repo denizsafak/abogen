@@ -2316,9 +2316,9 @@ class abogen(QWidget):
             file_size_str = "Unknown"
 
         # pipeline_loaded_callback remains unchanged
-        def pipeline_loaded_callback(np_module, kpipeline_class, error):
+        def pipeline_loaded_callback(backend, error):
             if error:
-                self.update_log((f"Error loading numpy or KPipeline: {error}", "red"))
+                self.update_log((f"Error loading TTS backend: {error}", "red"))
                 prevent_sleep_end()
                 return
 
@@ -2341,8 +2341,7 @@ class abogen(QWidget):
                 self.selected_output_folder,
                 subtitle_mode=actual_subtitle_mode,
                 output_format=self.selected_format,
-                np_module=np_module,
-                kpipeline_class=kpipeline_class,
+                backend=backend,
                 start_time=self.start_time,
                 total_char_count=self.char_count,
                 use_gpu=self.gpu_ok,
@@ -2426,7 +2425,20 @@ class abogen(QWidget):
             self.gpu_ok = gpu_ok
             self.update_log((gpu_msg, gpu_ok))
             self.update_log("Loading modules...")
-            load_thread = LoadPipelineThread(pipeline_loaded_callback)
+
+            # Determine device based on GPU availability
+            if gpu_ok:
+                if platform.system() == "Darwin" and platform.processor() == "arm":
+                    device = "mps"
+                else:
+                    device = "cuda"
+            else:
+                device = "cpu"
+
+            lang_code = self.selected_lang or "a"
+            load_thread = LoadPipelineThread(
+                pipeline_loaded_callback, lang_code=lang_code, device=device
+            )
             load_thread.start()
 
         threading.Thread(target=gpu_and_load, daemon=True).start()
@@ -2863,18 +2875,27 @@ class abogen(QWidget):
             )
             self.loading_movie.start()
 
-        def pipeline_loaded_callback(np_module, kpipeline_class, error):
-            self._on_pipeline_loaded_for_preview(np_module, kpipeline_class, error)
+        # Determine device based on GPU availability
+        if self.gpu_ok:
+            if platform.system() == "Darwin" and platform.processor() == "arm":
+                device = "mps"
+            else:
+                device = "cuda"
+        else:
+            device = "cpu"
 
-        load_thread = LoadPipelineThread(pipeline_loaded_callback)
+        lang = self.selected_lang or "a"
+        load_thread = LoadPipelineThread(
+            self._on_pipeline_loaded_for_preview, lang_code=lang, device=device
+        )
         load_thread.start()
 
-    def _on_pipeline_loaded_for_preview(self, np_module, kpipeline_class, error):
+    def _on_pipeline_loaded_for_preview(self, backend, error):
         # stop loading animation and restore icon on error
         if error:
             self.loading_movie.stop()
             self._show_error_message_box(
-                "Loading Error", f"Error loading numpy or KPipeline: {error}"
+                "Loading Error", f"Error loading TTS backend: {error}"
             )
             self.btn_preview.setIcon(self.play_icon)
             self.btn_preview.setEnabled(True)
@@ -2912,7 +2933,7 @@ class abogen(QWidget):
         gpu_msg, gpu_ok = get_gpu_acceleration(self.use_gpu)
 
         self.preview_thread = VoicePreviewThread(
-            np_module, kpipeline_class, lang, voice, speed, gpu_ok
+            backend, lang, voice, speed, gpu_ok
         )
         self.preview_thread.finished.connect(self._play_preview_audio)
         self.preview_thread.error.connect(self._preview_error)

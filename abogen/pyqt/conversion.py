@@ -5,6 +5,7 @@ import hashlib  # For generating unique cache filenames
 from platformdirs import user_desktop_dir
 from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer
 from PyQt6.QtWidgets import QCheckBox, QVBoxLayout, QDialog, QLabel, QDialogButtonBox
+import numpy as np
 import soundfile as sf
 from abogen.utils import (
     create_process,
@@ -259,8 +260,7 @@ class ConversionThread(QThread):
         output_folder,
         subtitle_mode,
         output_format,
-        np_module,
-        kpipeline_class,
+        backend,
         start_time,
         total_char_count,
         use_gpu=True,
@@ -270,8 +270,7 @@ class ConversionThread(QThread):
         super().__init__()
         self._chapter_options_event = threading.Event()
         self._timestamp_response_event = threading.Event()
-        self.np = np_module
-        self.KPipeline = kpipeline_class
+        self.backend = backend
         self.file_name = file_name
         self.lang_code = lang_code
         self.speed = speed
@@ -490,19 +489,6 @@ class ConversionThread(QThread):
 
             self.log_updated.emit(("\nInitializing TTS pipeline...", "grey"))
 
-            # Set device based on use_gpu setting and platform
-            if self.use_gpu:
-                if platform.system() == "Darwin" and platform.processor() == "arm":
-                    device = "mps"  # Use MPS for Apple Silicon
-                else:
-                    device = "cuda"  # Use CUDA for other platforms
-            else:
-                device = "cpu"
-
-            tts = self.KPipeline(
-                lang_code=self.lang_code, repo_id="hexgrad/Kokoro-82M", device=device
-            )
-
             # Check if the input is a subtitle file or timestamp text file
             is_subtitle_file = False
             is_timestamp_text = False
@@ -538,7 +524,7 @@ class ConversionThread(QThread):
 
             # Process subtitle files separately
             if is_subtitle_file or is_timestamp_text:
-                self._process_subtitle_file(tts, base_path, is_timestamp_text)
+                self._process_subtitle_file(self.backend, base_path, is_timestamp_text)
                 return
 
             if self.is_direct_text:
@@ -1071,7 +1057,7 @@ class ConversionThread(QThread):
                 for segment_idx, (voice_name, segment_text) in enumerate(voice_segments):
                     # Load voice for this segment (with caching)
                     try:
-                        loaded_voice = self.load_voice_cached(voice_name, tts)
+                        loaded_voice = self.load_voice_cached(voice_name, self.backend)
                         if segment_idx > 0:
                             voice_display = voice_name if len(voice_name) < 50 else voice_name[:47] + "..."
                             self.log_updated.emit((f"  → Voice: {voice_display}", "grey"))
@@ -1080,7 +1066,7 @@ class ConversionThread(QThread):
                             (f"⚠ Voice loading error for '{voice_name}', continuing with previous", "orange")
                         )
                         if segment_idx == 0:
-                            loaded_voice = self.load_voice_cached(self.voice, tts)
+                            loaded_voice = self.load_voice_cached(self.voice, self.backend)
 
                     # Determine if spaCy segmentation should be used for PRE-TTS segmentation
                     # Only non-English languages use spaCy for pre-segmentation
@@ -1166,7 +1152,7 @@ class ConversionThread(QThread):
                         print("Using split pattern: (unprintable)")
 
                     for text_segment in text_segments:
-                        for result in tts(
+                        for result in self.backend(
                             text_segment,
                             voice=loaded_voice,
                             speed=self.speed,
@@ -1368,7 +1354,7 @@ class ConversionThread(QThread):
                     silence_samples = int(
                         self.silence_duration * 24000
                     )  # Silence duration at 24,000 Hz
-                    silence_audio = self.np.zeros(silence_samples, dtype="float32")
+                    silence_audio = np.zeros(silence_samples, dtype="float32")
                     silence_bytes = silence_audio.tobytes()
 
                     if merged_out_file:
@@ -1707,7 +1693,7 @@ class ConversionThread(QThread):
             max_end_time = max(
                 (end for _, end, _ in subtitles if end is not None), default=0
             )
-            audio_buffer = self.np.zeros(
+            audio_buffer = np.zeros(
                 int(max_end_time * rate) + rate, dtype="float32"
             )
 
@@ -1771,7 +1757,7 @@ class ConversionThread(QThread):
                 # Generate TTS audio
                 tts_results = [
                     r
-                    for r in tts(
+                    for r in self.backend(
                         processed_text,
                         voice=loaded_voice,
                         speed=self.speed,
@@ -1789,11 +1775,11 @@ class ConversionThread(QThread):
 
                 # Concatenate audio and determine duration
                 full_audio = (
-                    self.np.concatenate(
+                    np.concatenate(
                         [a.numpy() if hasattr(a, "numpy") else a for a in audio_chunks]
                     )
                     if audio_chunks
-                    else self.np.zeros(
+                    else np.zeros(
                         int((subtitle_duration or 0) * rate), dtype="float32"
                     )
                 )
@@ -1827,8 +1813,8 @@ class ConversionThread(QThread):
                         num_stages = max(
                             1,
                             int(
-                                self.np.ceil(
-                                    self.np.log(speed_factor) / self.np.log(2.0)
+                                np.ceil(
+                                    np.log(speed_factor) / np.log(2.0)
                                 )
                             ),
                         )
@@ -1861,7 +1847,7 @@ class ConversionThread(QThread):
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
                         )
-                        full_audio = self.np.frombuffer(
+                        full_audio = np.frombuffer(
                             speed_proc.communicate(input=full_audio.tobytes())[0],
                             dtype="float32",
                         )
@@ -1875,7 +1861,7 @@ class ConversionThread(QThread):
 
                         tts_results = [
                             r
-                            for r in tts(
+                            for r in self.backend(
                                 processed_text,
                                 voice=loaded_voice,
                                 speed=new_speed,
@@ -1886,14 +1872,14 @@ class ConversionThread(QThread):
                         audio_chunks = [r.audio for r in tts_results]
 
                         full_audio = (
-                            self.np.concatenate(
+                            np.concatenate(
                                 [
                                     a.numpy() if hasattr(a, "numpy") else a
                                     for a in audio_chunks
                                 ]
                             )
                             if audio_chunks
-                            else self.np.zeros(
+                            else np.zeros(
                                 int(subtitle_duration * rate), dtype="float32"
                             )
                         )
@@ -1910,10 +1896,10 @@ class ConversionThread(QThread):
                 # Pad or trim to subtitle duration
                 target_samples = int(subtitle_duration * rate)
                 if len(full_audio) < target_samples:
-                    full_audio = self.np.concatenate(
+                    full_audio = np.concatenate(
                         [
                             full_audio,
-                            self.np.zeros(
+                            np.zeros(
                                 target_samples - len(full_audio), dtype="float32"
                             ),
                         ]
@@ -1926,10 +1912,10 @@ class ConversionThread(QThread):
                 end_sample = start_sample + len(full_audio)
                 if end_sample > len(audio_buffer):
                     # Extend buffer if needed
-                    audio_buffer = self.np.concatenate(
+                    audio_buffer = np.concatenate(
                         [
                             audio_buffer,
-                            self.np.zeros(
+                            np.zeros(
                                 end_sample - len(audio_buffer), dtype="float32"
                             ),
                         ]
@@ -1971,7 +1957,7 @@ class ConversionThread(QThread):
                 self.progress_updated.emit(percent, etr_str)
 
             # Normalize audio buffer to prevent clipping from mixed overlaps
-            max_amplitude = self.np.abs(audio_buffer).max()
+            max_amplitude = np.abs(audio_buffer).max()
             if max_amplitude > 1.0:
                 self.log_updated.emit(
                     f"\n  -> Normalizing audio (peak: {max_amplitude:.2f})"
@@ -2440,8 +2426,7 @@ class VoicePreviewThread(QThread):
 
     def __init__(
         self,
-        np_module,
-        kpipeline_class,
+        backend,
         lang_code,
         voice,
         speed,
@@ -2449,8 +2434,7 @@ class VoicePreviewThread(QThread):
         parent=None,
     ):
         super().__init__(parent)
-        self.np_module = np_module
-        self.kpipeline_class = kpipeline_class
+        self.backend = backend
         self.lang_code = lang_code
         self.voice = voice
         self.speed = speed
@@ -2484,31 +2468,19 @@ class VoicePreviewThread(QThread):
         # Generate the preview and save to cache
         try:
 
-            # Set device based on use_gpu setting and platform
-            if self.use_gpu:
-                if platform.system() == "Darwin" and platform.processor() == "arm":
-                    device = "mps"  # Use MPS for Apple Silicon
-                else:
-                    device = "cuda"  # Use CUDA for other platforms
-            else:
-                device = "cpu"
-
-            tts = self.kpipeline_class(
-                lang_code=self.lang_code, repo_id="hexgrad/Kokoro-82M", device=device
-            )
             # Enable voice formula support for preview
             if "*" in self.voice:
-                loaded_voice = get_new_voice(tts, self.voice, self.use_gpu)
+                loaded_voice = get_new_voice(self.backend, self.voice, self.use_gpu)
             else:
                 loaded_voice = self.voice
             sample_text = get_sample_voice_text(self.lang_code)
             audio_segments = []
-            for result in tts(
+            for result in self.backend(
                 sample_text, voice=loaded_voice, speed=self.speed, split_pattern=None
             ):
                 audio_segments.append(result.audio)
             if audio_segments:
-                audio = self.np_module.concatenate(audio_segments)
+                audio = np.concatenate(audio_segments)
                 # Save directly to the cache path
                 sf.write(self.cache_path, audio, 24000)
                 self.temp_wav = self.cache_path
