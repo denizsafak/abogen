@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import logging
 import math
 import re
-from typing import Any, Iterable, Iterator, Optional
+from typing import Any, Dict, Iterable, Iterator, List, Optional
 
 import numpy as np
 
@@ -275,7 +275,97 @@ class SupertonicPipeline:
             yield SupertonicSegment(graphemes=chunk_to_speak, audio=audio)
 
 
-def create_supertonic_backend(**kwargs):
+class SupertonicBackend:
+    """Supertonic TTS backend implementing the TTSBackend protocol.
+
+    Encapsulates ``SupertonicPipeline`` as an internal implementation detail.
+    """
+
+    @property
+    def metadata(self) -> "TTSBackendMetadata":
+        return TTSBackendMetadata(
+            id="supertonic",
+            name="SuperTonic",
+            description="SuperTonic TTS engine",
+        )
+
+    def __init__(self, **kwargs: Any) -> None:
+        self._pipeline = SupertonicPipeline(
+            sample_rate=kwargs.get("sample_rate", 24000),
+            auto_download=kwargs.get("auto_download", True),
+            total_steps=kwargs.get("total_steps", 5),
+        )
+
+    def synthesize(self, text: str, **kwargs: Any) -> bytes:
+        """Synthesize speech and return raw audio bytes (WAV).
+
+        Delegates to the internal :class:`SupertonicPipeline` and concatenates
+        all produced segments into a single byte buffer.
+        """
+        import io
+
+        import soundfile as sf
+
+        voice = kwargs.get("voice", "M1")
+        speed = float(kwargs.get("speed", 1.0))
+        split_pattern = kwargs.get("split_pattern")
+        total_steps = kwargs.get("total_steps")
+
+        segments = self._pipeline(
+            text,
+            voice=voice,
+            speed=speed,
+            split_pattern=split_pattern,
+            total_steps=total_steps,
+        )
+
+        audio_parts: list[np.ndarray] = []
+        for seg in segments:
+            audio_parts.append(seg.audio)
+
+        if not audio_parts:
+            return b""
+
+        combined = np.concatenate(audio_parts)
+        buf = io.BytesIO()
+        sf.write(buf, combined, self._pipeline.sample_rate, format="WAV")
+        return buf.getvalue()
+
+    def get_available_voices(self) -> List[str]:
+        """Return the list of built-in SuperTonic voice identifiers."""
+        return list(DEFAULT_SUPERTONIC_VOICES)
+
+    def get_supported_formats(self) -> List[str]:
+        return ["wav"]
+
+    def get_info(self) -> Dict[str, Any]:
+        return {
+            "sample_rate": self._pipeline.sample_rate,
+            "total_steps": self._pipeline.total_steps,
+            "max_chunk_length": self._pipeline.max_chunk_length,
+            "voices": list(DEFAULT_SUPERTONIC_VOICES),
+        }
+
+    def __call__(
+        self,
+        text: str,
+        *,
+        voice: str,
+        speed: float,
+        split_pattern: Optional[str] = None,
+        total_steps: Optional[int] = None,
+    ) -> Iterator[SupertonicSegment]:
+        """Backward-compatible call interface, delegates to the pipeline."""
+        return self._pipeline(
+            text,
+            voice=voice,
+            speed=speed,
+            split_pattern=split_pattern,
+            total_steps=total_steps,
+        )
+
+
+def create_supertonic_backend(**kwargs: Any) -> SupertonicBackend:
     """Create a SuperTonic TTS backend instance.
 
     Args:
@@ -284,13 +374,9 @@ def create_supertonic_backend(**kwargs):
         total_steps: Inference steps. Defaults to 5.
 
     Returns:
-        SupertonicPipeline instance.
+        SupertonicBackend instance.
     """
-    return SupertonicPipeline(
-        sample_rate=kwargs.get("sample_rate", 24000),
-        auto_download=kwargs.get("auto_download", True),
-        total_steps=kwargs.get("total_steps", 5),
-    )
+    return SupertonicBackend(**kwargs)
 
 
 from abogen.tts_backend import TTSBackendMetadata
