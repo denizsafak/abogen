@@ -97,3 +97,53 @@ class TestTTSBackendRegistry:
         result = registry.get_metadata("x")
         assert result.name == "V2"
         assert registry.create_backend("x") == "v2"
+
+
+class TestBackendRegistration:
+    """Tests that existing backends are auto-registered."""
+
+    def test_import_triggers_registration(self):
+        import abogen.tts_backends  # noqa: F401
+
+        from abogen.tts_backend_registry import _registry
+
+        backends = _registry.list_backends()
+        ids = [b.id for b in backends]
+        assert "kokoro" in ids
+        assert "supertonic" in ids
+
+    def test_kokoro_metadata(self):
+        import abogen.tts_backends  # noqa: F401
+
+        from abogen.tts_backend_registry import _registry
+
+        meta = _registry.get_metadata("kokoro")
+        assert meta.id == "kokoro"
+        assert meta.name == "Kokoro"
+        assert "Kokoro" in meta.description
+
+    def test_supertonic_metadata(self):
+        import abogen.tts_backends  # noqa: F401
+
+        from abogen.tts_backend_registry import _registry
+
+        meta = _registry.get_metadata("supertonic")
+        assert meta.id == "supertonic"
+        assert meta.name == "SuperTonic"
+        assert "SuperTonic" in meta.description
+
+    def test_kokoro_factory_callable(self):
+        import abogen.tts_backends  # noqa: F401
+
+        from abogen.tts_backend_registry import _registry
+
+        factory = _registry._factories["kokoro"]
+        assert callable(factory)
+
+    def test_supertonic_factory_callable(self):
+        import abogen.tts_backends  # noqa: F401
+
+        from abogen.tts_backend_registry import _registry
+
+        factory = _registry._factories["supertonic"]
+        assert callable(factory)
