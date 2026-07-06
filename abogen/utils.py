@@ -529,13 +529,6 @@ def prevent_sleep_end():
                 _sleep_procs[system] = None
 
 
-def load_numpy_kpipeline():
-    import numpy as np
-    from kokoro import KPipeline  # type: ignore[import-not-found]
-
-    return np, KPipeline
-
-
 class LoadPipelineThread(Thread):
     def __init__(self, callback):
         super().__init__()
@@ -543,6 +536,8 @@ class LoadPipelineThread(Thread):
 
     def run(self):
         try:
+            from abogen.tts_backends.kokoro import load_numpy_kpipeline
+
             np_module, kpipeline_class = load_numpy_kpipeline()
             self.callback(np_module, kpipeline_class, None)
         except Exception as e:

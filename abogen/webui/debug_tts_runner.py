@@ -15,7 +15,7 @@ from abogen.normalization_settings import build_apostrophe_config
 from abogen.text_extractor import extract_from_path
 from abogen.voice_cache import ensure_voice_assets
 from abogen.webui.conversion_runner import SAMPLE_RATE, SPLIT_PATTERN, _select_device, _to_float32, _resolve_voice, _spec_to_voice_ids
-from abogen.utils import load_numpy_kpipeline
+from abogen.tts_backends.kokoro import load_numpy_kpipeline
 
 
 _MARKER_RE = re.compile(re.escape(MARKER_PREFIX) + r"(?P<code>[A-Z0-9_]+)" + re.escape(MARKER_SUFFIX))

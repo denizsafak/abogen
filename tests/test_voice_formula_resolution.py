@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abogen.webui.conversion_runner import _resolve_voice, _supertonic_voice_from_spec
-from abogen.tts_supertonic import DEFAULT_SUPERTONIC_VOICES
+from abogen.tts_backends.supertonic import DEFAULT_SUPERTONIC_VOICES
 
 
 def test_resolve_voice_formula_without_pipeline_does_not_crash() -> None:
