@@ -19,7 +19,7 @@ def test_preview_applies_manual_override_before_normalization(monkeypatch):
 
     # And stub the kokoro pipeline path so generate_preview_audio won't proceed.
     # We'll instead validate by calling the override logic through generate_preview_audio
-    # with provider=supertonic and stub SupertonicPipeline to capture input.
+    # with provider=supertonic and stub create_backend to capture input.
     captured = {}
 
     class DummyPipeline:
@@ -30,11 +30,16 @@ def test_preview_applies_manual_override_before_normalization(monkeypatch):
             captured["text"] = text
             return iter(())
 
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "abogen.tts_backends.supertonic",
-        type("M", (), {"SupertonicPipeline": DummyPipeline}),
-    )
+    from abogen import tts_backend_registry
+
+    original_create_backend = tts_backend_registry.create_backend
+
+    def _mock_create_backend(backend_id, **kwargs):
+        if backend_id == "supertonic":
+            return DummyPipeline(**kwargs)
+        return original_create_backend(backend_id, **kwargs)
+
+    monkeypatch.setattr(tts_backend_registry, "create_backend", _mock_create_backend)
 
     try:
         preview.generate_preview_audio(

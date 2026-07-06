@@ -78,10 +78,9 @@ def get_preview_pipeline(language: str, device: str) -> Any:
         pipeline = _preview_pipelines.get(key)
         if pipeline is not None:
             return pipeline
-        from abogen.tts_backends.kokoro import load_numpy_kpipeline
+        from abogen.tts_backend_registry import create_backend
 
-        _, KPipeline = load_numpy_kpipeline()
-        pipeline = KPipeline(lang_code=language, repo_id="hexgrad/Kokoro-82M", device=device)
+        pipeline = create_backend("kokoro", lang_code=language, device=device)
         _preview_pipelines[key] = pipeline
         return pipeline
 
@@ -137,9 +136,9 @@ def generate_preview_audio(
             normalized_text = source_text
 
     if provider == "supertonic":
-        from abogen.tts_backends.supertonic import SupertonicPipeline
+        from abogen.tts_backend_registry import create_backend
 
-        pipeline = SupertonicPipeline(sample_rate=SAMPLE_RATE, auto_download=True, total_steps=supertonic_total_steps)
+        pipeline = create_backend("supertonic", sample_rate=SAMPLE_RATE, auto_download=True, total_steps=supertonic_total_steps)
         segments = pipeline(
             normalized_text,
             voice=voice_spec,

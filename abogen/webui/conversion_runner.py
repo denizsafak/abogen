@@ -40,14 +40,14 @@ from abogen.utils import (
     get_user_output_path,
     load_config,
 )
-from abogen.tts_backends.kokoro import load_numpy_kpipeline
+from abogen.tts_backend_registry import create_backend
 from abogen.tts_backend import TTSBackend
 from abogen.voice_cache import ensure_voice_assets
 from abogen.voice_formulas import extract_voice_ids, get_new_voice
 from abogen.voice_profiles import load_profiles, normalize_profile_entry
 from abogen.pronunciation_store import increment_usage
 from abogen.llm_client import LLMClientError
-from abogen.tts_backends.supertonic import DEFAULT_SUPERTONIC_VOICES, SupertonicPipeline
+from abogen.tts_backends.supertonic import DEFAULT_SUPERTONIC_VOICES
 
 from .service import Job, JobStatus
 
@@ -1582,7 +1582,8 @@ def run_conversion_job(job: Job) -> None:
                 return existing
 
             if provider_norm == "supertonic":
-                pipelines[provider_norm] = SupertonicPipeline(
+                pipelines[provider_norm] = create_backend(
+                    "supertonic",
                     sample_rate=SAMPLE_RATE,
                     auto_download=True,
                     total_steps=int(getattr(job, "supertonic_total_steps", 5) or 5),
@@ -1595,11 +1596,10 @@ def run_conversion_job(job: Job) -> None:
             device = "cpu"
             if not disable_gpu:
                 device = _select_device()
-            _np, KPipeline = load_numpy_kpipeline()
             # Create KPipeline instance directly (conforms to TTSBackend protocol)
-            pipelines[provider_norm] = KPipeline(
+            pipelines[provider_norm] = create_backend(
+                "kokoro",
                 lang_code=job.language,
-                repo_id="hexgrad/Kokoro-82M",
                 device=device
             )
             if not kokoro_cache_ready:
@@ -2443,7 +2443,8 @@ def _load_pipeline(job: Job):
     disable_gpu = not job.use_gpu or not cfg.get("use_gpu", True)
     provider = str(getattr(job, "tts_provider", "kokoro") or "kokoro").strip().lower()
     if provider == "supertonic":
-        return SupertonicPipeline(
+        return create_backend(
+            "supertonic",
             sample_rate=SAMPLE_RATE,
             auto_download=True,
             total_steps=int(getattr(job, "supertonic_total_steps", 5) or 5),
@@ -2452,8 +2453,7 @@ def _load_pipeline(job: Job):
     device = "cpu"
     if not disable_gpu:
         device = _select_device()
-    _np, KPipeline = load_numpy_kpipeline()
-    return KPipeline(lang_code=job.language, repo_id="hexgrad/Kokoro-82M", device=device)
+    return create_backend("kokoro", lang_code=job.language, device=device)
 
 
 def _select_device() -> str:
