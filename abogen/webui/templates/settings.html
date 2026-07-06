@@ -113,6 +113,33 @@
               <label for="supertonic_speed">Supertonic Speed</label>
               <input type="number" id="supertonic_speed" name="supertonic_speed" min="0.7" max="2.0" step="0.05" value="{{ '%.2f'|format(settings.supertonic_speed) }}">
             </div>
+
+            <div class="field field--wide">
+              <p class="tag">Camb AI settings</p>
+              <p class="hint">These defaults apply when a Camb AI speaker does not override them.</p>
+            </div>
+            <div class="field">
+              <label for="camb_api_key">Camb AI API Key</label>
+              <input type="password" id="camb_api_key" name="camb_api_key" value="{{ settings.camb_api_key }}" placeholder="Enter your API key">
+              <p class="hint">Get your key at <a href="https://studio.camb.ai" target="_blank" rel="noreferrer">studio.camb.ai</a>. Also reads from CAMB_API_KEY env var.</p>
+            </div>
+            <div class="field">
+              <label for="camb_model">Camb AI Model</label>
+              <select id="camb_model" name="camb_model">
+                <option value="mars-flash" {% if settings.camb_model == 'mars-flash' %}selected{% endif %}>mars-flash (low latency)</option>
+                <option value="mars-pro" {% if settings.camb_model == 'mars-pro' %}selected{% endif %}>mars-pro (high quality)</option>
+                <option value="mars-instruct" {% if settings.camb_model == 'mars-instruct' %}selected{% endif %}>mars-instruct (fine control)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="camb_voice_id">Camb AI Voice ID</label>
+              <input type="number" id="camb_voice_id" name="camb_voice_id" min="1" value="{{ settings.camb_voice_id }}">
+            </div>
+            <div class="field">
+              <label for="camb_language">Camb AI Language</label>
+              <input type="text" id="camb_language" name="camb_language" value="{{ settings.camb_language }}" placeholder="en-us">
+            </div>
+
             <div class="field">
               <label for="chunk_level_default">Chunk Granularity</label>
               <select id="chunk_level_default" name="chunk_level">

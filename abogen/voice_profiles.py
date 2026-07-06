@@ -101,7 +101,7 @@ def normalize_profile_entry(entry: Any) -> Dict[str, Any]:
         return {}
 
     provider = str(entry.get("provider") or "kokoro").strip().lower()
-    if provider not in {"kokoro", "supertonic"}:
+    if provider not in {"kokoro", "supertonic", "camb"}:
         provider = "kokoro"
 
     language = str(entry.get("language") or "a").strip().lower() or "a"
@@ -121,6 +121,30 @@ def normalize_profile_entry(entry: Any) -> Dict[str, Any]:
             "speed": _coerce_supertonic_speed(
                 entry.get("speed") or entry.get("supertonic_speed")
             ),
+        }
+
+    if provider == "camb":
+        voice_id = entry.get("voice_id") or entry.get("camb_voice_id") or 147320
+        try:
+            voice_id = int(voice_id)
+        except (TypeError, ValueError):
+            voice_id = 147320
+        model = str(entry.get("model") or entry.get("camb_model") or "mars-flash").strip()
+        if model not in {"mars-flash", "mars-pro", "mars-instruct"}:
+            model = "mars-flash"
+        speed = 1.0
+        raw_speed = entry.get("speed") or entry.get("camb_speed")
+        if raw_speed is not None:
+            try:
+                speed = max(0.5, min(2.0, float(raw_speed)))
+            except (TypeError, ValueError):
+                pass
+        return {
+            "provider": "camb",
+            "language": language,
+            "voice_id": voice_id,
+            "model": model,
+            "speed": speed,
         }
 
     voices = _normalize_voice_entries(entry.get("voices", []))

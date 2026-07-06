@@ -112,6 +112,10 @@ class Job:
     created_at: float
     tts_provider: str = "kokoro"
     supertonic_total_steps: int = 5
+    camb_model: str = "mars-flash"
+    camb_voice_id: int = 147320
+    camb_api_key: Optional[str] = None
+    camb_language: str = "en-us"
     save_chapters_separately: bool = False
     merge_chapters_at_end: bool = True
     separate_chapters_format: str = "wav"
@@ -553,6 +557,10 @@ class PendingJob:
     created_at: float
     tts_provider: str = "kokoro"
     supertonic_total_steps: int = 5
+    camb_model: str = "mars-flash"
+    camb_voice_id: int = 147320
+    camb_api_key: Optional[str] = None
+    camb_language: str = "en-us"
     cover_image_path: Optional[Path] = None
     cover_image_mime: Optional[str] = None
     chapter_intro_delay: float = 0.5
@@ -622,6 +630,10 @@ class ConversionService:
         speed: float,
         tts_provider: str = "kokoro",
         supertonic_total_steps: int = 5,
+        camb_model: str = "mars-flash",
+        camb_voice_id: int = 147320,
+        camb_api_key: Optional[str] = None,
+        camb_language: str = "en-us",
         use_gpu: bool,
         subtitle_mode: str,
         output_format: str,
@@ -675,6 +687,10 @@ class ConversionService:
             speed=speed,
             tts_provider=tts_provider,
             supertonic_total_steps=int(supertonic_total_steps or 5),
+            camb_model=camb_model or "mars-flash",
+            camb_voice_id=int(camb_voice_id or 147320),
+            camb_api_key=camb_api_key,
+            camb_language=camb_language or "en-us",
             use_gpu=use_gpu,
             subtitle_mode=subtitle_mode,
             output_format=output_format,
@@ -836,6 +852,10 @@ class ConversionService:
                 language=job.language,
                 voice=job.voice,
                 speed=job.speed,
+                camb_model=job.camb_model,
+                camb_voice_id=job.camb_voice_id,
+                camb_api_key=job.camb_api_key,
+                camb_language=job.camb_language,
                 use_gpu=job.use_gpu,
                 subtitle_mode=job.subtitle_mode,
                 output_format=job.output_format,

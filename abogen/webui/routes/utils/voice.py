@@ -675,6 +675,12 @@ def resolve_voice_choice(
             profile_language = (entry or {}).get("language")
             if profile_language:
                 resolved_language = str(profile_language)
+        elif provider == "camb":
+            resolved_voice = f"speaker:{profile_name}"
+            selected_profile = profile_name
+            profile_language = (entry or {}).get("language")
+            if profile_language:
+                resolved_language = str(profile_language)
         else:
             formula = formula_from_profile(entry or {}) if entry else None
             if formula:

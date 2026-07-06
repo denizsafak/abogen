@@ -33,6 +33,12 @@ const setupVoiceMixer = () => {
   const supertonicSpeedInput = app.querySelector('[data-role="supertonic-speed"]');
   const supertonicStepsLabel = app.querySelector('[data-role="supertonic-steps-display"]');
   const supertonicSpeedLabel = app.querySelector('[data-role="supertonic-speed-display"]');
+  const cambPanelEl = app.querySelector('[data-role="camb-panel"]');
+  const cambVoiceIdInput = app.querySelector('[data-role="camb-voice-id"]');
+  const cambModelSelect = app.querySelector('[data-role="camb-model"]');
+  const cambLanguageSelect = app.querySelector('[data-role="camb-language"]');
+  const cambSpeedInput = app.querySelector('[data-role="camb-speed"]');
+  const cambSpeedLabel = app.querySelector('[data-role="camb-speed-display"]');
   const speedInput = document.getElementById("preview-speed");
   const importInput = document.getElementById("voice-import-input");
   const headerActions = document.querySelector(".voice-mixer__header-actions");
@@ -81,6 +87,12 @@ const setupVoiceMixer = () => {
       supertonic: {
         voice: "M1",
         total_steps: 5,
+        speed: 1.0,
+      },
+      camb: {
+        voice_id: 147320,
+        model: "mars-flash",
+        language: "en-us",
         speed: 1.0,
       },
     },
@@ -150,7 +162,9 @@ const setupVoiceMixer = () => {
 
   const normalizeProvider = (value) => {
     const candidate = String(value || "").trim().toLowerCase();
-    return candidate === "supertonic" ? "supertonic" : "kokoro";
+    if (candidate === "supertonic") return "supertonic";
+    if (candidate === "camb") return "camb";
+    return "kokoro";
   };
 
   const getProviderCatalog = () => {
@@ -170,6 +184,9 @@ const setupVoiceMixer = () => {
     const provider = normalizeProvider(providerId);
     if (provider === "supertonic") {
       return "Voice selection + quality/speed per speaker.";
+    }
+    if (provider === "camb") {
+      return "Cloud TTS with MARS models. Requires API key.";
     }
     return "Voice mixing supported via the Kokoro mixer.";
   };
@@ -268,28 +285,40 @@ const setupVoiceMixer = () => {
   const applyProviderToUI = () => {
     const provider = normalizeProvider(state.draft.provider);
     const isSupertonic = provider === "supertonic";
+    const isCamb = provider === "camb";
+    const isKokoro = provider === "kokoro";
     if (providerSelect) {
       providerSelect.value = provider;
     }
     if (languageField) {
-      languageField.hidden = isSupertonic;
+      languageField.hidden = !isKokoro;
     }
     if (kokoroMixerEl) {
-      kokoroMixerEl.hidden = isSupertonic;
+      kokoroMixerEl.hidden = !isKokoro;
     }
     if (supertonicPanelEl) {
       supertonicPanelEl.hidden = !isSupertonic;
     }
+    if (cambPanelEl) {
+      cambPanelEl.hidden = !isCamb;
+    }
     if (mixTotalEl) {
-      mixTotalEl.hidden = isSupertonic;
+      mixTotalEl.hidden = !isKokoro;
     }
     if (previewBtn) {
-      previewBtn.dataset.label = isSupertonic ? "Preview speaker" : (previewBtn.dataset.label || "Preview speaker");
+      previewBtn.dataset.label = isKokoro ? (previewBtn.dataset.label || "Preview speaker") : "Preview speaker";
     }
 
-    // Keep preview speed aligned with the Supertonic speaker speed.
+    // Keep preview speed aligned with provider speaker speed.
     if (isSupertonic && speedInput) {
       const desired = Number(state.draft.supertonic?.speed ?? 1.0);
+      if (!Number.isNaN(desired)) {
+        speedInput.value = String(desired);
+        setRangeFill(speedInput);
+      }
+    }
+    if (isCamb && speedInput) {
+      const desired = Number(state.draft.camb?.speed ?? 1.0);
       if (!Number.isNaN(desired)) {
         speedInput.value = String(desired);
         setRangeFill(speedInput);
@@ -311,6 +340,8 @@ const setupVoiceMixer = () => {
         const profileLabel = state.draft.name ? `Editing: ${state.draft.name}` : "Unsaved speaker";
         if (isSupertonic) {
           profileSummaryEl.textContent = `${profileLabel} · Supertonic`;
+        } else if (provider === "camb") {
+          profileSummaryEl.textContent = `${profileLabel} · Camb AI`;
         } else {
           profileSummaryEl.textContent = `${profileLabel} · ${voiceCount} voice${voiceCount === 1 ? "" : "s"}`;
         }
@@ -607,6 +638,23 @@ const setupVoiceMixer = () => {
       const speed = Number(state.draft.supertonic?.speed ?? 1.0);
       supertonicSpeedLabel.textContent = `${(Number.isFinite(speed) ? speed : 1.0).toFixed(2)}×`;
     }
+    if (cambVoiceIdInput) {
+      cambVoiceIdInput.value = String(state.draft.camb?.voice_id ?? 147320);
+    }
+    if (cambModelSelect) {
+      cambModelSelect.value = state.draft.camb?.model || "mars-flash";
+    }
+    if (cambLanguageSelect) {
+      cambLanguageSelect.value = state.draft.camb?.language || "en-us";
+    }
+    if (cambSpeedInput) {
+      cambSpeedInput.value = String(state.draft.camb?.speed ?? 1.0);
+      setRangeFill(cambSpeedInput);
+    }
+    if (cambSpeedLabel) {
+      const speed = Number(state.draft.camb?.speed ?? 1.0);
+      cambSpeedLabel.textContent = `${(Number.isFinite(speed) ? speed : 1.0).toFixed(2)}×`;
+    }
     applyProviderToUI();
     renderSelectedVoices();
     updateMixSummary();
@@ -650,7 +698,7 @@ const setupVoiceMixer = () => {
       selectBtn.dataset.name = name;
       const profile = profiles[name] || {};
       const provider = normalizeProvider(profile.provider);
-      const providerLabel = provider === "supertonic" ? "Supertonic" : "Kokoro";
+      const providerLabel = provider === "supertonic" ? "Supertonic" : provider === "camb" ? "Camb AI" : "Kokoro";
       selectBtn.innerHTML = `
         <span class="voice-list__name">${name}</span>
         <span class="voice-list__meta"><span class="tag">${providerLabel}</span> ${voiceLanguageLabel(profile.language || "a")}</span>
@@ -704,6 +752,12 @@ const setupVoiceMixer = () => {
         total_steps: Number(profile?.total_steps ?? 5),
         speed: Number(profile?.speed ?? 1.0),
       },
+      camb: {
+        voice_id: Number(profile?.voice_id ?? 147320),
+        model: profile?.model || "mars-flash",
+        language: profile?.language || "en-us",
+        speed: Number(profile?.speed ?? 1.0),
+      },
     };
     if (provider === "kokoro" && Array.isArray(profile?.voices)) {
       profile.voices.forEach((entry) => {
@@ -734,6 +788,12 @@ const setupVoiceMixer = () => {
       supertonic: {
         voice: "M1",
         total_steps: 5,
+        speed: 1.0,
+      },
+      camb: {
+        voice_id: 147320,
+        model: "mars-flash",
+        language: "en-us",
         speed: 1.0,
       },
     };
@@ -796,15 +856,19 @@ const setupVoiceMixer = () => {
       setStatus("Give your profile a name first.", "warning");
       return;
     }
+    const provider = normalizeProvider(state.draft.provider);
     const payload = {
       name,
       originalName: state.originalName,
-      provider: normalizeProvider(state.draft.provider),
-      language: normalizeProvider(state.draft.provider) === "kokoro" ? (languageSelect ? languageSelect.value : "a") : "a",
-      voices: normalizeProvider(state.draft.provider) === "kokoro" ? buildProfilePayload() : [],
+      provider,
+      language: provider === "kokoro" ? (languageSelect ? languageSelect.value : "a") : "a",
+      voices: provider === "kokoro" ? buildProfilePayload() : [],
       voice: state.draft.supertonic?.voice,
       total_steps: state.draft.supertonic?.total_steps,
-      speed: state.draft.supertonic?.speed,
+      speed: provider === "camb" ? state.draft.camb?.speed : state.draft.supertonic?.speed,
+      camb_voice_id: state.draft.camb?.voice_id,
+      camb_model: state.draft.camb?.model,
+      camb_language: state.draft.camb?.language,
     };
     try {
       const response = await fetch("/api/voice-profiles", {
@@ -925,6 +989,12 @@ const setupVoiceMixer = () => {
         setStatus("Enable at least one voice to preview.", "warning");
         return;
       }
+    } else if (provider === "camb") {
+      payload.tts_provider = "camb";
+      payload.camb_voice_id = state.draft.camb?.voice_id || 147320;
+      payload.camb_model = state.draft.camb?.model || "mars-flash";
+      payload.camb_language = state.draft.camb?.language || "en-us";
+      payload.voice_id = payload.camb_voice_id;
     } else {
       if (!payload.voice) {
         setStatus("Select a Supertonic voice to preview.", "warning");
@@ -1004,8 +1074,8 @@ const setupVoiceMixer = () => {
   if (providerSelect) {
     providerSelect.addEventListener("change", () => {
       state.draft.provider = normalizeProvider(providerSelect.value);
-      // When switching to Supertonic, clear Kokoro mix.
-      if (state.draft.provider === "supertonic") {
+      // When switching away from Kokoro, clear Kokoro mix.
+      if (state.draft.provider !== "kokoro") {
         state.draft.voices = new Map();
       }
       applyDraftToControls();
@@ -1056,6 +1126,47 @@ const setupVoiceMixer = () => {
     setRangeFill(supertonicSpeedInput);
   }
 
+  if (cambVoiceIdInput) {
+    cambVoiceIdInput.addEventListener("change", () => {
+      state.draft.camb.voice_id = parseInt(cambVoiceIdInput.value, 10) || 147320;
+      markDirty();
+      updateMixSummary();
+    });
+  }
+
+  if (cambModelSelect) {
+    cambModelSelect.addEventListener("change", () => {
+      state.draft.camb.model = cambModelSelect.value || "mars-flash";
+      markDirty();
+    });
+  }
+
+  if (cambLanguageSelect) {
+    cambLanguageSelect.addEventListener("change", () => {
+      state.draft.camb.language = cambLanguageSelect.value || "en-us";
+      markDirty();
+    });
+  }
+
+  if (cambSpeedInput) {
+    cambSpeedInput.addEventListener("input", () => {
+      const value = parseFloat(cambSpeedInput.value || "1");
+      const normalized = clamp(value, 0.5, 2.0);
+      state.draft.camb.speed = normalized;
+      cambSpeedInput.value = normalized.toFixed(2);
+      if (cambSpeedLabel) {
+        cambSpeedLabel.textContent = `${normalized.toFixed(2)}×`;
+      }
+      setRangeFill(cambSpeedInput);
+      if (speedInput) {
+        speedInput.value = String(normalized);
+        setRangeFill(speedInput);
+      }
+      markDirty();
+    });
+    setRangeFill(cambSpeedInput);
+  }
+
   if (voiceFilterSelect) {
     voiceFilterSelect.addEventListener("change", () => {
       state.languageFilter = voiceFilterSelect.value;
@@ -1071,7 +1182,8 @@ const setupVoiceMixer = () => {
       }
       setRangeFill(speedInput);
 
-      if (normalizeProvider(state.draft.provider) === "supertonic") {
+      const currentProvider = normalizeProvider(state.draft.provider);
+      if (currentProvider === "supertonic") {
         state.draft.supertonic.speed = clamp(speed, 0.7, 2.0);
         if (supertonicSpeedInput) {
           supertonicSpeedInput.value = state.draft.supertonic.speed.toFixed(2);
@@ -1079,6 +1191,16 @@ const setupVoiceMixer = () => {
         }
         if (supertonicSpeedLabel) {
           supertonicSpeedLabel.textContent = `${state.draft.supertonic.speed.toFixed(2)}×`;
+        }
+      }
+      if (currentProvider === "camb") {
+        state.draft.camb.speed = clamp(speed, 0.5, 2.0);
+        if (cambSpeedInput) {
+          cambSpeedInput.value = state.draft.camb.speed.toFixed(2);
+          setRangeFill(cambSpeedInput);
+        }
+        if (cambSpeedLabel) {
+          cambSpeedLabel.textContent = `${state.draft.camb.speed.toFixed(2)}×`;
         }
       }
     };

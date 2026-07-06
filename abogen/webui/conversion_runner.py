@@ -48,6 +48,7 @@ from abogen.voice_profiles import load_profiles, normalize_profile_entry
 from abogen.pronunciation_store import increment_usage
 from abogen.llm_client import LLMClientError
 from abogen.tts_supertonic import DEFAULT_SUPERTONIC_VOICES, SupertonicPipeline
+from abogen.tts_camb import CambPipeline
 
 from .service import Job, JobStatus
 
@@ -127,6 +128,12 @@ def _infer_provider_from_spec(value: Any, fallback: str = "kokoro") -> str:
         return "supertonic"
     if "*" in raw or "+" in raw:
         return "kokoro"
+    # Pure integer values indicate a Camb AI voice ID.
+    try:
+        int(raw)
+        return "camb"
+    except (TypeError, ValueError):
+        pass
     return fallback
 
 
@@ -1574,7 +1581,7 @@ def run_conversion_job(job: Job) -> None:
         def get_pipeline(provider: str) -> Any:
             nonlocal kokoro_cache_ready
             provider_norm = str(provider or "kokoro").strip().lower() or "kokoro"
-            if provider_norm not in {"kokoro", "supertonic"}:
+            if provider_norm not in {"kokoro", "supertonic", "camb"}:
                 provider_norm = "kokoro"
 
             existing = pipelines.get(provider_norm)
@@ -1586,6 +1593,16 @@ def run_conversion_job(job: Job) -> None:
                     sample_rate=SAMPLE_RATE,
                     auto_download=True,
                     total_steps=int(getattr(job, "supertonic_total_steps", 5) or 5),
+                )
+                return pipelines[provider_norm]
+
+            if provider_norm == "camb":
+                pipelines[provider_norm] = CambPipeline(
+                    sample_rate=SAMPLE_RATE,
+                    api_key=getattr(job, "camb_api_key", None),
+                    model=getattr(job, "camb_model", "mars-flash") or "mars-flash",
+                    voice_id=int(getattr(job, "camb_voice_id", 147320) or 147320),
+                    language=getattr(job, "camb_language", "en-us") or "en-us",
                 )
                 return pipelines[provider_norm]
 
@@ -1619,6 +1636,10 @@ def run_conversion_job(job: Job) -> None:
                     steps = int(entry.get("total_steps") or getattr(job, "supertonic_total_steps", 5) or 5)
                     speed = float(entry.get("speed") or getattr(job, "speed", 1.0) or 1.0)
                     return "supertonic", _supertonic_voice_from_spec(voice, getattr(job, "voice", "M1")), speed, steps
+                if provider == "camb":
+                    voice_id = str(entry.get("voice_id") or getattr(job, "camb_voice_id", 147320) or 147320)
+                    speed = float(entry.get("speed") or getattr(job, "speed", 1.0) or 1.0)
+                    return "camb", voice_id, speed, None
                 formula = _formula_from_kokoro_entry(entry)
                 return "kokoro", formula or spec, None, None
 
@@ -1626,6 +1647,8 @@ def run_conversion_job(job: Job) -> None:
             inferred = _infer_provider_from_spec(spec, fallback=fallback_provider)
             if inferred == "supertonic":
                 return "supertonic", _supertonic_voice_from_spec(spec, getattr(job, "voice", "M1")), None, None
+            if inferred == "camb":
+                return "camb", spec, None, None
             return "kokoro", spec, None, None
 
         def resolve_voice_choice(raw_spec: str) -> tuple[str, str, Any, Optional[float], Optional[int]]:
@@ -1847,7 +1870,20 @@ def run_conversion_job(job: Job) -> None:
             local_segments = 0
 
             provider = str(tts_provider or getattr(job, "tts_provider", "kokoro") or "kokoro").strip().lower() or "kokoro"
-            if provider == "supertonic":
+            if provider == "camb":
+                camb_pipeline = get_pipeline("camb")
+                voice_id = voice_choice
+                try:
+                    voice_id = int(voice_choice)
+                except (TypeError, ValueError):
+                    voice_id = int(getattr(job, "camb_voice_id", 147320) or 147320)
+                segment_iter = camb_pipeline(
+                    normalized,
+                    voice=voice_id,
+                    speed=float(speed_override if speed_override is not None else job.speed),
+                    split_pattern=split_pattern,
+                )
+            elif provider == "supertonic":
                 supertonic_pipeline = get_pipeline("supertonic")
                 voice_name = _supertonic_voice_from_spec(voice_choice, getattr(job, "voice", "M1"))
                 segment_iter = supertonic_pipeline(

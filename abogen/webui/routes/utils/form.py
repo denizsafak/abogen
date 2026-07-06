@@ -579,8 +579,25 @@ def apply_book_step_form(
     # spec (e.g. "speaker:Name" for saved speakers, or a Kokoro mix formula).
     # This enables mixed-provider conversions (e.g. narrator=SuperTonic, characters=Kokoro).
     provider_value = str(form.get("tts_provider") or "").strip().lower()
-    if provider_value in {"kokoro", "supertonic"}:
+    if provider_value in {"kokoro", "supertonic", "camb"}:
         pending.tts_provider = provider_value
+
+    # Camb AI specific fields
+    camb_model = str(form.get("camb_model") or "").strip().lower()
+    if camb_model in {"mars-flash", "mars-pro", "mars-instruct"}:
+        pending.camb_model = camb_model
+    camb_voice_id = form.get("camb_voice_id")
+    if camb_voice_id is not None:
+        try:
+            pending.camb_voice_id = int(camb_voice_id)
+        except (TypeError, ValueError):
+            pass
+    camb_api_key = form.get("camb_api_key")
+    if camb_api_key is not None:
+        pending.camb_api_key = str(camb_api_key).strip() or None
+    camb_language = str(form.get("camb_language") or "").strip().lower()
+    if camb_language:
+        pending.camb_language = camb_language
 
     # Determine the base speaker selection (saved speaker ref or raw voice).
     narrator_voice_raw = (
