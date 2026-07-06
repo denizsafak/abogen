@@ -18,11 +18,13 @@ class TTSBackendMetadata:
         id: Unique backend identifier (e.g. ``"kokoro"``, ``"supertonic"``).
         name: Human-readable display name.
         description: Short description of the backend.
+        voices: Tuple of supported voice identifiers.
     """
 
     id: str
     name: str
     description: str
+    voices: tuple[str, ...] = ()
 
 
 class TTSBackend(Protocol):
