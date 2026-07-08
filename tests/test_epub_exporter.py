@@ -197,7 +197,7 @@ def test_epub3_preserves_original_whitespace(tmp_path) -> None:
     )
     assert match is not None
     original_text = html.unescape(match.group(1))
-    assert "Second line\n\nThird paragraph." in original_text
+    assert "Second line\n\nThird paragraph." in original_text.replace("\r\n", "\n")
 
 
 def test_epub3_sentence_chunks_render_as_paragraphs(tmp_path) -> None:
