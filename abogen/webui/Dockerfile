@@ -27,8 +27,6 @@ RUN python3 -m venv "$VIRTUAL_ENV"
 WORKDIR /app
 
 COPY pyproject.toml README.md ./
-COPY abogen ./abogen
-
 RUN pip install --upgrade pip \
   && if [ -n "$TORCH_VERSION" ]; then \
        pip install torch=="$TORCH_VERSION" torchvision=="$TORCH_VERSION" torchaudio=="$TORCH_VERSION" --index-url "$TORCH_INDEX_URL"; \
@@ -38,6 +36,8 @@ RUN pip install --upgrade pip \
   && pip install --no-cache-dir . \
     https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl \
   && pip install --no-cache-dir "mutagen>=1.47.0"
+
+COPY abogen ./abogen
 
 # Install onnxruntime-gpu for CUDA acceleration (supertonic uses ONNX Runtime)
 # Set USE_GPU=false to skip this for CPU-only deployments
