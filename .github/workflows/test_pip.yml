@@ -49,4 +49,6 @@ jobs:
           python -m pip install .[dev]
 
       - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: pytest tests/ -v --tb=short
