@@ -1,7 +1,7 @@
 import re
 from typing import List, Tuple
 
-from abogen.constants import VOICES_INTERNAL
+from abogen.tts_backend_registry import get_metadata
 
 
 # Calls parsing and loads the voice to gpu or cpu
@@ -22,6 +22,7 @@ def parse_formula_terms(formula: str) -> List[Tuple[str, float]]:
         raise ValueError("Empty voice formula")
 
     terms: List[Tuple[str, float]] = []
+    kokoro_voices = get_metadata("kokoro").voices
     for segment in formula.split("+"):
         part = segment.strip()
         if not part:
@@ -30,7 +31,7 @@ def parse_formula_terms(formula: str) -> List[Tuple[str, float]]:
             raise ValueError("Each component must be in the form voice*weight")
         voice_name, raw_weight = part.split("*", 1)
         voice_name = voice_name.strip()
-        if voice_name not in VOICES_INTERNAL:
+        if voice_name not in kokoro_voices:
             raise ValueError(f"Unknown voice: {voice_name}")
         try:
             weight = float(raw_weight.strip())

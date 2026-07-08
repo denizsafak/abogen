@@ -2,8 +2,7 @@ import json
 import os
 from typing import Any, Dict, Iterable, List, Tuple
 
-from abogen.constants import VOICES_INTERNAL
-from abogen.tts_backends.supertonic import DEFAULT_SUPERTONIC_VOICES
+from abogen.tts_backend_registry import get_metadata
 from abogen.utils import get_user_config_path
 
 
@@ -70,7 +69,8 @@ def serialize_profiles() -> Dict[str, Dict[str, Iterable[Tuple[str, float]]]]:
 
 def _normalize_supertonic_voice(value: Any) -> str:
     raw = str(value or "").strip().upper()
-    return raw if raw in DEFAULT_SUPERTONIC_VOICES else "M1"
+    supertonic_voices = get_metadata("supertonic").voices
+    return raw if raw in supertonic_voices else "M1"
 
 
 def _coerce_supertonic_steps(value: Any) -> int:
@@ -135,6 +135,7 @@ def normalize_profile_entry(entry: Any) -> Dict[str, Any]:
 
 def _normalize_voice_entries(entries: Iterable) -> List[Tuple[str, float]]:
     normalized: List[Tuple[str, float]] = []
+    kokoro_voices = get_metadata("kokoro").voices
     for item in entries or []:
         if isinstance(item, dict):
             voice = item.get("id") or item.get("voice")
@@ -143,7 +144,7 @@ def _normalize_voice_entries(entries: Iterable) -> List[Tuple[str, float]]:
             voice, weight = item[0], item[1]
         else:
             continue
-        if voice not in VOICES_INTERNAL:
+        if voice not in kokoro_voices:
             continue
         if weight is None:
             continue

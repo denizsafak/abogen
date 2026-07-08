@@ -66,6 +66,19 @@ def register_backend(
     _registry.register(metadata, factory)
 
 
+def get_metadata(backend_id: str) -> TTSBackendMetadata:
+    """Get metadata for a specific backend by id.
+
+    Ensures all backends are registered by importing the tts_backends
+    package on first access.
+
+    Raises:
+        KeyError: If backend with given id is not registered.
+    """
+    import abogen.tts_backends  # noqa: F401  — triggers backend registration
+    return _registry.get_metadata(backend_id)
+
+
 def create_backend(backend_id: str, **kwargs: Any) -> TTSBackend:
     """Create a TTS backend instance by provider id."""
     return _registry.create_backend(backend_id, **kwargs)
