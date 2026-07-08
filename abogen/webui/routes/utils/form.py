@@ -7,6 +7,7 @@ from flask.typing import ResponseReturnValue
 
 from abogen.webui.service import PendingJob, JobStatus
 from abogen.webui.routes.utils.service import get_service
+from abogen.tts_backend_registry import is_registered_backend
 from abogen.webui.routes.utils.settings import (
     load_settings,
     coerce_bool,
@@ -579,7 +580,7 @@ def apply_book_step_form(
     # spec (e.g. "speaker:Name" for saved speakers, or a Kokoro mix formula).
     # This enables mixed-provider conversions (e.g. narrator=SuperTonic, characters=Kokoro).
     provider_value = str(form.get("tts_provider") or "").strip().lower()
-    if provider_value in {"kokoro", "supertonic"}:
+    if is_registered_backend(provider_value):
         pending.tts_provider = provider_value
 
     # Determine the base speaker selection (saved speaker ref or raw voice).

@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any, Dict, Iterable, List, Tuple
 
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_backend_registry import get_metadata, is_registered_backend
 from abogen.utils import get_user_config_path
 
 
@@ -101,7 +101,7 @@ def normalize_profile_entry(entry: Any) -> Dict[str, Any]:
         return {}
 
     provider = str(entry.get("provider") or "kokoro").strip().lower()
-    if provider not in {"kokoro", "supertonic"}:
+    if not is_registered_backend(provider):
         provider = "kokoro"
 
     language = str(entry.get("language") or "a").strip().lower() or "a"

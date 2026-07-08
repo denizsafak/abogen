@@ -30,6 +30,10 @@ class TTSBackendRegistry:
         self._backends[metadata.id] = metadata
         self._factories[metadata.id] = factory
 
+    def is_registered(self, backend_id: str) -> bool:
+        """Return True if a backend with the given id is registered."""
+        return backend_id in self._backends
+
     def list_backends(self) -> list[TTSBackendMetadata]:
         """Return metadata for all registered backends."""
         return list(self._backends.values())
@@ -88,3 +92,9 @@ def get_default_voice(backend_id: str, fallback: str = "") -> str:
 def create_backend(backend_id: str, **kwargs: Any) -> TTSBackend:
     """Create a TTS backend instance by provider id."""
     return _registry.create_backend(backend_id, **kwargs)
+
+
+def is_registered_backend(backend_id: str) -> bool:
+    """Return True if *backend_id* is a registered TTS backend."""
+    import abogen.tts_backends  # noqa: F401  — triggers backend registration
+    return _registry.is_registered(backend_id)

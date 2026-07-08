@@ -20,7 +20,7 @@ import numpy as np
 import soundfile as sf
 import static_ffmpeg
 
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_backend_registry import get_metadata, is_registered_backend
 from abogen.epub3.exporter import build_epub3_package
 from abogen.kokoro_text_normalization import ApostropheConfig, normalize_for_pipeline, HAS_NUM2WORDS
 from abogen.normalization_settings import (
@@ -1574,7 +1574,7 @@ def run_conversion_job(job: Job) -> None:
         def get_pipeline(provider: str) -> Any:
             nonlocal kokoro_cache_ready
             provider_norm = str(provider or "kokoro").strip().lower() or "kokoro"
-            if provider_norm not in {"kokoro", "supertonic"}:
+            if not is_registered_backend(provider_norm):
                 provider_norm = "kokoro"
 
             existing = pipelines.get(provider_norm)
