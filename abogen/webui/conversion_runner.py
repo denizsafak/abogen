@@ -20,7 +20,7 @@ import numpy as np
 import soundfile as sf
 import static_ffmpeg
 
-from abogen.tts_backend_registry import get_metadata, is_registered_backend
+from abogen.tts_backend_registry import get_metadata, is_registered_backend, resolve_backend_for_voice
 from abogen.epub3.exporter import build_epub3_package
 from abogen.kokoro_text_normalization import ApostropheConfig, normalize_for_pipeline, HAS_NUM2WORDS
 from abogen.normalization_settings import (
@@ -57,25 +57,26 @@ SAMPLE_RATE = 24000
 
 
 def _supertonic_voice_from_spec(spec: Any, fallback: str) -> str:
+    """Normalize a voice specification for Supertonic.
+
+    This function only performs Supertonic-specific normalization (uppercase conversion
+    and fallback handling). Backend resolution is handled by the registry.
+    """
     raw = str(spec or "").strip()
     fallback_raw = str(fallback or "").strip()
 
-    # SuperTonic voices are discrete IDs (M1/F3/...). If we see a Kokoro mix
-    # formula (contains '*' or '+'), ignore it and fall back to a safe voice.
-    if not raw or "*" in raw or "+" in raw:
-        raw = fallback_raw
-    if not raw or "*" in raw or "+" in raw:
-        raw = "M1"
+    # Normalize to uppercase for Supertonic voice IDs
+    upper = raw.upper() if raw else ""
 
-    upper = raw.upper()
-    if upper in get_metadata("supertonic").voices:
-        return upper
+    # If empty or contains formula characters, use fallback
+    if not upper or "*" in upper or "+" in upper:
+        upper = fallback_raw.upper() if fallback_raw else ""
 
-    fallback_upper = fallback_raw.upper() if fallback_raw else ""
-    if fallback_upper in get_metadata("supertonic").voices:
-        return fallback_upper
+    # If still empty, use default Supertonic voice
+    if not upper or "*" in upper or "+" in upper:
+        upper = "M1"
 
-    return "M1"
+    return upper
 
 
 def _split_speaker_reference(value: Any) -> tuple[Optional[str], str]:
@@ -119,15 +120,7 @@ def _formula_from_kokoro_entry(entry: Mapping[str, Any]) -> str:
 
 
 def _infer_provider_from_spec(value: Any, fallback: str = "kokoro") -> str:
-    raw = str(value or "").strip()
-    if not raw:
-        return fallback
-    upper = raw.upper()
-    if upper in get_metadata("supertonic").voices:
-        return "supertonic"
-    if "*" in raw or "+" in raw:
-        return "kokoro"
-    return fallback
+    return resolve_backend_for_voice(str(value or ""), fallback=fallback)
 
 
 class _JobCancelled(Exception):

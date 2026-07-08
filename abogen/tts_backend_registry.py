@@ -58,6 +58,33 @@ class TTSBackendRegistry:
             raise KeyError(f"Unknown backend: {backend_id}")
         return self._factories[backend_id](**kwargs)
 
+    def resolve_backend_for_voice(
+        self,
+        spec: str,
+        fallback: str = "kokoro",
+    ) -> str:
+        """Determine which backend owns the given voice specification.
+
+        Resolution rules:
+        1. Empty spec -> fallback
+        2. Kokoro formula (contains '*' or '+') -> "kokoro"
+        3. Exact voice ID match against registered backends -> backend id
+        4. Unknown voice -> fallback
+        """
+        raw = str(spec or "").strip()
+        if not raw:
+            return fallback
+
+        if "*" in raw or "+" in raw:
+            return "kokoro"
+
+        upper = raw.upper()
+        for metadata in self._backends.values():
+            if upper in metadata.voices:
+                return metadata.id
+
+        return fallback
+
 
 _registry = TTSBackendRegistry()
 
@@ -98,3 +125,22 @@ def is_registered_backend(backend_id: str) -> bool:
     """Return True if *backend_id* is a registered TTS backend."""
     import abogen.tts_backends  # noqa: F401  — triggers backend registration
     return _registry.is_registered(backend_id)
+
+
+def resolve_backend_for_voice(
+    spec: str,
+    fallback: str = "kokoro",
+) -> str:
+    """Determine which backend owns the given voice specification.
+
+    Ensures all backends are registered by importing the tts_backends
+    package on first access.
+
+    Resolution rules:
+    1. Empty spec -> fallback
+    2. Kokoro formula (contains '*' or '+') -> "kokoro"
+    3. Exact voice ID match against registered backends -> backend id
+    4. Unknown voice -> fallback
+    """
+    import abogen.tts_backends  # noqa: F401  — triggers backend registration
+    return _registry.resolve_backend_for_voice(spec, fallback=fallback)
