@@ -6,8 +6,8 @@ from abogen.constants import (
     LANGUAGE_DESCRIPTIONS,
     SUBTITLE_FORMATS,
     SUPPORTED_SOUND_FORMATS,
-    VOICES_INTERNAL,
 )
+from abogen.tts_backend_registry import get_default_voice
 from abogen.normalization_settings import (
     DEFAULT_LLM_PROMPT,
     environment_llm_defaults,
@@ -174,7 +174,7 @@ def settings_defaults() -> Dict[str, Any]:
         "subtitle_format": "srt",
         "save_mode": "default_output" if has_output_override() else "save_next_to_input",
         "default_speaker": "",
-        "default_voice": VOICES_INTERNAL[0] if VOICES_INTERNAL else "",
+        "default_voice": get_default_voice("kokoro"),
         "supertonic_total_steps": 5,
         "supertonic_speed": 1.0,
         "replace_single_newlines": False,

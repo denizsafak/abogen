@@ -20,7 +20,7 @@ import numpy as np
 import soundfile as sf
 import static_ffmpeg
 
-from abogen.constants import VOICES_INTERNAL
+from abogen.tts_backend_registry import get_metadata
 from abogen.epub3.exporter import build_epub3_package
 from abogen.kokoro_text_normalization import ApostropheConfig, normalize_for_pipeline, HAS_NUM2WORDS
 from abogen.normalization_settings import (
@@ -47,7 +47,7 @@ from abogen.voice_formulas import extract_voice_ids, get_new_voice
 from abogen.voice_profiles import load_profiles, normalize_profile_entry
 from abogen.pronunciation_store import increment_usage
 from abogen.llm_client import LLMClientError
-from abogen.tts_backends.supertonic import DEFAULT_SUPERTONIC_VOICES
+
 
 from .service import Job, JobStatus
 
@@ -68,11 +68,11 @@ def _supertonic_voice_from_spec(spec: Any, fallback: str) -> str:
         raw = "M1"
 
     upper = raw.upper()
-    if upper in DEFAULT_SUPERTONIC_VOICES:
+    if upper in get_metadata("supertonic").voices:
         return upper
 
     fallback_upper = fallback_raw.upper() if fallback_raw else ""
-    if fallback_upper in DEFAULT_SUPERTONIC_VOICES:
+    if fallback_upper in get_metadata("supertonic").voices:
         return fallback_upper
 
     return "M1"
@@ -123,7 +123,7 @@ def _infer_provider_from_spec(value: Any, fallback: str = "kokoro") -> str:
     if not raw:
         return fallback
     upper = raw.upper()
-    if upper in DEFAULT_SUPERTONIC_VOICES:
+    if upper in get_metadata("supertonic").voices:
         return "supertonic"
     if "*" in raw or "+" in raw:
         return "kokoro"
@@ -576,7 +576,7 @@ def _spec_to_voice_ids(spec: Any) -> Set[str]:
             return set(extract_voice_ids(text))
         except ValueError:
             return set()
-    if text in VOICES_INTERNAL:
+    if text in get_metadata("kokoro").voices:
         return {text}
     return set()
 
@@ -640,7 +640,7 @@ def _collect_required_voice_ids(job: Job) -> Set[str]:
             for key in ("resolved_voice", "voice_formula", "voice"):
                 voices.update(_spec_to_voice_ids(payload.get(key)))
 
-    voices.update(VOICES_INTERNAL)
+    voices.update(get_metadata("kokoro").voices)
     return voices
 
 
@@ -1803,8 +1803,8 @@ def run_conversion_job(job: Job) -> None:
                     fallback_key = next(iter(voice_cache.keys()), "")
                     if fallback_key and fallback_key != "__custom_mix":
                         intro_voice_spec = fallback_key.split(":", 1)[-1]
-                if not intro_voice_spec and VOICES_INTERNAL:
-                    intro_voice_spec = VOICES_INTERNAL[0]
+                if not intro_voice_spec:
+                    intro_voice_spec = get_default_voice("kokoro")
 
                 if intro_voice_spec:
                     intro_provider, _, intro_voice_choice, intro_speed, intro_steps = resolve_voice_choice(
@@ -2237,8 +2237,8 @@ def run_conversion_job(job: Job) -> None:
                 if fallback_key and fallback_key != "__custom_mix":
                     # `voice_cache` keys are internal and include provider prefixes.
                     outro_voice_spec = fallback_key.split(":", 1)[-1]
-            if not outro_voice_spec and VOICES_INTERNAL:
-                outro_voice_spec = VOICES_INTERNAL[0]
+            if not outro_voice_spec:
+                outro_voice_spec = get_default_voice("kokoro")
 
             if outro_text and outro_voice_spec:
                 outro_start_time = current_time

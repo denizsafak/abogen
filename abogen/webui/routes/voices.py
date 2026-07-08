@@ -17,7 +17,7 @@ from abogen.speaker_configs import (
     save_configs,
     delete_config,
 )
-from abogen.constants import VOICES_INTERNAL
+
 
 voices_bp = Blueprint("voices", __name__)
 

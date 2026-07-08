@@ -32,7 +32,7 @@ from abogen.webui.routes.utils.common import split_profile_spec
 from abogen.utils import calculate_text_length
 from abogen.voice_profiles import serialize_profiles, normalize_profile_entry
 from abogen.chunking import ChunkLevel, build_chunks_for_chapters
-from abogen.constants import VOICES_INTERNAL
+from abogen.tts_backend_registry import get_default_voice
 from abogen.speaker_configs import get_config
 from abogen.kokoro_text_normalization import normalize_roman_numeral_titles
 from dataclasses import dataclass
@@ -616,8 +616,8 @@ def apply_book_step_form(
         custom_formula = ""
 
     base_voice_spec = resolved_default_voice or narrator_voice_raw
-    if not base_voice_spec and VOICES_INTERNAL:
-        base_voice_spec = VOICES_INTERNAL[0]
+    if not base_voice_spec:
+        base_voice_spec = get_default_voice("kokoro")
 
     voice_choice, resolved_language, selected_profile = resolve_voice_choice(
         pending.language,
@@ -796,8 +796,8 @@ def build_pending_job_from_extraction(
         profile_selection = inferred_profile
 
     base_voice = base_voice_input or resolved_default_voice or str(default_voice_setting).strip()
-    if not base_voice and VOICES_INTERNAL:
-        base_voice = VOICES_INTERNAL[0]
+    if not base_voice:
+        base_voice = get_default_voice("kokoro")
     selected_speaker_config = (form.get("speaker_config") or "").strip()
     speaker_config_payload = get_config(selected_speaker_config) if selected_speaker_config else None
 
