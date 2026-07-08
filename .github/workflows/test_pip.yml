@@ -1,5 +1,6 @@
-name: pip install
-run-name: pip install
+name: CI
+run-name: CI
+
 on:
   push:
     branches: [main]
@@ -12,8 +13,9 @@ on:
       - 'pyproject.toml'
       - '.github/workflows/**'
   workflow_dispatch:
+
 jobs:
-  install-and-run:
+  test:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-14, windows-latest]
@@ -23,12 +25,24 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
-      - name: Install from repository
-        run: python -m pip install .
-      #- name: Run abogen
-      #  run: abogen
+
+      - name: Cache pip
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .[dev]
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
