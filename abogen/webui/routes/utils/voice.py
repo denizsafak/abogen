@@ -17,8 +17,8 @@ from abogen.constants import (
     SUPPORTED_SOUND_FORMATS,
     SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION,
     SAMPLE_VOICE_TEXTS,
-    VOICES_INTERNAL,
 )
+from abogen.tts_backend_registry import get_metadata
 from abogen.speaker_configs import list_configs
 from abogen.tts_backend_registry import create_backend
 from abogen.webui.conversion_runner import _select_device, _to_float32, SAMPLE_RATE, SPLIT_PATTERN
@@ -285,7 +285,7 @@ def filter_voice_catalog(
 def build_voice_catalog() -> List[Dict[str, str]]:
     catalog: List[Dict[str, str]] = []
     gender_map = {"f": "Female", "m": "Male"}
-    for voice_id in VOICES_INTERNAL:
+    for voice_id in get_metadata("kokoro").voices:
         prefix, _, rest = voice_id.partition("_")
         language_code = prefix[0] if prefix else "a"
         gender_code = prefix[1] if len(prefix) > 1 else ""
@@ -590,7 +590,7 @@ def template_options() -> Dict[str, Any]:
     voice_catalog = build_voice_catalog()
     return {
         "languages": LANGUAGE_DESCRIPTIONS,
-        "voices": VOICES_INTERNAL,
+        "voices": get_metadata("kokoro").voices,
         "subtitle_formats": SUBTITLE_FORMATS,
         "supported_langs_for_subs": SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION,
         "output_formats": SUPPORTED_SOUND_FORMATS,

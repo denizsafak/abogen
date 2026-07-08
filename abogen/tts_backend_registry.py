@@ -79,6 +79,12 @@ def get_metadata(backend_id: str) -> TTSBackendMetadata:
     return _registry.get_metadata(backend_id)
 
 
+def get_default_voice(backend_id: str, fallback: str = "") -> str:
+    """Return the first voice of a backend, or *fallback* if none."""
+    voices = get_metadata(backend_id).voices
+    return voices[0] if voices else fallback
+
+
 def create_backend(backend_id: str, **kwargs: Any) -> TTSBackend:
     """Create a TTS backend instance by provider id."""
     return _registry.create_backend(backend_id, **kwargs)
