@@ -48,3 +48,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: pytest tests/ -v --tb=short
+
+      - name: Minimize uv cache
+        if: always()
+        run: uv cache prune --ci
