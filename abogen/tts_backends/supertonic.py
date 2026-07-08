@@ -15,6 +15,15 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SUPERTONIC_VOICES = ("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5")
 
+from abogen.tts_backend import TTSBackendMetadata
+
+_SUPERTONIC_METADATA = TTSBackendMetadata(
+    id="supertonic",
+    name="SuperTonic",
+    description="SuperTonic TTS engine",
+    voices=DEFAULT_SUPERTONIC_VOICES,
+)
+
 
 @dataclass
 class SupertonicSegment:
@@ -282,12 +291,8 @@ class SupertonicBackend:
     """
 
     @property
-    def metadata(self) -> "TTSBackendMetadata":
-        return TTSBackendMetadata(
-            id="supertonic",
-            name="SuperTonic",
-            description="SuperTonic TTS engine",
-        )
+    def metadata(self) -> TTSBackendMetadata:
+        return _SUPERTONIC_METADATA
 
     def __init__(self, **kwargs: Any) -> None:
         self._pipeline = SupertonicPipeline(
@@ -333,7 +338,7 @@ class SupertonicBackend:
 
     def get_available_voices(self) -> List[str]:
         """Return the list of built-in SuperTonic voice identifiers."""
-        return list(DEFAULT_SUPERTONIC_VOICES)
+        return list(self.metadata.voices)
 
     def get_supported_formats(self) -> List[str]:
         return ["wav"]
@@ -379,14 +384,9 @@ def create_supertonic_backend(**kwargs: Any) -> SupertonicBackend:
     return SupertonicBackend(**kwargs)
 
 
-from abogen.tts_backend import TTSBackendMetadata
-from abogen.tts_backend_registry import register_backend
+from abogen.tts_backend_registry import register_backend  # noqa: E402
 
 register_backend(
-    metadata=TTSBackendMetadata(
-        id="supertonic",
-        name="SuperTonic",
-        description="SuperTonic TTS engine",
-    ),
+    metadata=_SUPERTONIC_METADATA,
     factory=create_supertonic_backend,
 )

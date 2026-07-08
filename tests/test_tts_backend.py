@@ -18,6 +18,23 @@ class TestTTSBackendMetadata:
         assert meta.name == "Test Backend"
         assert meta.description == "A test backend"
 
+    def test_voices_field_default_empty(self):
+        meta = TTSBackendMetadata(
+            id="test",
+            name="Test",
+            description="Test backend",
+        )
+        assert meta.voices == ()
+
+    def test_voices_field_stored(self):
+        meta = TTSBackendMetadata(
+            id="test",
+            name="Test",
+            description="Test backend",
+            voices=("v1", "v2"),
+        )
+        assert meta.voices == ("v1", "v2")
+
     def test_is_immutable(self):
         import pytest
 
@@ -132,6 +149,26 @@ class TestBackendRegistration:
         assert meta.name == "SuperTonic"
         assert "SuperTonic" in meta.description
 
+    def test_kokoro_metadata_has_voices(self):
+        import abogen.tts_backends  # noqa: F401
+
+        from abogen.tts_backend_registry import _registry
+
+        meta = _registry.get_metadata("kokoro")
+        assert isinstance(meta.voices, tuple)
+        assert len(meta.voices) > 0
+        assert all(isinstance(v, str) for v in meta.voices)
+
+    def test_supertonic_metadata_has_voices(self):
+        import abogen.tts_backends  # noqa: F401
+
+        from abogen.tts_backend_registry import _registry
+
+        meta = _registry.get_metadata("supertonic")
+        assert isinstance(meta.voices, tuple)
+        assert len(meta.voices) == 10
+        assert meta.voices == ("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5")
+
     def test_kokoro_factory_callable(self):
         import abogen.tts_backends  # noqa: F401
 
@@ -147,3 +184,21 @@ class TestBackendRegistration:
 
         factory = _registry._factories["supertonic"]
         assert callable(factory)
+
+    def test_kokoro_metadata_voices_match_registry(self):
+        """Ensure the metadata property on the instance shares voices with registry."""
+        from abogen.tts_backends.kokoro import _KOKORO_METADATA
+        from abogen.tts_backend_registry import _registry
+
+        registry_meta = _registry.get_metadata("kokoro")
+        assert _KOKORO_METADATA is registry_meta
+        assert _KOKORO_METADATA.voices == registry_meta.voices
+
+    def test_supertonic_metadata_voices_match_registry(self):
+        """Ensure the metadata property on the instance shares voices with registry."""
+        from abogen.tts_backends.supertonic import _SUPERTONIC_METADATA
+        from abogen.tts_backend_registry import _registry
+
+        registry_meta = _registry.get_metadata("supertonic")
+        assert _SUPERTONIC_METADATA is registry_meta
+        assert _SUPERTONIC_METADATA.voices == registry_meta.voices

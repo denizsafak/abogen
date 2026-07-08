@@ -10,6 +10,16 @@ from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
 
+from abogen.constants import VOICES_INTERNAL
+from abogen.tts_backend import TTSBackendMetadata
+
+_KOKORO_METADATA = TTSBackendMetadata(
+    id="kokoro",
+    name="Kokoro",
+    description="Kokoro TTS engine",
+    voices=tuple(VOICES_INTERNAL),
+)
+
 
 def _load_kpipeline():
     """Lazy-load Kokoro dependencies."""
@@ -39,14 +49,8 @@ class KokoroBackend:
         self._lang_code = lang_code
 
     @property
-    def metadata(self):
-        from abogen.tts_backend import TTSBackendMetadata
-
-        return TTSBackendMetadata(
-            id="kokoro",
-            name="Kokoro",
-            description="Kokoro TTS engine",
-        )
+    def metadata(self) -> TTSBackendMetadata:
+        return _KOKORO_METADATA
 
     def __call__(
         self,
@@ -89,9 +93,7 @@ class KokoroBackend:
 
     def get_available_voices(self) -> List[str]:
         """Return known Kokoro voice identifiers."""
-        from abogen.constants import VOICES_INTERNAL
-
-        return list(VOICES_INTERNAL)
+        return list(self.metadata.voices)
 
     def get_supported_formats(self) -> List[str]:
         """Kokoro outputs raw PCM float32 audio."""
@@ -111,14 +113,9 @@ def create_kokoro_backend(**kwargs: Any) -> KokoroBackend:
 
 
 # --- Registration ---
-from abogen.tts_backend import TTSBackendMetadata  # noqa: E402
 from abogen.tts_backend_registry import register_backend  # noqa: E402
 
 register_backend(
-    metadata=TTSBackendMetadata(
-        id="kokoro",
-        name="Kokoro",
-        description="Kokoro TTS engine",
-    ),
+    metadata=_KOKORO_METADATA,
     factory=create_kokoro_backend,
 )
