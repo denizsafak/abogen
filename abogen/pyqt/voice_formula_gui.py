@@ -28,11 +28,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QPoint, QRect, QSize
 from PyQt6.QtGui import QPixmap, QIcon, QAction
 from abogen.constants import (
-    VOICES_INTERNAL,
     SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION,
     LANGUAGE_DESCRIPTIONS,
     COLORS,
 )
+from abogen.tts_backend_registry import get_metadata
 import re
 import platform
 from abogen.utils import get_resource_path
@@ -179,7 +179,7 @@ class VoiceMixer(QWidget):
         layout.addWidget(QLabel(name), alignment=Qt.AlignmentFlag.AlignCenter)
 
         # Voice name label with gender icon
-        is_female = self.voice_name in VOICES_INTERNAL and self.voice_name[1] == "f"
+        is_female = self.voice_name in get_metadata("kokoro").voices and self.voice_name[1] == "f"
 
         # Icons layout (flag and gender)
         icons_layout = QHBoxLayout()
@@ -772,7 +772,7 @@ class VoiceFormulaDialog(QDialog):
 
     def add_voices(self, initial_state):
         first_enabled_voice = None
-        for voice in VOICES_INTERNAL:
+        for voice in get_metadata("kokoro").voices:
             language_code = voice[0]  # First character is the language code
             matching_voice = next(
                 (item for item in initial_state if item[0] == voice), None
