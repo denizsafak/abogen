@@ -3,7 +3,7 @@ from typing import cast
 
 import pytest
 
-from abogen.constants import VOICES_INTERNAL
+from abogen.tts_backend_registry import get_metadata
 from abogen.voice_cache import (
     LocalEntryNotFoundError,
     _CACHED_VOICES,
@@ -66,4 +66,4 @@ def test_collect_required_voice_ids_includes_all():
     voices = _collect_required_voice_ids(cast(Job, job))
 
     assert {"af_nova", "am_liam", "am_michael"}.issubset(voices)
-    assert voices.issuperset(VOICES_INTERNAL)
+    assert voices.issuperset(get_metadata("kokoro").voices)
