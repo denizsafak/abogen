@@ -202,3 +202,113 @@ class TestBackendRegistration:
         registry_meta = _registry.get_metadata("supertonic")
         assert _SUPERTONIC_METADATA is registry_meta
         assert _SUPERTONIC_METADATA.voices == registry_meta.voices
+
+
+class TestResolveBackendForVoice:
+    """Tests for the resolve_backend_for_voice method."""
+
+    def test_empty_spec_returns_fallback(self):
+        registry = TTSBackendRegistry()
+        assert registry.resolve_backend_for_voice("", fallback="kokoro") == "kokoro"
+        assert registry.resolve_backend_for_voice("", fallback="supertonic") == "supertonic"
+
+    def test_none_spec_returns_fallback(self):
+        registry = TTSBackendRegistry()
+        assert registry.resolve_backend_for_voice(None, fallback="kokoro") == "kokoro"
+
+    def test_kokoro_formula_with_star_returns_kokoro(self):
+        registry = TTSBackendRegistry()
+        assert registry.resolve_backend_for_voice("af_nova*0.7") == "kokoro"
+
+    def test_kokoro_formula_with_plus_returns_kokoro(self):
+        registry = TTSBackendRegistry()
+        assert registry.resolve_backend_for_voice("af_nova*0.7+am_liam*0.3") == "kokoro"
+
+    def test_kokoro_voice_id_resolves_to_kokoro(self):
+        registry = TTSBackendRegistry()
+        meta = TTSBackendMetadata(
+            id="kokoro",
+            name="Kokoro",
+            description="Kokoro TTS",
+            voices=("af_nova", "am_liam"),
+        )
+        registry.register(metadata=meta, factory=lambda: None)
+
+        assert registry.resolve_backend_for_voice("af_nova") == "kokoro"
+        assert registry.resolve_backend_for_voice("am_liam") == "kokoro"
+
+    def test_supertonic_voice_id_resolves_to_supertonic(self):
+        registry = TTSBackendRegistry()
+        meta = TTSBackendMetadata(
+            id="supertonic",
+            name="SuperTonic",
+            description="SuperTonic TTS",
+            voices=("M1", "M2", "F1", "F2"),
+        )
+        registry.register(metadata=meta, factory=lambda: None)
+
+        assert registry.resolve_backend_for_voice("M1") == "supertonic"
+        assert registry.resolve_backend_for_voice("F2") == "supertonic"
+
+    def test_unknown_voice_returns_fallback(self):
+        registry = TTSBackendRegistry()
+        meta = TTSBackendMetadata(
+            id="kokoro",
+            name="Kokoro",
+            description="Kokoro TTS",
+            voices=("af_nova",),
+        )
+        registry.register(metadata=meta, factory=lambda: None)
+
+        assert registry.resolve_backend_for_voice("unknown_voice") == "kokoro"
+        assert registry.resolve_backend_for_voice("unknown_voice", fallback="supertonic") == "supertonic"
+
+    def test_case_insensitive_matching(self):
+        registry = TTSBackendRegistry()
+        meta = TTSBackendMetadata(
+            id="supertonic",
+            name="SuperTonic",
+            description="SuperTonic TTS",
+            voices=("M1", "F1"),
+        )
+        registry.register(metadata=meta, factory=lambda: None)
+
+        assert registry.resolve_backend_for_voice("m1") == "supertonic"
+        assert registry.resolve_backend_for_voice("f1") == "supertonic"
+
+    def test_default_fallback_is_kokoro(self):
+        registry = TTSBackendRegistry()
+        assert registry.resolve_backend_for_voice("unknown") == "kokoro"
+
+    def test_multiple_backends_resolution(self):
+        registry = TTSBackendRegistry()
+        kokoro_meta = TTSBackendMetadata(
+            id="kokoro",
+            name="Kokoro",
+            description="Kokoro TTS",
+            voices=("af_nova",),
+        )
+        supertonic_meta = TTSBackendMetadata(
+            id="supertonic",
+            name="SuperTonic",
+            description="SuperTonic TTS",
+            voices=("M1",),
+        )
+        registry.register(metadata=kokoro_meta, factory=lambda: None)
+        registry.register(metadata=supertonic_meta, factory=lambda: None)
+
+        assert registry.resolve_backend_for_voice("af_nova") == "kokoro"
+        assert registry.resolve_backend_for_voice("M1") == "supertonic"
+
+    def test_global_wrapper_resolve_backend_for_voice(self):
+        from abogen.tts_backend_registry import resolve_backend_for_voice
+
+        # Test with empty spec
+        assert resolve_backend_for_voice("") == "kokoro"
+
+        # Test with formula
+        assert resolve_backend_for_voice("af_nova*0.7") == "kokoro"
+
+        # Test with a registered voice
+        assert resolve_backend_for_voice("af_nova") == "kokoro"
+        assert resolve_backend_for_voice("M1") == "supertonic"
