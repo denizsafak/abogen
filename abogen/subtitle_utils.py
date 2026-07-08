@@ -466,7 +466,7 @@ def sanitize_name_for_os(name, is_folder=True):
 
 
 def validate_voice_name(voice_name):
-    """Validate voice name against VOICES_INTERNAL list (case-insensitive).
+    """Validate voice name against available voices (case-insensitive).
     Handles both single voices and formulas like 'af_heart*0.5 + am_echo*0.5'.
 
     Args:
@@ -477,10 +477,10 @@ def validate_voice_name(voice_name):
             - is_valid: True if all voices in the name/formula are valid
             - invalid_voice_name: The first invalid voice found, or None if all valid
     """
-    from abogen.constants import VOICES_INTERNAL
+    from abogen.tts_backend_registry import get_metadata
 
     # Create case-insensitive lookup set (done once per call)
-    voice_lookup_lower = {v.lower() for v in VOICES_INTERNAL}
+    voice_lookup_lower = {v.lower() for v in get_metadata("kokoro").voices}
     voice_name = voice_name.strip()
 
     # Check if it's a formula (contains *)
@@ -505,7 +505,7 @@ def split_text_by_voice_markers(text, default_voice):
     """Split text by voice markers, returning list of (voice, text) tuples.
 
     IMPORTANT: Returns the last voice used so it can persist across chapters.
-    Voice names are normalized to lowercase to match VOICES_INTERNAL.
+    Voice names are normalized to lowercase to match canonical voice names.
 
     Args:
         text: Text potentially containing <<VOICE:name>> markers
@@ -518,7 +518,7 @@ def split_text_by_voice_markers(text, default_voice):
             - valid_count: Number of valid voice markers processed
             - invalid_count: Number of invalid voice markers skipped
     """
-    from abogen.constants import VOICES_INTERNAL
+    from abogen.tts_backend_registry import get_metadata
 
     voice_splits = list(_VOICE_MARKER_SEARCH_PATTERN.finditer(text))
 
@@ -560,7 +560,7 @@ def split_text_by_voice_markers(text, default_voice):
                         # Find the canonical (lowercase) voice name
                         voice_part_lower = voice_part.strip().lower()
                         canonical_voice = next(
-                            (v for v in VOICES_INTERNAL if v.lower() == voice_part_lower),
+                            (v for v in get_metadata("kokoro").voices if v.lower() == voice_part_lower),
                             voice_part.strip()
                         )
                         normalized_parts.append(f"{canonical_voice}*{weight.strip()}")
@@ -569,7 +569,7 @@ def split_text_by_voice_markers(text, default_voice):
                 # Find the canonical (lowercase) voice name
                 voice_name_lower = voice_name.lower()
                 current_voice = next(
-                    (v for v in VOICES_INTERNAL if v.lower() == voice_name_lower),
+                    (v for v in get_metadata("kokoro").voices if v.lower() == voice_name_lower),
                     voice_name
                 )
             valid_markers += 1
