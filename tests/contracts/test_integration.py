@@ -1,9 +1,9 @@
-"""Integration tests for PR #5: Migrate First Consumer to Plugin Architecture.
+"""Integration tests for the TTS Plugin Architecture.
 
 These tests verify:
-1. Consumer Flow Test: consumer → plugin → engine → session → synthesis → result
-2. Lifecycle Test: dispose, no leaks, error handling
-3. Regression Test: old path vs new path equivalence
+1. Consumer Flow: consumer → plugin → engine → session → synthesis → result
+2. Lifecycle: dispose, no leaks, error handling
+3. Regression: old path vs new path equivalence
 
 Tests use mock plugins to avoid requiring real TTS dependencies.
 """
