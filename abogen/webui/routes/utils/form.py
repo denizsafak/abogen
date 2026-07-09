@@ -7,7 +7,7 @@ from flask.typing import ResponseReturnValue
 
 from abogen.webui.service import PendingJob, JobStatus
 from abogen.webui.routes.utils.service import get_service
-from abogen.tts_backend_registry import is_registered_backend
+from abogen.tts_plugin.compat import is_registered_backend
 from abogen.webui.routes.utils.settings import (
     load_settings,
     coerce_bool,
@@ -33,7 +33,7 @@ from abogen.webui.routes.utils.common import split_profile_spec
 from abogen.utils import calculate_text_length
 from abogen.voice_profiles import serialize_profiles, normalize_profile_entry
 from abogen.chunking import ChunkLevel, build_chunks_for_chapters
-from abogen.tts_backend_registry import get_default_voice
+from abogen.tts_plugin.compat import get_default_voice
 from abogen.speaker_configs import get_config
 from abogen.kokoro_text_normalization import normalize_roman_numeral_titles
 from dataclasses import dataclass

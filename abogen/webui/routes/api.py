@@ -34,7 +34,7 @@ from abogen.normalization_settings import (
 )
 from abogen.llm_client import list_models, LLMClientError
 from abogen.kokoro_text_normalization import normalize_for_pipeline
-from abogen.tts_backend_registry import is_registered_backend
+from abogen.tts_plugin.compat import is_registered_backend
 from abogen.integrations.audiobookshelf import AudiobookshelfClient, AudiobookshelfConfig
 from abogen.integrations.calibre_opds import (
     CalibreOPDSClient,

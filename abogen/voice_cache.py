@@ -17,7 +17,7 @@ if LocalEntryNotFoundError is None:  # pragma: no cover - fallback for tests
         pass
 
 
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_plugin.compat import get_metadata
 
 _CACHE_LOCK = threading.Lock()
 _CACHED_VOICES: Set[str] = set()

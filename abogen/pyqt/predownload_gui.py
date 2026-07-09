@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from abogen.constants import COLORS
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_plugin.compat import get_metadata
 from abogen.spacy_utils import SPACY_MODELS
 import abogen.hf_tracker
 

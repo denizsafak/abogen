@@ -32,7 +32,7 @@ from abogen.constants import (
     LANGUAGE_DESCRIPTIONS,
     COLORS,
 )
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_plugin.compat import get_metadata
 import re
 import platform
 from abogen.utils import get_resource_path

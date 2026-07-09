@@ -135,3 +135,141 @@ def create_backend(backend_id: str, **kwargs: Any) -> Any:
     manager = get_plugin_manager()
     engine = manager.create_engine(backend_id, **kwargs)
     return CompatBackend(engine, **kwargs)
+
+def get_metadata(backend_id: str) -> Any:
+    """Get metadata for a specific backend using the new Plugin Architecture.
+
+    This is a drop-in replacement for the old `get_metadata()` function
+    from `abogen.tts_backend_registry`.
+
+    Args:
+        backend_id: The backend/plugin ID (e.g., "kokoro")
+
+    Returns:
+        TTSBackendMetadata-like object with voices attribute
+
+    Raises:
+        KeyError: If plugin_id is not found
+    """
+    from abogen.tts_backend import TTSBackendMetadata
+
+    manager = get_plugin_manager()
+    plugin_info = manager.get_plugin(backend_id)
+
+    if plugin_info is None:
+        raise KeyError(f"Unknown backend: {backend_id}")
+
+    manifest = plugin_info["manifest"]
+
+    # Import voice lists from plugin engines
+    # This avoids creating an engine just to get the voice list
+    voices: tuple[str, ...] = ()
+    if backend_id == "kokoro":
+        try:
+            from plugins.kokoro.engine import _KOKORO_VOICES
+            voices = _KOKORO_VOICES
+        except ImportError:
+            pass
+    elif backend_id == "supertonic":
+        try:
+            from plugins.supertonic.engine import _SUPERTONIC_VOICES
+            voices = _SUPERTONIC_VOICES
+        except ImportError:
+            pass
+
+    return TTSBackendMetadata(
+        id=manifest.id,
+        name=manifest.name,
+        description=manifest.description,
+        voices=voices,
+    )
+
+
+def is_registered_backend(backend_id: str) -> bool:
+    """Check if a backend is registered using the new Plugin Architecture.
+
+    This is a drop-in replacement for the old `is_registered_backend()` function
+    from `abogen.tts_backend_registry`.
+
+    Args:
+        backend_id: The backend/plugin ID (e.g., "kokoro")
+
+    Returns:
+        True if the plugin is loaded, False otherwise
+    """
+    manager = get_plugin_manager()
+    return manager.has_plugin(backend_id)
+
+
+def resolve_backend_for_voice(
+    spec: str,
+    fallback: str = "kokoro",
+) -> str:
+    """Determine which backend owns the given voice specification.
+
+    This is a drop-in replacement for the old `resolve_backend_for_voice()` function
+    from `abogen.tts_backend_registry`.
+
+    Resolution rules:
+    1. Empty spec -> fallback
+    2. Kokoro formula (contains '*' or '+') -> "kokoro"
+    3. Exact voice ID match against registered plugins -> plugin id
+    4. Unknown voice -> fallback
+
+    Args:
+        spec: Voice specification (e.g., "af_nova", "M1", "af_nova*0.7+am_liam*0.3")
+        fallback: Fallback backend ID if no match is found
+
+    Returns:
+        The backend/plugin ID that owns the voice
+    """
+    raw = str(spec or "").strip()
+    if not raw:
+        return fallback
+
+    # Kokoro formula detection
+    if "*" in raw or "+" in raw:
+        return "kokoro"
+
+    manager = get_plugin_manager()
+    upper = raw.upper()
+
+    # Check each plugin's voices
+    for plugin_info in manager.list_plugins():
+        manifest = plugin_info
+        for voice_source in manifest.engine.voiceSources:
+            if voice_source.type == "list" and isinstance(voice_source.config, dict):
+                try:
+                    engine = manager.create_engine(manifest.id)
+                    if hasattr(engine, "listVoices"):
+                        voice_manifests = engine.listVoices(voice_source.id)
+                        voice_ids = [v.id.upper() for v in voice_manifests]
+                        if upper in voice_ids:
+                            engine.dispose()
+                            return manifest.id
+                    engine.dispose()
+                except Exception:
+                    continue
+
+    return fallback
+
+
+def get_default_voice(backend_id: str, fallback: str = "") -> str:
+    """Return the first voice of a backend, or fallback if none.
+
+    This is a drop-in replacement for the old `get_default_voice()` function
+    from `abogen.tts_backend_registry`.
+
+    Args:
+        backend_id: The backend/plugin ID (e.g., "kokoro")
+        fallback: Fallback voice if no voices are available
+
+    Returns:
+        The first voice ID, or fallback if none
+    """
+    try:
+        metadata = get_metadata(backend_id)
+        voices = metadata.voices
+        return voices[0] if voices else fallback
+    except KeyError:
+        return fallback

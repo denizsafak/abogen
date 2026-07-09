@@ -15,7 +15,7 @@ from abogen.normalization_settings import build_apostrophe_config
 from abogen.text_extractor import extract_from_path
 from abogen.voice_cache import ensure_voice_assets
 from abogen.webui.conversion_runner import SAMPLE_RATE, SPLIT_PATTERN, _select_device, _to_float32, _resolve_voice, _spec_to_voice_ids
-from abogen.tts_backend_registry import create_backend
+from abogen.tts_plugin.compat import create_backend
 
 
 _MARKER_RE = re.compile(re.escape(MARKER_PREFIX) + r"(?P<code>[A-Z0-9_]+)" + re.escape(MARKER_SUFFIX))

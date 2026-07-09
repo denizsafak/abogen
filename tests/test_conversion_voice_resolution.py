@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from typing import cast
 
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_plugin.compat import get_metadata
 from abogen.webui.conversion_runner import (
     _chapter_voice_spec,
     _chunk_voice_spec,

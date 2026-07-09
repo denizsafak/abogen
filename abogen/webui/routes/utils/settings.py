@@ -7,7 +7,7 @@ from abogen.constants import (
     SUBTITLE_FORMATS,
     SUPPORTED_SOUND_FORMATS,
 )
-from abogen.tts_backend_registry import get_default_voice
+from abogen.tts_plugin.compat import get_default_voice
 from abogen.normalization_settings import (
     DEFAULT_LLM_PROMPT,
     environment_llm_defaults,

@@ -3,7 +3,7 @@ from typing import cast
 
 import pytest
 
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_plugin.compat import get_metadata
 from abogen.voice_cache import (
     LocalEntryNotFoundError,
     _CACHED_VOICES,

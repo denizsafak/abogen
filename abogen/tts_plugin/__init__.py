@@ -61,6 +61,10 @@ Usage:
         reset_plugin_manager,
         # Compatibility
         create_backend,
+        get_metadata,
+        is_registered_backend,
+        resolve_backend_for_voice,
+        get_default_voice,
     )
 """
 
@@ -106,7 +110,13 @@ from abogen.tts_plugin.types import (
 
 # Plugin Manager and Compatibility
 from abogen.tts_plugin.plugin_manager import get_plugin_manager, reset_plugin_manager
-from abogen.tts_plugin.compat import create_backend
+from abogen.tts_plugin.compat import (
+    create_backend,
+    get_default_voice,
+    get_metadata,
+    is_registered_backend,
+    resolve_backend_for_voice,
+)
 
 __all__ = [
     # Types
@@ -153,4 +163,8 @@ __all__ = [
     "reset_plugin_manager",
     # Compatibility
     "create_backend",
+    "get_metadata",
+    "is_registered_backend",
+    "resolve_backend_for_voice",
+    "get_default_voice",
 ]

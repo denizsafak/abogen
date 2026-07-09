@@ -20,7 +20,7 @@ import numpy as np
 import soundfile as sf
 import static_ffmpeg
 
-from abogen.tts_backend_registry import get_metadata, is_registered_backend, resolve_backend_for_voice
+from abogen.tts_plugin.compat import get_metadata, is_registered_backend, resolve_backend_for_voice
 from abogen.epub3.exporter import build_epub3_package
 from abogen.kokoro_text_normalization import ApostropheConfig, normalize_for_pipeline, HAS_NUM2WORDS
 from abogen.normalization_settings import (
@@ -40,8 +40,7 @@ from abogen.utils import (
     get_user_output_path,
     load_config,
 )
-from abogen.tts_backend_registry import create_backend
-from abogen.tts_backend import TTSBackend
+from abogen.tts_plugin.compat import create_backend
 from abogen.voice_cache import ensure_voice_assets
 from abogen.voice_formulas import extract_voice_ids, get_new_voice
 from abogen.voice_profiles import load_profiles, normalize_profile_entry

@@ -538,7 +538,7 @@ class LoadPipelineThread(Thread):
 
     def run(self):
         try:
-            from abogen.tts_backend_registry import create_backend
+            from abogen.tts_plugin.compat import create_backend
 
             backend = create_backend(
                 "kokoro", lang_code=self.lang_code, device=self.device

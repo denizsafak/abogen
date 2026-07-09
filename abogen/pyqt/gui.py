@@ -86,7 +86,7 @@ from abogen.constants import (
     COLORS,
     SUBTITLE_FORMATS,
 )
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_plugin.compat import get_metadata
 import threading
 from abogen.pyqt.voice_formula_gui import VoiceFormulaDialog
 from abogen.voice_profiles import load_profiles

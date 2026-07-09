@@ -18,9 +18,9 @@ from abogen.constants import (
     SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION,
     SAMPLE_VOICE_TEXTS,
 )
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_plugin.compat import get_metadata
 from abogen.speaker_configs import list_configs
-from abogen.tts_backend_registry import create_backend
+from abogen.tts_plugin.compat import create_backend
 from abogen.webui.conversion_runner import _select_device, _to_float32, SAMPLE_RATE, SPLIT_PATTERN
 
 _preview_pipeline_lock = threading.RLock()

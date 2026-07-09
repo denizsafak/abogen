@@ -1,7 +1,7 @@
 import re
 from typing import List, Tuple
 
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_plugin.compat import get_metadata
 
 
 # Calls parsing and loads the voice to gpu or cpu

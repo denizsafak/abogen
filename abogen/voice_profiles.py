@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any, Dict, Iterable, List, Tuple
 
-from abogen.tts_backend_registry import get_metadata, is_registered_backend
+from abogen.tts_plugin.compat import get_metadata, is_registered_backend
 from abogen.utils import get_user_config_path
 
 
