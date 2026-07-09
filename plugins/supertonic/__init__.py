@@ -33,7 +33,7 @@ from .engine import SuperTonicEngine
 
 def _load_supertonic_pipeline(sample_rate: int = 24000, auto_download: bool = True, total_steps: int = 5) -> Any:
     """Lazy-load SuperTonic dependencies and create pipeline."""
-    from abogen.tts_backends.supertonic import SupertonicPipeline
+    from plugins.supertonic.pipeline import SupertonicPipeline
 
     return SupertonicPipeline(
         sample_rate=sample_rate,

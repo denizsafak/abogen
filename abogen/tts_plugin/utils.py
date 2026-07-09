@@ -14,14 +14,24 @@ from abogen.tts_plugin.plugin_manager import get_plugin_manager
 
 
 def get_voices(plugin_id: str) -> tuple[str, ...]:
-    """Return the voice-id tuple for *plugin_id*."""
-    if plugin_id == "kokoro":
-        from plugins.kokoro.engine import _KOKORO_VOICES
-        return _KOKORO_VOICES
-    if plugin_id == "supertonic":
-        from plugins.supertonic.engine import _SUPERTONIC_VOICES
-        return _SUPERTONIC_VOICES
-    return ()
+    """Return the voice-id tuple for *plugin_id*.
+
+    Uses the official Plugin Architecture: PluginManager → Engine → VoiceLister.
+    """
+    manager = get_plugin_manager()
+    if not manager.has_plugin(plugin_id):
+        return ()
+
+    engine = manager.create_engine(plugin_id)
+    try:
+        from abogen.tts_plugin.capabilities import VoiceLister
+
+        if isinstance(engine, VoiceLister):
+            manifests = engine.listVoices("builtin")
+            return tuple(v.id for v in manifests)
+        return ()
+    finally:
+        engine.dispose()
 
 
 def get_default_voice(plugin_id: str, fallback: str = "") -> str:
