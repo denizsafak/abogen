@@ -1,10 +1,10 @@
-"""Integration tests for Plugin Manager and compatibility adapter."""
+"""Integration tests for Plugin Manager and direct utility functions."""
 
 import pytest
 from unittest.mock import MagicMock, patch
 
 from abogen.tts_plugin.plugin_manager import PluginManager, get_plugin_manager, reset_plugin_manager
-from abogen.tts_plugin.compat import CompatBackend, create_backend
+from abogen.tts_plugin.utils import Pipeline, create_pipeline
 from abogen.tts_plugin.engine import Engine, EngineSession
 from abogen.tts_plugin.types import SynthesisRequest, SynthesizedAudio, AudioFormat
 
@@ -110,27 +110,27 @@ class TestPluginManager:
         reset_plugin_manager()
 
 
-class TestCompatBackend:
-    """Test CompatBackend functionality."""
+class TestPipeline:
+    """Test Pipeline functionality."""
     
-    def test_compat_backend_creation(self):
-        """CompatBackend can be created."""
+    def test_pipeline_creation(self):
+        """Pipeline can be created."""
         engine = FakeEngine()
-        backend = CompatBackend(engine)
+        backend = Pipeline(engine)
         assert backend is not None
     
-    def test_compat_backend_callable(self):
-        """CompatBackend is callable like old TTSBackend."""
+    def test_pipeline_callable(self):
+        """Pipeline is callable like old TTSBackend."""
         engine = FakeEngine()
-        backend = CompatBackend(engine)
+        backend = Pipeline(engine)
         
         # Should be callable
         assert callable(backend)
     
-    def test_compat_backend_synthesize(self):
-        """CompatBackend can synthesize text."""
+    def test_pipeline_synthesize(self):
+        """Pipeline can synthesize text."""
         engine = FakeEngine()
-        backend = CompatBackend(engine)
+        backend = Pipeline(engine)
         
         # Call the backend
         segments = list(backend("Hello world", voice="default", speed=1.0))
@@ -144,10 +144,10 @@ class TestCompatBackend:
         assert hasattr(segment, "audio")
         assert segment.graphemes == "Hello world"
     
-    def test_compat_backend_dispose(self):
-        """CompatBackend can be disposed."""
+    def test_pipeline_dispose(self):
+        """Pipeline can be disposed."""
         engine = FakeEngine()
-        backend = CompatBackend(engine)
+        backend = Pipeline(engine)
         
         # Create a session by calling
         list(backend("test"))
@@ -159,33 +159,33 @@ class TestCompatBackend:
         backend.dispose()
 
 
-class TestCreateBackendCompat:
-    """Test create_backend compatibility function."""
+class TestCreatePipelineCompat:
+    """Test create_pipeline utility function."""
     
-    def test_create_backend_returns_callable(self):
-        """create_backend returns a callable backend."""
+    def test_create_pipeline_returns_callable(self):
+        """create_pipeline returns a callable backend."""
         # Mock the plugin manager
-        with patch("abogen.tts_plugin.compat.get_plugin_manager") as mock_get_manager:
+        with patch("abogen.tts_plugin.utils.get_plugin_manager") as mock_get_manager:
             mock_manager = MagicMock()
             mock_get_manager.return_value = mock_manager
             
             mock_engine = FakeEngine()
             mock_manager.create_engine.return_value = mock_engine
             
-            backend = create_backend("kokoro", lang_code="a", device="cpu")
+            backend = create_pipeline("kokoro", lang_code="a", device="cpu")
             
             assert callable(backend)
             mock_manager.create_engine.assert_called_once_with("kokoro", lang_code="a", device="cpu")
     
-    def test_create_backend_raises_for_unknown_plugin(self):
-        """create_backend raises KeyError for unknown plugins."""
-        with patch("abogen.tts_plugin.compat.get_plugin_manager") as mock_get_manager:
+    def test_create_pipeline_raises_for_unknown_plugin(self):
+        """create_pipeline raises KeyError for unknown plugins."""
+        with patch("abogen.tts_plugin.utils.get_plugin_manager") as mock_get_manager:
             mock_manager = MagicMock()
             mock_get_manager.return_value = mock_manager
             mock_manager.create_engine.side_effect = KeyError("Plugin not found")
             
             with pytest.raises(KeyError):
-                create_backend("nonexistent")
+                create_pipeline("nonexistent")
 
 
 class TestPluginManagerWithFakePlugins:

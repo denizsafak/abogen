@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from typing import cast
 
-from abogen.tts_plugin.compat import get_metadata
+from abogen.tts_plugin.utils import get_voices
 from abogen.webui.conversion_runner import (
     _chapter_voice_spec,
     _chunk_voice_spec,
@@ -49,4 +49,4 @@ def test_voice_collection_includes_formula_components():
     voices = _collect_required_voice_ids(job)
 
     assert {"af_nova", "am_liam"}.issubset(voices)
-    assert voices.issuperset(get_metadata("kokoro").voices)
+    assert voices.issuperset(get_voices("kokoro"))

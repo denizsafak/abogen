@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from abogen.constants import COLORS
-from abogen.tts_plugin.compat import get_metadata
+from abogen.tts_plugin.utils import get_voices
 from abogen.spacy_utils import SPACY_MODELS
 import abogen.hf_tracker
 
@@ -115,7 +115,7 @@ class PreDownloadWorker(QThread):
             self._voices_success = False
             return
 
-        voice_list = get_metadata("kokoro").voices
+        voice_list = get_voices("kokoro")
         for idx, voice in enumerate(voice_list, start=1):
             if self._cancelled:
                 self._voices_success = False
@@ -463,14 +463,14 @@ class PreDownloadDialog(QDialog):
         try:
             from huggingface_hub import try_to_load_from_cache
 
-            for voice in get_metadata("kokoro").voices:
+            for voice in get_voices("kokoro"):
                 if not try_to_load_from_cache(
                     repo_id="hexgrad/Kokoro-82M", filename=f"voices/{voice}.pt"
                 ):
                     missing.append(voice)
         except Exception:
             # If HF missing, report all as missing
-            return False, list(get_metadata("kokoro").voices)
+            return False, list(get_voices("kokoro"))
         return (len(missing) == 0), missing
 
     def _check_kokoro_model(self) -> bool:

@@ -34,7 +34,7 @@ from abogen.normalization_settings import (
 )
 from abogen.llm_client import list_models, LLMClientError
 from abogen.kokoro_text_normalization import normalize_for_pipeline
-from abogen.tts_plugin.compat import is_registered_backend
+from abogen.tts_plugin.utils import is_plugin_registered
 from abogen.integrations.audiobookshelf import AudiobookshelfClient, AudiobookshelfConfig
 from abogen.integrations.calibre_opds import (
     CalibreOPDSClient,
@@ -64,7 +64,7 @@ def api_save_voice_profile() -> ResponseReturnValue:
     if profile is None:
         # Speaker Studio payload format
         provider = str(payload.get("provider") or "kokoro").strip().lower()
-        if not is_registered_backend(provider):
+        if not is_plugin_registered(provider):
             provider = "kokoro"
         if provider == "supertonic":
             profile = {
@@ -231,7 +231,7 @@ def api_speaker_preview() -> ResponseReturnValue:
     use_gpu = settings.get("use_gpu", False)
 
     base_spec, speaker_name = split_profile_spec(voice)
-    resolved_provider = tts_provider if is_registered_backend(tts_provider) else ""
+    resolved_provider = tts_provider if is_plugin_registered(tts_provider) else ""
 
     if speaker_name:
         entry = normalize_profile_entry(load_profiles().get(speaker_name))

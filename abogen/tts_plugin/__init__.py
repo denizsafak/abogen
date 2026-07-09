@@ -13,7 +13,7 @@ Public modules:
 - plugin: Plugin contract (create_engine function signature)
 - loader: Plugin discovery and loading
 - plugin_manager: Plugin management and engine creation
-- compat: Backward compatibility adapter for old create_backend() API
+- utils: Direct utility functions (get_voices, create_pipeline, etc.)
 
 Usage:
     from abogen.tts_plugin import (
@@ -59,12 +59,12 @@ Usage:
         # Plugin Manager
         get_plugin_manager,
         reset_plugin_manager,
-        # Compatibility
-        create_backend,
-        get_metadata,
-        is_registered_backend,
-        resolve_backend_for_voice,
+        # Utils
+        get_voices,
         get_default_voice,
+        is_plugin_registered,
+        resolve_voice_to_plugin,
+        create_pipeline,
     )
 """
 
@@ -108,14 +108,14 @@ from abogen.tts_plugin.types import (
     VoiceSelection,
 )
 
-# Plugin Manager and Compatibility
+# Plugin Manager and Utils
 from abogen.tts_plugin.plugin_manager import get_plugin_manager, reset_plugin_manager
-from abogen.tts_plugin.compat import (
-    create_backend,
+from abogen.tts_plugin.utils import (
+    create_pipeline,
     get_default_voice,
-    get_metadata,
-    is_registered_backend,
-    resolve_backend_for_voice,
+    get_voices,
+    is_plugin_registered,
+    resolve_voice_to_plugin,
 )
 
 __all__ = [
@@ -161,10 +161,10 @@ __all__ = [
     # Plugin Manager
     "get_plugin_manager",
     "reset_plugin_manager",
-    # Compatibility
-    "create_backend",
-    "get_metadata",
-    "is_registered_backend",
-    "resolve_backend_for_voice",
+    # Utils
+    "get_voices",
     "get_default_voice",
+    "is_plugin_registered",
+    "resolve_voice_to_plugin",
+    "create_pipeline",
 ]

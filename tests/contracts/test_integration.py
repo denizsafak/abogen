@@ -17,7 +17,7 @@ import numpy as np
 from abogen.tts_plugin.engine import Engine, EngineSession
 from abogen.tts_plugin.errors import EngineError
 from abogen.tts_plugin.plugin_manager import PluginManager, get_plugin_manager, reset_plugin_manager
-from abogen.tts_plugin.compat import CompatBackend, create_backend
+from abogen.tts_plugin.utils import Pipeline, create_pipeline
 from abogen.tts_plugin.types import (
     AudioFormat,
     Duration,
@@ -148,8 +148,8 @@ class TestConsumerFlow:
         assert result.format.mime == "audio/wav"
         assert result.duration.seconds > 0
     
-    def test_consumer_flow_via_compat_adapter(self):
-        """Verify flow through compatibility adapter matches direct flow."""
+    def test_consumer_flow_via_pipeline(self):
+        """Verify flow through Pipeline utility matches direct flow."""
         manager = PluginManager()
         
         # Register mock plugin
@@ -157,9 +157,9 @@ class TestConsumerFlow:
         manager._plugins["mock_tts"] = mock_plugin
         manager._loaded = True
         
-        # Use compat adapter
-        with patch("abogen.tts_plugin.compat.get_plugin_manager", return_value=manager):
-            backend = create_backend("mock_tts")
+        # Use Pipeline utility
+        with patch("abogen.tts_plugin.utils.get_plugin_manager", return_value=manager):
+            backend = create_pipeline("mock_tts")
             
             # Call like old TTSBackend
             segments = list(backend("Hello world", voice="default", speed=1.0))
@@ -296,8 +296,8 @@ class TestRegression:
         manager._loaded = True
         
         # New path: Plugin Manager → Engine → Session → Synthesis
-        with patch("abogen.tts_plugin.compat.get_plugin_manager", return_value=manager):
-            new_backend = create_backend("mock_tts")
+        with patch("abogen.tts_plugin.utils.get_plugin_manager", return_value=manager):
+            new_backend = create_pipeline("mock_tts")
             new_segments = list(new_backend("Hello world", voice="default", speed=1.0))
         
         # Old path: Direct MockEngine (simulating old registry)
@@ -320,15 +320,15 @@ class TestRegression:
         # Both should have same format
         assert new_segments[0].audio.dtype == np.float32
     
-    def test_compat_adapter_matches_old_interface(self):
-        """Compat adapter should match old TTSBackend interface."""
+    def test_pipeline_matches_old_interface(self):
+        """Pipeline utility should match old TTSBackend interface."""
         manager = PluginManager()
         mock_plugin = create_mock_plugin()
         manager._plugins["mock_tts"] = mock_plugin
         manager._loaded = True
         
-        with patch("abogen.tts_plugin.compat.get_plugin_manager", return_value=manager):
-            backend = create_backend("mock_tts", lang_code="a", device="cpu")
+        with patch("abogen.tts_plugin.utils.get_plugin_manager", return_value=manager):
+            backend = create_pipeline("mock_tts", lang_code="a", device="cpu")
             
             # Old interface: pipeline(text, voice=..., speed=..., split_pattern=...)
             segments = list(backend(
@@ -398,3 +398,23 @@ class TestPluginManagerIntegration:
         
         # Cache should be empty
         assert len(manager._engines) == 0
+
+
+class TestNoCompatLayer:
+    """Regression: confirm the compatibility layer has been removed."""
+
+    def test_compat_module_does_not_exist(self):
+        """abogen.tts_plugin.compat must not be importable."""
+        import importlib
+        with pytest.raises((ImportError, ModuleNotFoundError)):
+            importlib.import_module("abogen.tts_plugin.compat")
+
+    def test_consumers_use_plugin_architecture_directly(self):
+        """Key consumers import from abogen.tts_plugin.utils, not compat."""
+        import inspect, abogen.voice_profiles, abogen.voice_formulas, abogen.voice_cache
+
+        for mod in (abogen.voice_profiles, abogen.voice_formulas, abogen.voice_cache):
+            source = inspect.getsource(mod)
+            assert "tts_plugin.compat" not in source, (
+                f"{mod.__name__} still references tts_plugin.compat"
+            )

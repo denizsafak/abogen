@@ -20,7 +20,7 @@ import numpy as np
 import soundfile as sf
 import static_ffmpeg
 
-from abogen.tts_plugin.compat import get_metadata, is_registered_backend, resolve_backend_for_voice
+from abogen.tts_plugin.utils import get_voices, is_plugin_registered, resolve_voice_to_plugin
 from abogen.epub3.exporter import build_epub3_package
 from abogen.kokoro_text_normalization import ApostropheConfig, normalize_for_pipeline, HAS_NUM2WORDS
 from abogen.normalization_settings import (
@@ -40,7 +40,7 @@ from abogen.utils import (
     get_user_output_path,
     load_config,
 )
-from abogen.tts_plugin.compat import create_backend
+from abogen.tts_plugin.utils import create_pipeline
 from abogen.voice_cache import ensure_voice_assets
 from abogen.voice_formulas import extract_voice_ids, get_new_voice
 from abogen.voice_profiles import load_profiles, normalize_profile_entry
@@ -119,7 +119,7 @@ def _formula_from_kokoro_entry(entry: Mapping[str, Any]) -> str:
 
 
 def _infer_provider_from_spec(value: Any, fallback: str = "kokoro") -> str:
-    return resolve_backend_for_voice(str(value or ""), fallback=fallback)
+    return resolve_voice_to_plugin(str(value or ""), fallback=fallback)
 
 
 class _JobCancelled(Exception):
@@ -568,7 +568,7 @@ def _spec_to_voice_ids(spec: Any) -> Set[str]:
             return set(extract_voice_ids(text))
         except ValueError:
             return set()
-    if text in get_metadata("kokoro").voices:
+    if text in get_voices("kokoro"):
         return {text}
     return set()
 
@@ -632,7 +632,7 @@ def _collect_required_voice_ids(job: Job) -> Set[str]:
             for key in ("resolved_voice", "voice_formula", "voice"):
                 voices.update(_spec_to_voice_ids(payload.get(key)))
 
-    voices.update(get_metadata("kokoro").voices)
+    voices.update(get_voices("kokoro"))
     return voices
 
 
@@ -1566,7 +1566,7 @@ def run_conversion_job(job: Job) -> None:
         def get_pipeline(provider: str) -> Any:
             nonlocal kokoro_cache_ready
             provider_norm = str(provider or "kokoro").strip().lower() or "kokoro"
-            if not is_registered_backend(provider_norm):
+            if not is_plugin_registered(provider_norm):
                 provider_norm = "kokoro"
 
             existing = pipelines.get(provider_norm)
@@ -1574,7 +1574,7 @@ def run_conversion_job(job: Job) -> None:
                 return existing
 
             if provider_norm == "supertonic":
-                pipelines[provider_norm] = create_backend(
+                pipelines[provider_norm] = create_pipeline(
                     "supertonic",
                     sample_rate=SAMPLE_RATE,
                     auto_download=True,
@@ -1589,7 +1589,7 @@ def run_conversion_job(job: Job) -> None:
             if not disable_gpu:
                 device = _select_device()
             # Create KPipeline instance directly (conforms to TTSBackend protocol)
-            pipelines[provider_norm] = create_backend(
+            pipelines[provider_norm] = create_pipeline(
                 "kokoro",
                 lang_code=job.language,
                 device=device
@@ -2441,7 +2441,7 @@ def _load_pipeline(job: Job):
     disable_gpu = not job.use_gpu or not cfg.get("use_gpu", True)
     provider = str(getattr(job, "tts_provider", "kokoro") or "kokoro").strip().lower()
     if provider == "supertonic":
-        return create_backend(
+        return create_pipeline(
             "supertonic",
             sample_rate=SAMPLE_RATE,
             auto_download=True,
@@ -2451,7 +2451,7 @@ def _load_pipeline(job: Job):
     device = "cpu"
     if not disable_gpu:
         device = _select_device()
-    return create_backend("kokoro", lang_code=job.language, device=device)
+    return create_pipeline("kokoro", lang_code=job.language, device=device)
 
 
 def _select_device() -> str:

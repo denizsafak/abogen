@@ -477,10 +477,10 @@ def validate_voice_name(voice_name):
             - is_valid: True if all voices in the name/formula are valid
             - invalid_voice_name: The first invalid voice found, or None if all valid
     """
-    from abogen.tts_plugin.compat import get_metadata
+    from abogen.tts_plugin.utils import get_voices
 
     # Create case-insensitive lookup set (done once per call)
-    voice_lookup_lower = {v.lower() for v in get_metadata("kokoro").voices}
+    voice_lookup_lower = {v.lower() for v in get_voices("kokoro")}
     voice_name = voice_name.strip()
 
     # Check if it's a formula (contains *)
@@ -518,7 +518,7 @@ def split_text_by_voice_markers(text, default_voice):
             - valid_count: Number of valid voice markers processed
             - invalid_count: Number of invalid voice markers skipped
     """
-    from abogen.tts_plugin.compat import get_metadata
+    from abogen.tts_plugin.utils import get_voices
 
     voice_splits = list(_VOICE_MARKER_SEARCH_PATTERN.finditer(text))
 
@@ -560,7 +560,7 @@ def split_text_by_voice_markers(text, default_voice):
                         # Find the canonical (lowercase) voice name
                         voice_part_lower = voice_part.strip().lower()
                         canonical_voice = next(
-                            (v for v in get_metadata("kokoro").voices if v.lower() == voice_part_lower),
+                            (v for v in get_voices("kokoro") if v.lower() == voice_part_lower),
                             voice_part.strip()
                         )
                         normalized_parts.append(f"{canonical_voice}*{weight.strip()}")
@@ -569,7 +569,7 @@ def split_text_by_voice_markers(text, default_voice):
                 # Find the canonical (lowercase) voice name
                 voice_name_lower = voice_name.lower()
                 current_voice = next(
-                    (v for v in get_metadata("kokoro").voices if v.lower() == voice_name_lower),
+                    (v for v in get_voices("kokoro") if v.lower() == voice_name_lower),
                     voice_name
                 )
             valid_markers += 1

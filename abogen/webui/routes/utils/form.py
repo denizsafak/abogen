@@ -7,7 +7,7 @@ from flask.typing import ResponseReturnValue
 
 from abogen.webui.service import PendingJob, JobStatus
 from abogen.webui.routes.utils.service import get_service
-from abogen.tts_plugin.compat import is_registered_backend
+from abogen.tts_plugin.utils import is_plugin_registered
 from abogen.webui.routes.utils.settings import (
     load_settings,
     coerce_bool,
@@ -33,7 +33,7 @@ from abogen.webui.routes.utils.common import split_profile_spec
 from abogen.utils import calculate_text_length
 from abogen.voice_profiles import serialize_profiles, normalize_profile_entry
 from abogen.chunking import ChunkLevel, build_chunks_for_chapters
-from abogen.tts_plugin.compat import get_default_voice
+from abogen.tts_plugin.utils import get_default_voice
 from abogen.speaker_configs import get_config
 from abogen.kokoro_text_normalization import normalize_roman_numeral_titles
 from dataclasses import dataclass
@@ -580,7 +580,7 @@ def apply_book_step_form(
     # spec (e.g. "speaker:Name" for saved speakers, or a Kokoro mix formula).
     # This enables mixed-provider conversions (e.g. narrator=SuperTonic, characters=Kokoro).
     provider_value = str(form.get("tts_provider") or "").strip().lower()
-    if is_registered_backend(provider_value):
+    if is_plugin_registered(provider_value):
         pending.tts_provider = provider_value
 
     # Determine the base speaker selection (saved speaker ref or raw voice).
