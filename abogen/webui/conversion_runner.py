@@ -1859,45 +1859,51 @@ def run_conversion_job(job: Job) -> None:
                     split_pattern=split_pattern,
                 )
 
-            for segment in segment_iter:
-                canceller()
-                graphemes_raw = getattr(segment, "graphemes", "") or ""
-                graphemes = graphemes_raw.strip()
-
-                audio = _to_float32(getattr(segment, "audio", None))
-                if audio.size == 0:
-                    continue
-
-                local_segments += 1
-                if chapter_sink:
-                    chapter_sink.write(audio)
-                if audio_sink:
-                    audio_sink.write(audio)
-
-                duration = len(audio) / SAMPLE_RATE
-                processed_chars += len(graphemes)
-                job.processed_characters = processed_chars
-                if job.total_characters:
-                    job.progress = min(processed_chars / job.total_characters, 0.999)
-                else:
-                    job.progress = 0.0 if processed_chars == 0 else 0.999
-
-                preview_text = graphemes or (graphemes_raw[:80] if graphemes_raw else "[silence]")
-                prefix = f"{preview_prefix} · " if preview_prefix else ""
-                job.add_log(f"{prefix}{processed_chars:,}/{job.total_characters or '—'}: {preview_text[:80]}")
-
-                if subtitle_writer and audio_sink and graphemes:
-                    subtitle_writer.write_segment(
-                        index=subtitle_index,
-                        text=graphemes,
-                        start=current_time,
-                        end=current_time + duration,
-                    )
-                    subtitle_index += 1
-
-                if audio_sink:
-                    current_time += duration
-
+            try:
+                for segment in segment_iter:
+                    canceller()
+                    graphemes_raw = getattr(segment, "graphemes", "") or ""
+                    graphemes = graphemes_raw.strip()
+    
+                    audio = _to_float32(getattr(segment, "audio", None))
+                    if audio.size == 0:
+                        continue
+    
+                    local_segments += 1
+                    if chapter_sink:
+                        chapter_sink.write(audio)
+                    if audio_sink:
+                        audio_sink.write(audio)
+    
+                    duration = len(audio) / SAMPLE_RATE
+                    processed_chars += len(graphemes)
+                    job.processed_characters = processed_chars
+                    if job.total_characters:
+                        job.progress = min(processed_chars / job.total_characters, 0.999)
+                    else:
+                        job.progress = 0.0 if processed_chars == 0 else 0.999
+    
+                    preview_text = graphemes or (graphemes_raw[:80] if graphemes_raw else "[silence]")
+                    prefix = f"{preview_prefix} · " if preview_prefix else ""
+                    job.add_log(f"{prefix}{processed_chars:,}/{job.total_characters or '—'}: {preview_text[:80]}")
+    
+                    if subtitle_writer and audio_sink and graphemes:
+                        subtitle_writer.write_segment(
+                            index=subtitle_index,
+                            text=graphemes,
+                            start=current_time,
+                            end=current_time + duration,
+                        )
+                        subtitle_index += 1
+    
+                    if audio_sink:
+                        current_time += duration
+                        
+            except OverflowError as exc:
+                job.add_log(
+                    f"Skipped chunk — number too large for TTS conversion: {exc}",
+                    level="warning",
+                )
             return local_segments
 
         def append_silence(
