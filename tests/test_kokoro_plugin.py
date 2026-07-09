@@ -4,7 +4,7 @@ These tests verify that the Kokoro plugin:
 - Loads correctly through the Plugin Loader
 - Has a valid manifest
 - Creates a valid Engine
-- Satisfies the Engine/EngineSession contract
+- Satisfies the Engine/EngineSession contract (via EngineContractMixin)
 - Implements VoiceLister capability
 """
 
@@ -28,23 +28,45 @@ from abogen.tts_plugin.types import (
     VoiceSelection,
 )
 
+from tests.contracts.engine_contract import EngineContractMixin
+
 
 # ──────────────────────────────────────────────────────────────
-# Path fixtures
+# Helpers
 # ──────────────────────────────────────────────────────────────
-
-@pytest.fixture
-def kokoro_plugin_dir() -> Path:
-    return Path(__file__).parent.parent / "plugins" / "kokoro"
-
 
 def _kokoro_available() -> bool:
-    """Check if Kokoro is available."""
     try:
         from kokoro import KPipeline  # type: ignore[import-not-found]
         return True
     except ImportError:
         return False
+
+
+def _make_mock_engine() -> Any:
+    from plugins.kokoro.engine import KokoroEngine
+
+    class MockPipeline:
+        def __call__(self, text, voice, speed, split_pattern=None):
+            class MockSegment:
+                def __init__(self):
+                    self.audio = MockAudio()
+            class MockAudio:
+                def numpy(self):
+                    import numpy as np
+                    return np.zeros(24000, dtype="float32")
+            return [MockSegment()]
+
+    return KokoroEngine(MockPipeline(), "a")
+
+
+# ──────────────────────────────────────────────────────────────
+# Fixtures
+# ──────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def kokoro_plugin_dir() -> Path:
+    return Path(__file__).parent.parent / "plugins" / "kokoro"
 
 
 @pytest.fixture
@@ -62,12 +84,16 @@ def host_context(tmp_path: Path) -> HostContext:
     )
 
 
+@pytest.fixture
+def engine() -> Engine:
+    return _make_mock_engine()
+
+
 # ──────────────────────────────────────────────────────────────
 # Plugin Loading Tests
 # ──────────────────────────────────────────────────────────────
 
 class TestKokoroPluginLoading:
-    """Test that Kokoro plugin loads correctly through the Loader."""
 
     def test_plugin_loads_successfully(self, kokoro_plugin_dir: Path) -> None:
         result = load_plugin_from_dir(kokoro_plugin_dir)
@@ -93,8 +119,7 @@ class TestKokoroPluginLoading:
     def test_plugin_manifest_capabilities(self, kokoro_plugin_dir: Path) -> None:
         result = load_plugin_from_dir(kokoro_plugin_dir)
         assert result.success is True
-        manifest = result.manifest
-        assert "voice_list" in manifest.capabilities
+        assert "voice_list" in result.manifest.capabilities
 
     def test_plugin_manifest_engine(self, kokoro_plugin_dir: Path) -> None:
         result = load_plugin_from_dir(kokoro_plugin_dir)
@@ -106,115 +131,38 @@ class TestKokoroPluginLoading:
 
 
 # ──────────────────────────────────────────────────────────────
-# Engine Creation Tests
+# Engine Creation (real backend, skipped if not installed)
 # ──────────────────────────────────────────────────────────────
 
 class TestKokoroEngineCreation:
-    """Test that Kokoro Engine can be created."""
 
-    @pytest.mark.skipif(
-        not _kokoro_available(),
-        reason="Kokoro not installed"
-    )
+    @pytest.mark.skipif(not _kokoro_available(), reason="Kokoro not installed")
     def test_create_engine(self, kokoro_plugin_dir: Path, host_context: HostContext) -> None:
         result = load_plugin_from_dir(kokoro_plugin_dir)
         assert result.success is True
-
         engine = result.create_engine(host_context, None, EngineConfig())
         assert isinstance(engine, Engine)
         engine.dispose()
 
-    @pytest.mark.skipif(
-        not _kokoro_available(),
-        reason="Kokoro not installed"
-    )
+    @pytest.mark.skipif(not _kokoro_available(), reason="Kokoro not installed")
     def test_engine_satisfies_protocol(self, kokoro_plugin_dir: Path, host_context: HostContext) -> None:
         result = load_plugin_from_dir(kokoro_plugin_dir)
         assert result.success is True
-
         engine = result.create_engine(host_context, None, EngineConfig())
         assert isinstance(engine, Engine)
         engine.dispose()
 
 
 # ──────────────────────────────────────────────────────────────
-# Engine Protocol Tests (using mock pipeline)
+# Engine / Session Contract (inherited from base)
 # ──────────────────────────────────────────────────────────────
 
-class TestKokoroEngineProtocol:
-    """Test Kokoro Engine protocol compliance using mock pipeline."""
+class TestKokoroEngineContract(EngineContractMixin):
+    """Every test from EngineContractMixin runs against KokoroEngine."""
 
-    def _create_engine_with_mock(self) -> Any:
-        """Create engine with mock pipeline for testing."""
-        from plugins.kokoro.engine import KokoroEngine
-
-        class MockPipeline:
-            def __call__(self, text, voice, speed, split_pattern=None):
-                class MockSegment:
-                    def __init__(self):
-                        self.audio = MockAudio()
-                class MockAudio:
-                    def numpy(self):
-                        import numpy as np
-                        return np.zeros(24000, dtype="float32")
-                return [MockSegment()]
-
-        return KokoroEngine(MockPipeline(), "a")
-
-    def test_create_session(self) -> None:
-        engine = self._create_engine_with_mock()
-        session = engine.createSession()
-        assert isinstance(session, EngineSession)
-        engine.dispose()
-
-    def test_dispose_idempotent(self) -> None:
-        engine = self._create_engine_with_mock()
-        engine.dispose()
-        engine.dispose()  # Should not raise
-
-    def test_create_session_after_dispose_raises(self) -> None:
-        from abogen.tts_plugin.errors import EngineError
-        engine = self._create_engine_with_mock()
-        engine.dispose()
-        with pytest.raises(EngineError):
-            engine.createSession()
-
-    def test_session_synthesize(self) -> None:
-        engine = self._create_engine_with_mock()
-        session = engine.createSession()
-        request = SynthesisRequest(
-            text="Hello",
-            voice=VoiceSelection(source="builtin", key="af_nova"),
-            parameters=ParameterValues(values={}),
-            format=AudioFormat(mime="audio/wav", extension="wav"),
-        )
-        result = session.synthesize(request)
-        assert result.data is not None
-        assert len(result.data) > 0
-        session.dispose()
-        engine.dispose()
-
-    def test_session_dispose_idempotent(self) -> None:
-        engine = self._create_engine_with_mock()
-        session = engine.createSession()
-        session.dispose()
-        session.dispose()  # Should not raise
-        engine.dispose()
-
-    def test_session_synthesize_after_dispose_raises(self) -> None:
-        from abogen.tts_plugin.errors import EngineError
-        engine = self._create_engine_with_mock()
-        session = engine.createSession()
-        session.dispose()
-        request = SynthesisRequest(
-            text="Hello",
-            voice=VoiceSelection(source="builtin", key="af_nova"),
-            parameters=ParameterValues(values={}),
-            format=AudioFormat(mime="audio/wav", extension="wav"),
-        )
-        with pytest.raises(EngineError):
-            session.synthesize(request)
-        engine.dispose()
+    @pytest.fixture
+    def default_voice(self) -> str:
+        return "af_nova"
 
 
 # ──────────────────────────────────────────────────────────────
@@ -222,10 +170,9 @@ class TestKokoroEngineProtocol:
 # ──────────────────────────────────────────────────────────────
 
 class TestKokoroVoiceLister:
-    """Test Kokoro VoiceLister capability."""
 
     def test_list_voices(self) -> None:
-        engine = TestKokoroEngineProtocol._create_engine_with_mock(TestKokoroEngineProtocol)
+        engine = _make_mock_engine()
         voices = engine.listVoices("builtin")
         assert len(voices) > 0
         assert all(hasattr(v, "id") for v in voices)
@@ -233,7 +180,7 @@ class TestKokoroVoiceLister:
         engine.dispose()
 
     def test_voices_have_tags(self) -> None:
-        engine = TestKokoroEngineProtocol._create_engine_with_mock(TestKokoroEngineProtocol)
+        engine = _make_mock_engine()
         voices = engine.listVoices("builtin")
         for voice in voices:
             assert isinstance(voice.tags, tuple)
