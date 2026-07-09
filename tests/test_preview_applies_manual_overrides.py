@@ -30,16 +30,16 @@ def test_preview_applies_manual_override_before_normalization(monkeypatch):
             captured["text"] = text
             return iter(())
 
-    from abogen import tts_backend_registry
+    from abogen.tts_plugin import compat
 
-    original_create_backend = tts_backend_registry.create_backend
+    original_create_backend = compat.create_backend
 
     def _mock_create_backend(backend_id, **kwargs):
         if backend_id == "supertonic":
             return DummyPipeline(**kwargs)
         return original_create_backend(backend_id, **kwargs)
 
-    monkeypatch.setattr(tts_backend_registry, "create_backend", _mock_create_backend)
+    monkeypatch.setattr(compat, "create_backend", _mock_create_backend)
 
     try:
         preview.generate_preview_audio(

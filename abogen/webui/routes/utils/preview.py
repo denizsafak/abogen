@@ -78,7 +78,7 @@ def get_preview_pipeline(language: str, device: str) -> Any:
         pipeline = _preview_pipelines.get(key)
         if pipeline is not None:
             return pipeline
-        from abogen.tts_backend_registry import create_backend
+        from abogen.tts_plugin.compat import create_backend
 
         pipeline = create_backend("kokoro", lang_code=language, device=device)
         _preview_pipelines[key] = pipeline
@@ -136,7 +136,7 @@ def generate_preview_audio(
             normalized_text = source_text
 
     if provider == "supertonic":
-        from abogen.tts_backend_registry import create_backend
+        from abogen.tts_plugin.compat import create_backend
 
         pipeline = create_backend("supertonic", sample_rate=SAMPLE_RATE, auto_download=True, total_steps=supertonic_total_steps)
         segments = pipeline(

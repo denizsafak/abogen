@@ -11,6 +11,9 @@ Public modules:
 - capabilities: Optional capability interfaces (VoiceLister, PreviewGenerator, etc.)
 - host_context: HostContext dataclass
 - plugin: Plugin contract (create_engine function signature)
+- loader: Plugin discovery and loading
+- plugin_manager: Plugin management and engine creation
+- compat: Backward compatibility adapter for old create_backend() API
 
 Usage:
     from abogen.tts_plugin import (
@@ -53,6 +56,11 @@ Usage:
         # Host Context
         HostContext,
         HttpClient,
+        # Plugin Manager
+        get_plugin_manager,
+        reset_plugin_manager,
+        # Compatibility
+        create_backend,
     )
 """
 
@@ -96,6 +104,10 @@ from abogen.tts_plugin.types import (
     VoiceSelection,
 )
 
+# Plugin Manager and Compatibility
+from abogen.tts_plugin.plugin_manager import get_plugin_manager, reset_plugin_manager
+from abogen.tts_plugin.compat import create_backend
+
 __all__ = [
     # Types
     "AudioFormat",
@@ -136,4 +148,9 @@ __all__ = [
     # Host Context
     "HostContext",
     "HttpClient",
+    # Plugin Manager
+    "get_plugin_manager",
+    "reset_plugin_manager",
+    # Compatibility
+    "create_backend",
 ]
