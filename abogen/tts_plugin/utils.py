@@ -18,17 +18,44 @@ def get_voices(plugin_id: str) -> tuple[str, ...]:
 
     Uses the official Plugin Architecture: PluginManager → Engine → VoiceLister.
     """
+    import logging
+    import tempfile
+    from pathlib import Path
+
+    from abogen.tts_plugin.host_context import HostContext
+    from abogen.tts_plugin.types import EngineConfig
+
     manager = get_plugin_manager()
     if not manager.has_plugin(plugin_id):
         return ()
 
-    engine = manager.create_engine(plugin_id)
+    ctx = HostContext(
+        config_dir=Path(tempfile.gettempdir()),
+        logger=logging.getLogger(f"abogen.utils.{plugin_id}"),
+        http_client=type("_StubHttpClient", (), {
+            "get": staticmethod(lambda url, **kw: None),
+            "post": staticmethod(lambda url, **kw: None),
+        })(),
+    )
+
+    try:
+        engine = manager.create_engine(
+            plugin_id,
+            context=ctx,
+            model_path=None,
+            config=EngineConfig(device="cpu"),
+        )
+    except Exception:
+        return ()
+
     try:
         from abogen.tts_plugin.capabilities import VoiceLister
 
         if isinstance(engine, VoiceLister):
             manifests = engine.listVoices("builtin")
             return tuple(v.id for v in manifests)
+        return ()
+    except Exception:
         return ()
     finally:
         engine.dispose()
