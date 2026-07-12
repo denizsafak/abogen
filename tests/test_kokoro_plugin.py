@@ -57,7 +57,15 @@ def _make_mock_engine() -> Any:
                     return np.zeros(24000, dtype="float32")
             return [MockSegment()]
 
-    return KokoroEngine(MockPipeline(), "a")
+    engine = KokoroEngine(MockPipeline())
+
+    # Override listVoices for testing (real engine reads from manifest)
+    from abogen.tts_plugin.manifest import VoiceManifest
+    engine.listVoices = lambda source_id: [
+        VoiceManifest(id="test_voice_1", name="Test Voice 1", tags=("en",)),
+        VoiceManifest(id="test_voice_2", name="Test Voice 2", tags=("es",)),
+    ]
+    return engine
 
 
 # ──────────────────────────────────────────────────────────────

@@ -24,6 +24,7 @@ from abogen.tts_plugin.manifest import (
     ParameterManifest,
     PluginManifest,
     RequirementManifest,
+    VoiceManifest,
     VoiceSourceManifest,
 )
 from abogen.tts_plugin.types import EngineConfig
@@ -31,14 +32,14 @@ from abogen.tts_plugin.types import EngineConfig
 from .engine import SuperTonicEngine
 
 
-def _load_supertonic_pipeline(sample_rate: int = 24000, auto_download: bool = True, total_steps: int = 5) -> Any:
+def _load_supertonic_pipeline() -> Any:
     """Lazy-load SuperTonic dependencies and create pipeline."""
     from plugins.supertonic.pipeline import SupertonicPipeline
 
     return SupertonicPipeline(
-        sample_rate=sample_rate,
-        auto_download=auto_download,
-        total_steps=total_steps,
+        sample_rate=24000,
+        auto_download=True,
+        total_steps=5,
     )
 
 
@@ -87,6 +88,18 @@ PLUGIN_MANIFEST = PluginManifest(
         audioFormats=(
             AudioFormatManifest(mime="audio/wav", extension="wav"),
         ),
+    ),
+    voices=(
+        VoiceManifest(id="M1", name="Male 1", tags=("male",)),
+        VoiceManifest(id="M2", name="Male 2", tags=("male",)),
+        VoiceManifest(id="M3", name="Male 3", tags=("male",)),
+        VoiceManifest(id="M4", name="Male 4", tags=("male",)),
+        VoiceManifest(id="M5", name="Male 5", tags=("male",)),
+        VoiceManifest(id="F1", name="Female 1", tags=("female",)),
+        VoiceManifest(id="F2", name="Female 2", tags=("female",)),
+        VoiceManifest(id="F3", name="Female 3", tags=("female",)),
+        VoiceManifest(id="F4", name="Female 4", tags=("female",)),
+        VoiceManifest(id="F5", name="Female 5", tags=("female",)),
     ),
 )
 

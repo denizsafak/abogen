@@ -1576,9 +1576,6 @@ def run_conversion_job(job: Job) -> None:
             if provider_norm == "supertonic":
                 pipelines[provider_norm] = create_pipeline(
                     "supertonic",
-                    sample_rate=SAMPLE_RATE,
-                    auto_download=True,
-                    total_steps=int(getattr(job, "supertonic_total_steps", 5) or 5),
                 )
                 return pipelines[provider_norm]
 
@@ -1863,17 +1860,17 @@ def run_conversion_job(job: Job) -> None:
                     canceller()
                     graphemes_raw = getattr(segment, "graphemes", "") or ""
                     graphemes = graphemes_raw.strip()
-    
+
                     audio = _to_float32(getattr(segment, "audio", None))
                     if audio.size == 0:
                         continue
-    
+
                     local_segments += 1
                     if chapter_sink:
                         chapter_sink.write(audio)
                     if audio_sink:
                         audio_sink.write(audio)
-    
+
                     duration = len(audio) / SAMPLE_RATE
                     processed_chars += len(graphemes)
                     job.processed_characters = processed_chars
@@ -1881,11 +1878,11 @@ def run_conversion_job(job: Job) -> None:
                         job.progress = min(processed_chars / job.total_characters, 0.999)
                     else:
                         job.progress = 0.0 if processed_chars == 0 else 0.999
-    
+
                     preview_text = graphemes or (graphemes_raw[:80] if graphemes_raw else "[silence]")
                     prefix = f"{preview_prefix} · " if preview_prefix else ""
                     job.add_log(f"{prefix}{processed_chars:,}/{job.total_characters or '—'}: {preview_text[:80]}")
-    
+
                     if subtitle_writer and audio_sink and graphemes:
                         subtitle_writer.write_segment(
                             index=subtitle_index,
@@ -1894,10 +1891,10 @@ def run_conversion_job(job: Job) -> None:
                             end=current_time + duration,
                         )
                         subtitle_index += 1
-    
+
                     if audio_sink:
                         current_time += duration
-                        
+
             except OverflowError as exc:
                 job.add_log(
                     f"Skipped chunk — number too large for TTS conversion: {exc}",
@@ -2408,6 +2405,11 @@ def run_conversion_job(job: Job) -> None:
 
         # Explicitly release the pipeline and force garbage collection to prevent
         # memory accumulation in the worker process, which can lead to host lockups.
+        for p in pipelines.values():
+            try:
+                p.dispose()
+            except Exception:
+                pass
         pipelines.clear()
         pipeline = None
         gc.collect()
@@ -2443,9 +2445,6 @@ def _load_pipeline(job: Job):
     if provider == "supertonic":
         return create_pipeline(
             "supertonic",
-            sample_rate=SAMPLE_RATE,
-            auto_download=True,
-            total_steps=int(getattr(job, "supertonic_total_steps", 5) or 5),
         )
 
     device = "cpu"

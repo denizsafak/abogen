@@ -8,41 +8,22 @@ from __future__ import annotations
 
 import io
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
 from abogen.tts_plugin.capabilities import VoiceLister
 from abogen.tts_plugin.engine import Engine, EngineSession
-from abogen.tts_plugin.errors import EngineError, InvalidInputError
+from abogen.tts_plugin.errors import EngineError
 from abogen.tts_plugin.manifest import VoiceManifest
 from abogen.tts_plugin.types import (
     AudioFormat,
     Duration,
-    ParameterValues,
     SynthesisRequest,
     SynthesizedAudio,
-    VoiceSelection,
 )
 
 logger = logging.getLogger(__name__)
-
-# SuperTonic voice list - source of truth
-_SUPERTONIC_VOICES = ("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5")
-
-# Voice display names mapping
-_VOICE_DISPLAY_NAMES: dict[str, str] = {
-    "M1": "Male 1",
-    "M2": "Male 2",
-    "M3": "Male 3",
-    "M4": "Male 4",
-    "M5": "Male 5",
-    "F1": "Female 1",
-    "F2": "Female 2",
-    "F3": "Female 3",
-    "F4": "Female 4",
-    "F5": "Female 5",
-}
 
 # Sample rate for SuperTonic audio
 _SUPERTONIC_SAMPLE_RATE = 24000
@@ -134,23 +115,11 @@ class SuperTonicEngine:
         self._disposed = True
 
     def listVoices(self, sourceId: str) -> list[VoiceManifest]:
-        """List available SuperTonic voices. Implements VoiceLister capability."""
+        """List available SuperTonic voices. Implements VoiceLister capability.
+        
+        Note: Static voice catalog is declared in plugin manifest.
+        This method is retained for VoiceLister interface compliance.
+        """
         if self._disposed:
             raise EngineError("Engine disposed")
-        return [
-            VoiceManifest(
-                id=voice_id,
-                name=_VOICE_DISPLAY_NAMES.get(voice_id, voice_id),
-                tags=(_get_gender_tag(voice_id),),
-            )
-            for voice_id in _SUPERTONIC_VOICES
-        ]
-
-
-def _get_gender_tag(voice_id: str) -> str:
-    """Extract gender tag from voice ID."""
-    if voice_id.startswith("M"):
-        return "male"
-    elif voice_id.startswith("F"):
-        return "female"
-    return "unknown"
+        return []

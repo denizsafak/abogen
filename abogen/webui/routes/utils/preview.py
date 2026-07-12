@@ -14,6 +14,17 @@ _preview_pipelines: Dict[Tuple[str, str], Any] = {}
 _preview_pipeline_lock = threading.Lock()
 
 
+def clear_preview_pipelines() -> None:
+    """Dispose all cached preview pipelines and clear the cache."""
+    with _preview_pipeline_lock:
+        for pipeline in _preview_pipelines.values():
+            try:
+                pipeline.dispose()
+            except Exception:
+                pass
+        _preview_pipelines.clear()
+
+
 def _select_device() -> str:
     import platform
 
@@ -138,7 +149,7 @@ def generate_preview_audio(
     if provider == "supertonic":
         from abogen.tts_plugin.utils import create_pipeline
 
-        pipeline = create_pipeline("supertonic", sample_rate=SAMPLE_RATE, auto_download=True, total_steps=supertonic_total_steps)
+        pipeline = create_pipeline("supertonic")
         segments = pipeline(
             normalized_text,
             voice=voice_spec,

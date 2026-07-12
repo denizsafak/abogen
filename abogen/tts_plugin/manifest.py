@@ -173,6 +173,8 @@ class PluginManifest:
         capabilities: List of capability identifiers.
         requires: Plugin requirements.
         engine: Engine manifest.
+        voices: Optional static voice catalog. None = not declared (use VoiceLister),
+            empty tuple = explicitly no static voices, non-empty = static catalog.
     """
 
     id: str
@@ -184,3 +186,4 @@ class PluginManifest:
     capabilities: tuple[str, ...] = field(default_factory=tuple)
     requires: RequirementManifest = field(default_factory=RequirementManifest)
     engine: EngineManifest = field(default_factory=EngineManifest)
+    voices: tuple[VoiceManifest, ...] | None = None

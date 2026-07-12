@@ -6,7 +6,7 @@ calling the Plugin Manager directly.
 
 from __future__ import annotations
 
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator
 
 import numpy as np
 
@@ -17,6 +17,7 @@ def get_voices(plugin_id: str) -> tuple[str, ...]:
     """Return the voice-id tuple for *plugin_id*.
 
     Uses the official Plugin Architecture: PluginManager → Engine → VoiceLister.
+    First checks plugin manifest for static voice catalog.
     """
     import logging
     import tempfile
@@ -28,6 +29,13 @@ def get_voices(plugin_id: str) -> tuple[str, ...]:
     manager = get_plugin_manager()
     if not manager.has_plugin(plugin_id):
         return ()
+
+    # Check manifest for static voice catalog
+    plugin_info = manager.get_plugin(plugin_id)
+    if plugin_info is not None:
+        manifest = plugin_info.get("manifest")
+        if manifest is not None and manifest.voices is not None:
+            return tuple(v.id for v in manifest.voices)
 
     ctx = HostContext(
         config_dir=Path(tempfile.gettempdir()),
@@ -183,12 +191,45 @@ class Pipeline:
         self.dispose()
 
 
-def create_pipeline(plugin_id: str, **kwargs: Any) -> Pipeline:
+def create_pipeline(
+    plugin_id: str,
+    *,
+    lang_code: str = "a",
+    device: str = "cpu",
+) -> Pipeline:
     """Create a callable TTS pipeline via the Plugin Architecture.
 
-    Returns a :class:`Pipeline` whose ``__call__`` interface matches the
-    legacy ``TTSBackend`` callable protocol.
+    Builds a proper HostContext and EngineConfig, then delegates to the
+    PluginManager to create the engine. Returns a :class:`Pipeline` whose
+    ``__call__`` interface matches the legacy ``TTSBackend`` callable protocol.
+
+    Args:
+        plugin_id: Plugin identifier (e.g., "kokoro", "supertonic").
+        lang_code: Language code for the engine.
+        device: Device to use (e.g., "cpu", "cuda:0").
+
+    Returns:
+        A callable Pipeline instance.
     """
+    import logging
+    import tempfile
+    from pathlib import Path
+
+    from abogen.tts_plugin.host_context import HostContext
+    from abogen.tts_plugin.types import EngineConfig
+
     manager = get_plugin_manager()
-    engine = manager.create_engine(plugin_id, **kwargs)
-    return Pipeline(engine, **kwargs)
+
+    ctx = HostContext(
+        config_dir=Path(tempfile.gettempdir()),
+        logger=logging.getLogger(f"abogen.pipeline.{plugin_id}"),
+        http_client=type("_StubHttpClient", (), {
+            "get": staticmethod(lambda url, **kw: None),
+            "post": staticmethod(lambda url, **kw: None),
+        })(),
+    )
+
+    config = EngineConfig(device=device, lang_code=lang_code)
+
+    engine = manager.create_engine(plugin_id, context=ctx, model_path=None, config=config)
+    return Pipeline(engine)
