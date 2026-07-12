@@ -1585,7 +1585,7 @@ def run_conversion_job(job: Job) -> None:
             device = "cpu"
             if not disable_gpu:
                 device = _select_device()
-            # Create KPipeline instance directly (conforms to TTSBackend protocol)
+            # Create KPipeline instance directly (uses new Plugin Architecture)
             pipelines[provider_norm] = create_pipeline(
                 "kokoro",
                 lang_code=job.language,

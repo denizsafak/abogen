@@ -201,7 +201,7 @@ def create_pipeline(
 
     Builds a proper HostContext and EngineConfig, then delegates to the
     PluginManager to create the engine. Returns a :class:`Pipeline` whose
-    ``__call__`` interface matches the legacy ``TTSBackend`` callable protocol.
+    ``__call__`` interface matches the callable protocol used by consumers.
 
     Args:
         plugin_id: Plugin identifier (e.g., "kokoro", "supertonic").
