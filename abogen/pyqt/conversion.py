@@ -2397,6 +2397,10 @@ class ConversionThread(QThread):
         self.cancel_requested = True
         self.should_cancel = True
         self.waiting_for_user_input = False
+        # Clear voice cache (instance and module-level)
+        self.voice_cache.clear()
+        from abogen.voice_cache import clear_voice_cache
+        clear_voice_cache()
         # Terminate subprocess if running
         if self.process:
             try:

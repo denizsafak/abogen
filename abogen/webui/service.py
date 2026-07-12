@@ -1609,10 +1609,12 @@ def build_service(
     output_root: Optional[Path] = None,
     uploads_root: Optional[Path] = None,
 ) -> ConversionService:
+    global _service_instance
     output_root = output_root or default_storage_root()
     service = ConversionService(
         output_root=output_root,
         uploads_root=uploads_root,
         runner=runner,
     )
+    _service_instance = service
     return service

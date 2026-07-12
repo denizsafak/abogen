@@ -144,3 +144,11 @@ def _ensure_single_voice_asset(
 
     hf_hub_download(resume_download=True, **common_kwargs)
     return True
+
+
+def clear_voice_cache() -> None:
+    """Clear the in‑process voice cache (used during shutdown)."""
+    with _CACHE_LOCK:
+        _CACHED_VOICES.clear()
+    global _BOOTSTRAPPED
+    _BOOTSTRAPPED = False

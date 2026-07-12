@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import atexit
 import os
 import platform
-import signal
-import sys
 
-from abogen.utils import load_config, prevent_sleep_end
+# Initialise global shutdown handling (atexit, signals, Qt) as early as possible.
+from abogen import shutdown  # noqa: F401
+shutdown.register_shutdown()
+
+from abogen.utils import load_config
 from abogen.webui.app import main as _run_web_ui
 
 # Configure Hugging Face Hub behaviour (mirrors legacy GUI defaults).
@@ -26,17 +27,6 @@ os.environ.setdefault("MIOPEN_CONV_PRECISE_ROCM_TUNING", "0")
 # Enable MPS GPU acceleration on Apple Silicon.
 if platform.system() == "Darwin" and platform.processor() == "arm":
     os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
-
-atexit.register(prevent_sleep_end)
-
-
-def _cleanup_sleep(signum, _frame):
-    prevent_sleep_end()
-    sys.exit(0)
-
-
-signal.signal(signal.SIGINT, _cleanup_sleep)
-signal.signal(signal.SIGTERM, _cleanup_sleep)
 
 
 def main() -> None:

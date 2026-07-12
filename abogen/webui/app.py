@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import atexit
 import logging
 import os
 from pathlib import Path
@@ -8,6 +7,8 @@ from typing import Any, Optional
 
 from flask import Flask
 
+from abogen import shutdown  # noqa: F401
+shutdown.register_shutdown()
 from abogen.utils import get_user_cache_path, get_user_output_path, get_user_settings_dir
 
 from .conversion_runner import run_conversion_job
@@ -112,8 +113,6 @@ def create_app(config: Optional[dict[str, Any]] = None) -> Flask:
     app.register_blueprint(entities_bp, url_prefix="/overrides")
     app.register_blueprint(books_bp, url_prefix="/find-books")
     app.register_blueprint(api_bp, url_prefix="/api")
-
-    atexit.register(service.shutdown)
 
     global _access_log_filter_attached
     if not _access_log_filter_attached:

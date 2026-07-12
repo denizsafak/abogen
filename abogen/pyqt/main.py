@@ -1,10 +1,10 @@
 import os
 import sys
 import platform
-import atexit
-import signal
-from abogen.utils import get_resource_path, load_config, prevent_sleep_end
 
+# Initialise global shutdown handling (atexit, signals, Qt) as early as possible.
+from abogen import shutdown  # noqa: F401
+shutdown.register_shutdown()
 
 # Fix PyTorch DLL loading issue ([WinError 1114]) on Windows before importing PyQt6
 if platform.system() == "Windows":
@@ -94,6 +94,7 @@ os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"  # Disable Hugging Face telemetry
 os.environ["HF_HUB_ETAG_TIMEOUT"] = "10"  # Metadata request timeout (seconds)
 os.environ["HF_HUB_DOWNLOAD_TIMEOUT"] = "10"  # File download timeout (seconds)
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"  # Disable symlinks warning
+from abogen.utils import load_config
 if load_config().get("disable_kokoro_internet", False):
     print("INFO: Kokoro's internet access is disabled.")
     os.environ["HF_HUB_OFFLINE"] = "1"  # Disable Hugging Face Hub internet access
@@ -104,25 +105,6 @@ from abogen.constants import PROGRAM_NAME, VERSION
 # Set environment variables for AMD ROCm
 os.environ["MIOPEN_FIND_MODE"] = "FAST"
 os.environ["MIOPEN_CONV_PRECISE_ROCM_TUNING"] = "0"
-
-# Reset sleep states
-atexit.register(prevent_sleep_end)
-
-
-# Also handle signals (Ctrl+C, kill, etc.)
-def _cleanup_sleep(signum, frame):
-    prevent_sleep_end()
-    sys.exit(0)
-
-
-signal.signal(signal.SIGINT, _cleanup_sleep)
-signal.signal(signal.SIGTERM, _cleanup_sleep)
-
-# Ensure sys.stdout and sys.stderr are valid in GUI mode
-if sys.stdout is None:
-    sys.stdout = open(os.devnull, "w")
-if sys.stderr is None:
-    sys.stderr = open(os.devnull, "w")
 
 # Enable MPS GPU acceleration on Mac Apple Silicon
 if platform.system() == "Darwin" and platform.processor() == "arm":

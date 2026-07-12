@@ -3236,12 +3236,16 @@ class abogen(QWidget):
             )
             box.setDefaultButton(QMessageBox.StandardButton.No)
             if box.exec() == QMessageBox.StandardButton.Yes:
+                from abogen import shutdown
+                shutdown.request_shutdown()
                 self.cleanup_conversion_thread()
                 self.cleanup_preview_threads()
                 event.accept()
             else:
                 event.ignore()
         else:
+            from abogen import shutdown
+            shutdown.request_shutdown()
             self.cleanup_conversion_thread()
             self.cleanup_preview_threads()
             event.accept()
