@@ -1,40 +1,25 @@
+"""SuperTonic Pipeline — self-contained TTS pipeline for the plugin.
+
+This module provides the SuperTonicPipeline class and supporting utilities
+used by the SuperTonic plugin. It is independent of the legacy
+abogen.tts_backends module.
+"""
+
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
 import logging
-import math
 import re
-from typing import Any, Dict, Iterable, Iterator, List, Optional
+from typing import Any, Iterable, Iterator, Optional
 
 import numpy as np
 
-
 logger = logging.getLogger(__name__)
-
-
-DEFAULT_SUPERTONIC_VOICES = ("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5")
-
-from abogen.tts_backend import TTSBackendMetadata
-
-_SUPERTONIC_METADATA = TTSBackendMetadata(
-    id="supertonic",
-    name="SuperTonic",
-    description="SuperTonic TTS engine",
-    voices=DEFAULT_SUPERTONIC_VOICES,
-)
-
-
-@dataclass
-class SupertonicSegment:
-    graphemes: str
-    audio: np.ndarray
 
 
 def _ensure_float32_mono(wav: Any) -> np.ndarray:
     arr = np.asarray(wav, dtype="float32")
     if arr.ndim == 2:
-        # (n, 1) or (1, n) or (n, channels)
         if arr.shape[0] == 1 and arr.shape[1] > 1:
             arr = arr.reshape(-1)
         else:
@@ -71,7 +56,6 @@ def _split_text(
     else:
         parts = [stripped]
 
-    # Enforce max length by hard-splitting long parts.
     result: list[str] = []
     for part in parts:
         if len(part) <= max_chunk_length:
@@ -80,7 +64,6 @@ def _split_text(
         start = 0
         while start < len(part):
             end = min(len(part), start + max_chunk_length)
-            # Try to split at whitespace.
             if end < len(part):
                 ws = part.rfind(" ", start, end)
                 if ws > start + 40:
@@ -99,7 +82,6 @@ _UNSUPPORTED_CHARS_RE = re.compile(
 
 def _parse_unsupported_characters(error: BaseException) -> list[str]:
     """Best-effort extraction of unsupported characters from SuperTonic errors."""
-
     message = " ".join(
         str(part) for part in getattr(error, "args", ()) if part is not None
     ) or str(error)
@@ -145,16 +127,11 @@ def _configure_supertonic_gpu() -> None:
 
         available = ort.get_available_providers()
 
-        # Use CUDA if available, skip TensorRT (requires extra libs not always present)
-        # TensorrtExecutionProvider may be listed as available but fail at runtime
-        # if TensorRT libraries (libnvinfer.so) are not installed
         providers = []
         if "CUDAExecutionProvider" in available:
             providers.append("CUDAExecutionProvider")
         providers.append("CPUExecutionProvider")
 
-        # Patch supertonic's config and loader before TTS import
-        # We must patch both because loader imports the value at module load time
         import supertonic.config as supertonic_config
         import supertonic.loader as supertonic_loader
 
@@ -163,6 +140,16 @@ def _configure_supertonic_gpu() -> None:
         logger.info("Supertonic ONNX providers configured: %s", providers)
     except Exception as exc:
         logger.warning("Could not configure supertonic GPU providers: %s", exc)
+
+
+class SupertonicSegment:
+    """A single synthesized audio segment."""
+
+    __slots__ = ("graphemes", "audio")
+
+    def __init__(self, graphemes: str, audio: np.ndarray) -> None:
+        self.graphemes = graphemes
+        self.audio = audio
 
 
 class SupertonicPipeline:
@@ -180,7 +167,6 @@ class SupertonicPipeline:
         self.total_steps = int(total_steps)
         self.max_chunk_length = int(max_chunk_length)
 
-        # Configure GPU providers before importing TTS
         _configure_supertonic_gpu()
 
         try:
@@ -216,7 +202,6 @@ class SupertonicPipeline:
             removed: set[str] = set()
             last_exc: Exception | None = None
 
-            # SuperTonic can raise ValueError for unsupported characters; strip and retry.
             for attempt in range(3):
                 try:
                     wav, duration = self._tts.synthesize(
@@ -240,7 +225,6 @@ class SupertonicPipeline:
                         chunk_to_speak, unsupported
                     ).strip()
 
-                    # If we didn't change anything, don't loop forever.
                     if sanitized == chunk_to_speak.strip():
                         raise
 
@@ -258,7 +242,6 @@ class SupertonicPipeline:
                             sorted(removed),
                         )
             else:
-                # Exhausted retries.
                 assert last_exc is not None
                 raise last_exc
 
@@ -267,7 +250,6 @@ class SupertonicPipeline:
 
             audio = _ensure_float32_mono(wav)
 
-            # If duration is present, infer the source sample rate and resample if needed.
             src_rate = self.sample_rate
             try:
                 dur = float(duration)
@@ -282,111 +264,3 @@ class SupertonicPipeline:
                 audio = _resample_linear(audio, src_rate, self.sample_rate)
 
             yield SupertonicSegment(graphemes=chunk_to_speak, audio=audio)
-
-
-class SupertonicBackend:
-    """Supertonic TTS backend implementing the TTSBackend protocol.
-
-    Encapsulates ``SupertonicPipeline`` as an internal implementation detail.
-    """
-
-    @property
-    def metadata(self) -> TTSBackendMetadata:
-        return _SUPERTONIC_METADATA
-
-    def __init__(self, **kwargs: Any) -> None:
-        self._pipeline = SupertonicPipeline(
-            sample_rate=kwargs.get("sample_rate", 24000),
-            auto_download=kwargs.get("auto_download", True),
-            total_steps=kwargs.get("total_steps", 5),
-        )
-
-    def synthesize(self, text: str, **kwargs: Any) -> bytes:
-        """Synthesize speech and return raw audio bytes (WAV).
-
-        Delegates to the internal :class:`SupertonicPipeline` and concatenates
-        all produced segments into a single byte buffer.
-        """
-        import io
-
-        import soundfile as sf
-
-        voice = kwargs.get("voice", "M1")
-        speed = float(kwargs.get("speed", 1.0))
-        split_pattern = kwargs.get("split_pattern")
-        total_steps = kwargs.get("total_steps")
-
-        segments = self._pipeline(
-            text,
-            voice=voice,
-            speed=speed,
-            split_pattern=split_pattern,
-            total_steps=total_steps,
-        )
-
-        audio_parts: list[np.ndarray] = []
-        for seg in segments:
-            audio_parts.append(seg.audio)
-
-        if not audio_parts:
-            return b""
-
-        combined = np.concatenate(audio_parts)
-        buf = io.BytesIO()
-        sf.write(buf, combined, self._pipeline.sample_rate, format="WAV")
-        return buf.getvalue()
-
-    def get_available_voices(self) -> List[str]:
-        """Return the list of built-in SuperTonic voice identifiers."""
-        return list(self.metadata.voices)
-
-    def get_supported_formats(self) -> List[str]:
-        return ["wav"]
-
-    def get_info(self) -> Dict[str, Any]:
-        return {
-            "sample_rate": self._pipeline.sample_rate,
-            "total_steps": self._pipeline.total_steps,
-            "max_chunk_length": self._pipeline.max_chunk_length,
-            "voices": list(DEFAULT_SUPERTONIC_VOICES),
-        }
-
-    def __call__(
-        self,
-        text: str,
-        *,
-        voice: str,
-        speed: float,
-        split_pattern: Optional[str] = None,
-        total_steps: Optional[int] = None,
-    ) -> Iterator[SupertonicSegment]:
-        """Backward-compatible call interface, delegates to the pipeline."""
-        return self._pipeline(
-            text,
-            voice=voice,
-            speed=speed,
-            split_pattern=split_pattern,
-            total_steps=total_steps,
-        )
-
-
-def create_supertonic_backend(**kwargs: Any) -> SupertonicBackend:
-    """Create a SuperTonic TTS backend instance.
-
-    Args:
-        sample_rate: Audio sample rate. Defaults to 24000.
-        auto_download: Auto-download models. Defaults to True.
-        total_steps: Inference steps. Defaults to 5.
-
-    Returns:
-        SupertonicBackend instance.
-    """
-    return SupertonicBackend(**kwargs)
-
-
-from abogen.tts_backend_registry import register_backend  # noqa: E402
-
-register_backend(
-    metadata=_SUPERTONIC_METADATA,
-    factory=create_supertonic_backend,
-)

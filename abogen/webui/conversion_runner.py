@@ -20,7 +20,7 @@ import numpy as np
 import soundfile as sf
 import static_ffmpeg
 
-from abogen.tts_backend_registry import get_metadata, is_registered_backend, resolve_backend_for_voice
+from abogen.tts_plugin.utils import get_voices, is_plugin_registered, resolve_voice_to_plugin
 from abogen.epub3.exporter import build_epub3_package
 from abogen.kokoro_text_normalization import ApostropheConfig, normalize_for_pipeline, HAS_NUM2WORDS
 from abogen.normalization_settings import (
@@ -40,8 +40,7 @@ from abogen.utils import (
     get_user_output_path,
     load_config,
 )
-from abogen.tts_backend_registry import create_backend
-from abogen.tts_backend import TTSBackend
+from abogen.tts_plugin.utils import create_pipeline
 from abogen.voice_cache import ensure_voice_assets
 from abogen.voice_formulas import extract_voice_ids, get_new_voice
 from abogen.voice_profiles import load_profiles, normalize_profile_entry
@@ -120,7 +119,7 @@ def _formula_from_kokoro_entry(entry: Mapping[str, Any]) -> str:
 
 
 def _infer_provider_from_spec(value: Any, fallback: str = "kokoro") -> str:
-    return resolve_backend_for_voice(str(value or ""), fallback=fallback)
+    return resolve_voice_to_plugin(str(value or ""), fallback=fallback)
 
 
 class _JobCancelled(Exception):
@@ -569,7 +568,7 @@ def _spec_to_voice_ids(spec: Any) -> Set[str]:
             return set(extract_voice_ids(text))
         except ValueError:
             return set()
-    if text in get_metadata("kokoro").voices:
+    if text in get_voices("kokoro"):
         return {text}
     return set()
 
@@ -633,7 +632,7 @@ def _collect_required_voice_ids(job: Job) -> Set[str]:
             for key in ("resolved_voice", "voice_formula", "voice"):
                 voices.update(_spec_to_voice_ids(payload.get(key)))
 
-    voices.update(get_metadata("kokoro").voices)
+    voices.update(get_voices("kokoro"))
     return voices
 
 
@@ -1567,7 +1566,7 @@ def run_conversion_job(job: Job) -> None:
         def get_pipeline(provider: str) -> Any:
             nonlocal kokoro_cache_ready
             provider_norm = str(provider or "kokoro").strip().lower() or "kokoro"
-            if not is_registered_backend(provider_norm):
+            if not is_plugin_registered(provider_norm):
                 provider_norm = "kokoro"
 
             existing = pipelines.get(provider_norm)
@@ -1575,11 +1574,8 @@ def run_conversion_job(job: Job) -> None:
                 return existing
 
             if provider_norm == "supertonic":
-                pipelines[provider_norm] = create_backend(
+                pipelines[provider_norm] = create_pipeline(
                     "supertonic",
-                    sample_rate=SAMPLE_RATE,
-                    auto_download=True,
-                    total_steps=int(getattr(job, "supertonic_total_steps", 5) or 5),
                 )
                 return pipelines[provider_norm]
 
@@ -1589,8 +1585,8 @@ def run_conversion_job(job: Job) -> None:
             device = "cpu"
             if not disable_gpu:
                 device = _select_device()
-            # Create KPipeline instance directly (conforms to TTSBackend protocol)
-            pipelines[provider_norm] = create_backend(
+            # Create KPipeline instance directly (uses new Plugin Architecture)
+            pipelines[provider_norm] = create_pipeline(
                 "kokoro",
                 lang_code=job.language,
                 device=device
@@ -1864,17 +1860,17 @@ def run_conversion_job(job: Job) -> None:
                     canceller()
                     graphemes_raw = getattr(segment, "graphemes", "") or ""
                     graphemes = graphemes_raw.strip()
-    
+
                     audio = _to_float32(getattr(segment, "audio", None))
                     if audio.size == 0:
                         continue
-    
+
                     local_segments += 1
                     if chapter_sink:
                         chapter_sink.write(audio)
                     if audio_sink:
                         audio_sink.write(audio)
-    
+
                     duration = len(audio) / SAMPLE_RATE
                     processed_chars += len(graphemes)
                     job.processed_characters = processed_chars
@@ -1882,11 +1878,11 @@ def run_conversion_job(job: Job) -> None:
                         job.progress = min(processed_chars / job.total_characters, 0.999)
                     else:
                         job.progress = 0.0 if processed_chars == 0 else 0.999
-    
+
                     preview_text = graphemes or (graphemes_raw[:80] if graphemes_raw else "[silence]")
                     prefix = f"{preview_prefix} · " if preview_prefix else ""
                     job.add_log(f"{prefix}{processed_chars:,}/{job.total_characters or '—'}: {preview_text[:80]}")
-    
+
                     if subtitle_writer and audio_sink and graphemes:
                         subtitle_writer.write_segment(
                             index=subtitle_index,
@@ -1895,10 +1891,10 @@ def run_conversion_job(job: Job) -> None:
                             end=current_time + duration,
                         )
                         subtitle_index += 1
-    
+
                     if audio_sink:
                         current_time += duration
-                        
+
             except OverflowError as exc:
                 job.add_log(
                     f"Skipped chunk — number too large for TTS conversion: {exc}",
@@ -2409,6 +2405,11 @@ def run_conversion_job(job: Job) -> None:
 
         # Explicitly release the pipeline and force garbage collection to prevent
         # memory accumulation in the worker process, which can lead to host lockups.
+        for p in pipelines.values():
+            try:
+                p.dispose()
+            except Exception:
+                pass
         pipelines.clear()
         pipeline = None
         gc.collect()
@@ -2442,17 +2443,14 @@ def _load_pipeline(job: Job):
     disable_gpu = not job.use_gpu or not cfg.get("use_gpu", True)
     provider = str(getattr(job, "tts_provider", "kokoro") or "kokoro").strip().lower()
     if provider == "supertonic":
-        return create_backend(
+        return create_pipeline(
             "supertonic",
-            sample_rate=SAMPLE_RATE,
-            auto_download=True,
-            total_steps=int(getattr(job, "supertonic_total_steps", 5) or 5),
         )
 
     device = "cpu"
     if not disable_gpu:
         device = _select_device()
-    return create_backend("kokoro", lang_code=job.language, device=device)
+    return create_pipeline("kokoro", lang_code=job.language, device=device)
 
 
 def _select_device() -> str:

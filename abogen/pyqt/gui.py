@@ -86,7 +86,7 @@ from abogen.constants import (
     COLORS,
     SUBTITLE_FORMATS,
 )
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_plugin.utils import get_voices
 import threading
 from abogen.pyqt.voice_formula_gui import VoiceFormulaDialog
 from abogen.voice_profiles import load_profiles
@@ -1873,7 +1873,7 @@ class abogen(QWidget):
         for pname in load_profiles().keys():
             self.voice_combo.addItem(profile_icon, pname, f"profile:{pname}")
         # re-add voices
-        for v in get_metadata("kokoro").voices:
+        for v in get_voices("kokoro"):
             icon = QIcon()
             flag_path = get_resource_path("abogen.assets.flags", f"{v[0]}.png")
             if flag_path and os.path.exists(flag_path):

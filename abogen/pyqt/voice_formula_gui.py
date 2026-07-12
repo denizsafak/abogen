@@ -32,7 +32,7 @@ from abogen.constants import (
     LANGUAGE_DESCRIPTIONS,
     COLORS,
 )
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_plugin.utils import get_voices
 import re
 import platform
 from abogen.utils import get_resource_path
@@ -179,7 +179,7 @@ class VoiceMixer(QWidget):
         layout.addWidget(QLabel(name), alignment=Qt.AlignmentFlag.AlignCenter)
 
         # Voice name label with gender icon
-        is_female = self.voice_name in get_metadata("kokoro").voices and self.voice_name[1] == "f"
+        is_female = self.voice_name in get_voices("kokoro") and self.voice_name[1] == "f"
 
         # Icons layout (flag and gender)
         icons_layout = QHBoxLayout()
@@ -772,7 +772,7 @@ class VoiceFormulaDialog(QDialog):
 
     def add_voices(self, initial_state):
         first_enabled_voice = None
-        for voice in get_metadata("kokoro").voices:
+        for voice in get_voices("kokoro"):
             language_code = voice[0]  # First character is the language code
             matching_voice = next(
                 (item for item in initial_state if item[0] == voice), None

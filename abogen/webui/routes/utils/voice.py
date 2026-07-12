@@ -18,9 +18,9 @@ from abogen.constants import (
     SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION,
     SAMPLE_VOICE_TEXTS,
 )
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_plugin.utils import get_voices
 from abogen.speaker_configs import list_configs
-from abogen.tts_backend_registry import create_backend
+from abogen.tts_plugin.utils import create_pipeline
 from abogen.webui.conversion_runner import _select_device, _to_float32, SAMPLE_RATE, SPLIT_PATTERN
 
 _preview_pipeline_lock = threading.RLock()
@@ -285,7 +285,7 @@ def filter_voice_catalog(
 def build_voice_catalog() -> List[Dict[str, str]]:
     catalog: List[Dict[str, str]] = []
     gender_map = {"f": "Female", "m": "Male"}
-    for voice_id in get_metadata("kokoro").voices:
+    for voice_id in get_voices("kokoro"):
         prefix, _, rest = voice_id.partition("_")
         language_code = prefix[0] if prefix else "a"
         gender_code = prefix[1] if len(prefix) > 1 else ""
@@ -590,7 +590,7 @@ def template_options() -> Dict[str, Any]:
     voice_catalog = build_voice_catalog()
     return {
         "languages": LANGUAGE_DESCRIPTIONS,
-        "voices": get_metadata("kokoro").voices,
+        "voices": get_voices("kokoro"),
         "subtitle_formats": SUBTITLE_FORMATS,
         "supported_langs_for_subs": SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION,
         "output_formats": SUPPORTED_SOUND_FORMATS,
@@ -741,7 +741,7 @@ def get_preview_pipeline(language: str, device: str):
         pipeline = _preview_pipelines.get(key)
         if pipeline is not None:
             return pipeline
-        pipeline = create_backend("kokoro", lang_code=language, device=device)
+        pipeline = create_pipeline("kokoro", lang_code=language, device=device)
         _preview_pipelines[key] = pipeline
         return pipeline
 

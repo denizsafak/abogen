@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any, Dict, Iterable, List, Tuple
 
-from abogen.tts_backend_registry import get_metadata, is_registered_backend
+from abogen.tts_plugin.utils import get_voices, is_plugin_registered
 from abogen.utils import get_user_config_path
 
 
@@ -69,7 +69,7 @@ def serialize_profiles() -> Dict[str, Dict[str, Iterable[Tuple[str, float]]]]:
 
 def _normalize_supertonic_voice(value: Any) -> str:
     raw = str(value or "").strip().upper()
-    supertonic_voices = get_metadata("supertonic").voices
+    supertonic_voices = get_voices("supertonic")
     return raw if raw in supertonic_voices else "M1"
 
 
@@ -101,7 +101,7 @@ def normalize_profile_entry(entry: Any) -> Dict[str, Any]:
         return {}
 
     provider = str(entry.get("provider") or "kokoro").strip().lower()
-    if not is_registered_backend(provider):
+    if not is_plugin_registered(provider):
         provider = "kokoro"
 
     language = str(entry.get("language") or "a").strip().lower() or "a"
@@ -135,7 +135,7 @@ def normalize_profile_entry(entry: Any) -> Dict[str, Any]:
 
 def _normalize_voice_entries(entries: Iterable) -> List[Tuple[str, float]]:
     normalized: List[Tuple[str, float]] = []
-    kokoro_voices = get_metadata("kokoro").voices
+    kokoro_voices = get_voices("kokoro")
     for item in entries or []:
         if isinstance(item, dict):
             voice = item.get("id") or item.get("voice")

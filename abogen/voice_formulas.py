@@ -1,7 +1,7 @@
 import re
 from typing import List, Tuple
 
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_plugin.utils import get_voices
 
 
 # Calls parsing and loads the voice to gpu or cpu
@@ -22,7 +22,7 @@ def parse_formula_terms(formula: str) -> List[Tuple[str, float]]:
         raise ValueError("Empty voice formula")
 
     terms: List[Tuple[str, float]] = []
-    kokoro_voices = get_metadata("kokoro").voices
+    kokoro_voices = get_voices("kokoro")
     for segment in formula.split("+"):
         part = segment.strip()
         if not part:

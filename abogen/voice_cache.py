@@ -17,7 +17,7 @@ if LocalEntryNotFoundError is None:  # pragma: no cover - fallback for tests
         pass
 
 
-from abogen.tts_backend_registry import get_metadata
+from abogen.tts_plugin.utils import get_voices
 
 _CACHE_LOCK = threading.Lock()
 _CACHED_VOICES: Set[str] = set()
@@ -26,7 +26,7 @@ _BOOTSTRAPPED = False
 
 
 def _normalize_targets(voices: Optional[Iterable[str]]) -> Set[str]:
-    kokoro_voices = get_metadata("kokoro").voices
+    kokoro_voices = get_voices("kokoro")
     if not voices:
         return set(kokoro_voices)
     normalized: Set[str] = set()
