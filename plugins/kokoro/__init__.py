@@ -34,6 +34,13 @@ from .engine import KokoroEngine
 
 def _load_kpipeline() -> Any:
     """Lazy-load Kokoro dependencies."""
+    # Transformers 5.x moved AlbertModel out of top-level imports.
+    # Monkey-patch before kokoro imports it.
+    import transformers
+    if not hasattr(transformers, "AlbertModel"):
+        from transformers.models.albert import AlbertModel as _AlbertModel
+        transformers.AlbertModel = _AlbertModel
+
     from kokoro import KPipeline  # type: ignore[import-not-found]
     return KPipeline
 
