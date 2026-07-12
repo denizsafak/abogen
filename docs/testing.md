@@ -4,6 +4,60 @@ This document describes the testing strategy for Abogen's Plugin Architecture.
 
 ## Test Categories
 
+### 0. Auto-Discovery Plugin Tests (`tests/plugins/`)
+
+**Purpose**: Automatically test every plugin in `plugins/` directory without manual test creation. These tests use discovery to find all plugins and run generic tests against each one.
+
+**What They Test**:
+- **Manifest structure**: Required fields, API version format, voices field
+- **Engine lifecycle**: `create_engine`, `dispose` idempotency, post-dispose behavior
+- **Capability implementation**: Declared capabilities are implemented (e.g., `voice_list` → `VoiceLister`)
+
+**How Auto-Discovery Works**:
+```python
+# tests/plugins/conftest.py
+@pytest.fixture(scope="module")
+def plugin_ids(plugins_dir: Path) -> list[str]:
+    """Discovers all plugin directories with __init__.py"""
+    return [item.name for item in plugins_dir.iterdir() 
+            if item.is_dir() and (item / "__init__.py").exists()]
+```
+
+**Test Structure**:
+```
+tests/plugins/
+├── conftest.py              # Fixtures: plugin_ids, loaded_plugin, host_context
+└── test_all_plugins.py      # Generic tests for every plugin
+    ├── TestAllPluginsManifest
+    ├── TestAllPluginsEngine
+    └── TestAllPluginsCapabilities
+```
+
+**Running Auto-Discovery Tests**:
+```bash
+# Test all plugins automatically
+pytest tests/plugins/ -v
+
+# Test specific plugin
+pytest tests/plugins/ -v -k "kokoro"
+
+# See which plugins were discovered
+pytest tests/plugins/ --collect-only
+```
+
+**Adding a New Plugin**:
+1. Create plugin directory: `plugins/my_plugin/`
+2. Add `__init__.py` with `PLUGIN_MANIFEST`, `MODEL_REQUIREMENTS`, `create_engine`
+3. Run `pytest tests/plugins/` — tests automatically discover and test your plugin!
+
+**When to Add Plugin-Specific Tests**:
+Auto-discovery tests cover generic contract validation. Create plugin-specific tests in `tests/test_<plugin>_plugin.py` for:
+- Integration with real dependencies (e.g., KPipeline for Kokoro)
+- Specific voice IDs and behavior
+- Plugin-specific parameters and features
+
+---
+
 ### 1. Contract Tests (`tests/contracts/`)
 
 **Purpose**: Verify that every plugin satisfies the architectural contract. These tests ensure the Plugin Architecture's invariants are maintained.
@@ -82,7 +136,7 @@ pytest tests/test_behavioral_regression.py -v -k "kokoro"
 
 ---
 
-### 3. Unit Tests (`tests/`)
+### 4. Unit Tests (`tests/`)
 
 **Purpose**: Test individual modules in isolation.
 
@@ -94,7 +148,7 @@ pytest tests/test_behavioral_regression.py -v -k "kokoro"
 
 ---
 
-### 4. Integration Tests
+### 5. Integration Tests
 
 **Purpose**: Test cross-component interactions.
 
@@ -132,38 +186,35 @@ tests/
 
 ## Adding Tests for a New Plugin
 
-### Contract Tests (Required)
+### Auto-Discovery Tests (Automatic!)
 
-Create `tests/contracts/test_your_plugin.py`:
+**No manual test creation required!** When you add a new plugin to `plugins/`:
 
-```python
-"""Contract tests for YourPlugin — verifies architectural compliance."""
+1. Create plugin directory: `plugins/my_plugin/`
+2. Add `__init__.py` with required exports:
+   ```python
+   PLUGIN_MANIFEST = PluginManifest(...)
+   MODEL_REQUIREMENTS = [...]
+   def create_engine(...): ...
+   ```
+3. Run `pytest tests/plugins/` — auto-discovery tests automatically find and test your plugin!
 
-from pathlib import Path
-from abogen.tts_plugin.loader import load_plugin_from_dir
-from abogen.tts_plugin.manifest import PluginManifest
-from abogen.tts_plugin.engine import Engine
+**What's Tested Automatically**:
+- Manifest structure and required fields
+- API version compatibility
+- Engine creation and dispose contract
+- Capability implementation (if declared)
 
-def test_your_plugin_loads():
-    result = load_plugin_from_dir(Path("plugins/your_tts"))
-    assert result.success
-    assert isinstance(result.manifest, PluginManifest)
-    assert result.manifest.id == "your_tts"
-    assert callable(result.create_engine)
+### Plugin-Specific Tests (Optional)
 
-def test_your_plugin_creates_engine():
-    result = load_plugin_from_dir(Path("plugins/your_tts"))
-    # ... create HostContext, EngineConfig
-    engine = result.create_engine(ctx, None, EngineConfig(device="cpu"))
-    assert isinstance(engine, Engine)
-    engine.dispose()
+Create `tests/test_my_plugin_plugin.py` for:
+- Integration with real backend (e.g., KPipeline for Kokoro)
+- Specific voice IDs and behavior
+- Plugin-specific parameters and features
 
-def test_your_plugin_capabilities():
-    """If plugin declares capabilities, verify they're implemented."""
-    result = load_plugin_from_dir(Path("plugins/your_tts"))
-    # Check VoiceLister, PreviewGenerator, etc.
-    ...
-```
+### Contract Tests (Deprecated for New Plugins)
+
+**Note**: Auto-discovery tests (`tests/plugins/`) now cover contract validation for all plugins. Manual contract tests in `tests/contracts/` are only needed for testing internal architecture components.
 
 ### Behavioral Tests (Recommended)
 
@@ -171,10 +222,10 @@ Add parametrized tests to `tests/test_behavioral_regression.py`:
 
 ```python
 # In _plugin_ids list, add your plugin
-_plugin_ids = ["kokoro", "supertonic", "your_tts"]
-_plugin_engines["your_tts"] = _YourMockEngine
-_plugin_default_voices["your_tts"] = "voice1"
-_plugin_all_voices["your_tts"] = ["voice1", "voice2"]
+_plugin_ids = ["kokoro", "supertonic", "my_plugin"]
+_plugin_engines["my_plugin"] = _YourMockEngine
+_plugin_default_voices["my_plugin"] = "voice1"
+_plugin_all_voices["my_plugin"] = ["voice1", "voice2"]
 ```
 
 All existing behavioral tests will automatically run against your plugin.
