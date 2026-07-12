@@ -821,7 +821,7 @@ class ConversionThread(QThread):
                         "-i",
                         "pipe:0",
                     ]
-                    cmd.extend(["-c:a", "libopus", "-b:a", "24000"])
+                    cmd.extend(["-c:a", "libopus", "-b:a", "128000"])
                     cmd.append(merged_out_path)
                     ffmpeg_proc = create_process(cmd, stdin=subprocess.PIPE, text=False)
                     merged_out_file = None
@@ -976,7 +976,7 @@ class ConversionThread(QThread):
                             "-i",
                             "pipe:0",
                         ]
-                        cmd.extend(["-c:a", "libopus", "-b:a", "24000"])
+                        cmd.extend(["-c:a", "libopus", "-b:a", "128000"])
                         cmd.append(chapter_out_path)
                         chapter_ffmpeg_proc = create_process(
                             cmd, stdin=subprocess.PIPE, text=False
@@ -1642,7 +1642,7 @@ class ConversionThread(QThread):
                     )
                     cmd.extend(metadata_options)
                 elif self.output_format == "opus":
-                    cmd.extend(["-c:a", "libopus", "-b:a", "24000"])
+                    cmd.extend(["-c:a", "libopus", "-b:a", "128000"])
                 else:
                     self.log_updated.emit(
                         (f"Unsupported output format: {self.output_format}", "red")
