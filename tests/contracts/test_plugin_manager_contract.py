@@ -164,6 +164,9 @@ class TestCreatePipelineCompat:
     
     def test_create_pipeline_returns_callable(self):
         """create_pipeline returns a callable backend."""
+        from abogen.tts_plugin.host_context import HostContext
+        from abogen.tts_plugin.types import EngineConfig
+
         # Mock the plugin manager
         with patch("abogen.tts_plugin.utils.get_plugin_manager") as mock_get_manager:
             mock_manager = MagicMock()
@@ -175,7 +178,14 @@ class TestCreatePipelineCompat:
             backend = create_pipeline("kokoro", lang_code="a", device="cpu")
             
             assert callable(backend)
-            mock_manager.create_engine.assert_called_once_with("kokoro", lang_code="a", device="cpu")
+            mock_manager.create_engine.assert_called_once()
+            call_args = mock_manager.create_engine.call_args
+            assert call_args.args[0] == "kokoro"
+            assert isinstance(call_args.kwargs["context"], HostContext)
+            assert call_args.kwargs["model_path"] is None
+            assert isinstance(call_args.kwargs["config"], EngineConfig)
+            assert call_args.kwargs["config"].device == "cpu"
+            assert call_args.kwargs["config"].lang_code == "a"
     
     def test_create_pipeline_raises_for_unknown_plugin(self):
         """create_pipeline raises KeyError for unknown plugins."""

@@ -247,4 +247,8 @@ def run_debug_tts_wavs(
         "sample_rate": SAMPLE_RATE,
     }
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    try:
+        pipeline.dispose()
+    except Exception:
+        pass
     return manifest

@@ -92,6 +92,7 @@ class MockEngine:
     def __init__(
         self,
         voice_manifests: list[VoiceManifest] | None = None,
+        **kwargs: Any,
     ) -> None:
         self._disposed = False
         self._voice_manifests = voice_manifests or [
@@ -930,6 +931,7 @@ class TestValueObjectsBehavioral:
 
         config = EngineConfig()
         assert config.device == "cpu"
+        assert config.lang_code == "a"
 
     def test_parameter_values_defaults(self) -> None:
         pv = ParameterValues()

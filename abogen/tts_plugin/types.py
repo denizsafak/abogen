@@ -94,12 +94,18 @@ class SynthesizedAudio:
 
 @dataclass(frozen=True)
 class EngineConfig:
-    """Immutable value object for engine initialization settings.
+    """Immutable configuration of an Engine instance.
 
-    Contains only engine-specific settings, no resource references.
+    Contains parameters that define how a particular Engine instance is
+    created and that remain constant throughout the lifetime of that Engine.
+
+    Plugin implementations may ignore fields that are not applicable to them.
 
     Attributes:
         device: Device to use (e.g., "cpu", "cuda:0").
+        lang_code: Language code for the engine (e.g., "a" for Kokoro English).
+            Plugins that do not require a language code ignore this field.
     """
 
     device: str = "cpu"
+    lang_code: str = "a"

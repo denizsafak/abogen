@@ -192,10 +192,23 @@ class TestEngineConfigContract:
         config = EngineConfig(device="cuda:0")
         assert config.device == "cuda:0"
 
+    def test_default_lang_code(self) -> None:
+        config = EngineConfig()
+        assert config.lang_code == "a"
+
+    def test_custom_lang_code(self) -> None:
+        config = EngineConfig(lang_code="j")
+        assert config.lang_code == "j"
+
     def test_immutability(self) -> None:
         config = EngineConfig()
         with pytest.raises(AttributeError):
             config.device = "cuda:0"  # type: ignore[misc]
+
+    def test_immutability_lang_code(self) -> None:
+        config = EngineConfig()
+        with pytest.raises(AttributeError):
+            config.lang_code = "j"  # type: ignore[misc]
 
     def test_unknown_keys_ignored_per_spec(self) -> None:
         """Architecture spec: Unknown keys are ignored (no error).
@@ -205,3 +218,27 @@ class TestEngineConfigContract:
         """
         config = EngineConfig()
         assert config.device == "cpu"
+
+    def test_plugins_may_ignore_irrelevant_fields(self) -> None:
+        """Architecture Amendment #1: Plugins ignore unsupported fields.
+
+        EngineConfig may contain fields that are not relevant to every plugin.
+        Plugins MUST ignore fields they do not need, not raise on them.
+        """
+        config = EngineConfig(device="cuda:0", lang_code="j")
+        assert config.device == "cuda:0"
+        assert config.lang_code == "j"
+        # A plugin that only needs device simply reads config.device
+        # and ignores config.lang_code — this must not raise.
+
+    def test_engine_config_contains_engine_instance_configuration(self) -> None:
+        """Architecture Amendment #1: EngineConfig definition.
+
+        EngineConfig contains parameters that define how a particular
+        Engine instance is created and that remain constant throughout
+        the lifetime of that Engine.
+        """
+        config = EngineConfig(device="cpu", lang_code="a")
+        # Both fields are init-time, immutable, engine-scoped.
+        assert config.device == "cpu"
+        assert config.lang_code == "a"

@@ -57,7 +57,15 @@ def _make_mock_engine() -> Any:
         def __call__(self, text, voice, speed, split_pattern=None, total_steps=None):
             return [MockSegment()]
 
-    return SuperTonicEngine(MockPipeline())
+    engine = SuperTonicEngine(MockPipeline())
+
+    # Override listVoices for testing (real engine reads from manifest)
+    from abogen.tts_plugin.manifest import VoiceManifest
+    engine.listVoices = lambda source_id: [
+        VoiceManifest(id="test_voice_1", name="Test Voice 1", tags=("male",)),
+        VoiceManifest(id="test_voice_2", name="Test Voice 2", tags=("female",)),
+    ]
+    return engine
 
 
 # ──────────────────────────────────────────────────────────────
