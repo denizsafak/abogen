@@ -61,10 +61,26 @@ def _make_mock_engine() -> Any:
 
     # Override listVoices for testing (real engine reads from manifest)
     from abogen.tts_plugin.manifest import VoiceManifest
-    engine.listVoices = lambda source_id: [
-        VoiceManifest(id="test_voice_1", name="Test Voice 1", tags=("male",)),
-        VoiceManifest(id="test_voice_2", name="Test Voice 2", tags=("female",)),
-    ]
+    original_list_voices = engine.listVoices
+    
+    def mock_list_voices(source_id):
+        if engine._disposed:
+            from abogen.tts_plugin.errors import EngineError
+            raise EngineError("Engine disposed")
+        return [
+            VoiceManifest(id="M1", name="Male 1", tags=("male",)),
+            VoiceManifest(id="M2", name="Male 2", tags=("male",)),
+            VoiceManifest(id="M3", name="Male 3", tags=("male",)),
+            VoiceManifest(id="M4", name="Male 4", tags=("male",)),
+            VoiceManifest(id="M5", name="Male 5", tags=("male",)),
+            VoiceManifest(id="F1", name="Female 1", tags=("female",)),
+            VoiceManifest(id="F2", name="Female 2", tags=("female",)),
+            VoiceManifest(id="F3", name="Female 3", tags=("female",)),
+            VoiceManifest(id="F4", name="Female 4", tags=("female",)),
+            VoiceManifest(id="F5", name="Female 5", tags=("female",)),
+        ]
+    
+    engine.listVoices = mock_list_voices
     return engine
 
 
