@@ -62,6 +62,10 @@ from abogen.domain.metadata_helpers import (
     extract_series_metadata as _extract_series_metadata,
     format_series_sentence as _format_series_sentence,
 )
+from abogen.domain.title_builder import (
+    build_title_intro_text as _build_title_intro_text,
+    build_outro_text as _build_outro_text,
+)
 
 
 from .service import Job, JobStatus
@@ -165,81 +169,6 @@ def _coerce_truthy(value: Any, default: bool = True) -> bool:
 
 
 _OUTPUT_SANITIZE_RE = re.compile(r"[^\w\-_.]+")
-
-
-def _build_title_intro_text(
-    metadata: Optional[Mapping[str, Any]],
-    fallback_basename: str,
-) -> str:
-    normalized = _normalize_metadata_map(metadata)
-    fallback_title = Path(fallback_basename).stem if fallback_basename else ""
-    title = normalized.get("title") or normalized.get("book_title") or normalized.get("album") or fallback_title
-    if not title:
-        title = fallback_title
-    subtitle = normalized.get("subtitle") or normalized.get("sub_title")
-    if subtitle and title and subtitle.casefold() == title.casefold():
-        subtitle = ""
-    author_value = ""
-    for candidate in ("artist", "album_artist", "author", "authors", "writer", "composer"):
-        value = normalized.get(candidate)
-        if value:
-            author_value = value
-            break
-
-    series_name, series_number = _extract_series_metadata(normalized)
-    series_sentence = _format_series_sentence(series_name, series_number)
-
-    sentences: List[str] = []
-    if series_sentence:
-        sentences.append(_ensure_sentence(series_sentence))
-    if title:
-        sentences.append(_ensure_sentence(title))
-    if subtitle:
-        sentences.append(_ensure_sentence(subtitle))
-    author_sentence = _format_author_sentence(author_value)
-    if author_sentence:
-        sentences.append(_ensure_sentence(author_sentence))
-    return " ".join(sentences).strip()
-
-
-def _build_outro_text(
-    metadata: Optional[Mapping[str, Any]],
-    fallback_basename: str,
-) -> str:
-    normalized = _normalize_metadata_map(metadata)
-    fallback_title = Path(fallback_basename).stem if fallback_basename else ""
-    title = (
-        normalized.get("title")
-        or normalized.get("book_title")
-        or normalized.get("album")
-        or fallback_title
-    )
-    author_value = ""
-    for candidate in ("authors", "author", "album_artist", "artist", "writer", "composer"):
-        value = normalized.get(candidate)
-        if value:
-            author_value = value
-            break
-    author_sentence = _format_author_sentence(author_value)
-    authors_fragment = author_sentence[3:].strip() if author_sentence.lower().startswith("by ") else author_sentence.strip()
-
-    if title and authors_fragment:
-        closing_line = f"The end of {title} from {authors_fragment}"
-    elif title:
-        closing_line = f"The end of {title}"
-    elif authors_fragment:
-        closing_line = f"The end from {authors_fragment}"
-    else:
-        closing_line = "The end"
-
-    series_name, series_number = _extract_series_metadata(normalized)
-    series_sentence = _format_series_sentence(series_name, series_number)
-
-    sentences: List[str] = [_ensure_sentence(closing_line)]
-    if series_sentence:
-        sentences.append(_ensure_sentence(series_sentence))
-
-    return " ".join(sentence for sentence in sentences if sentence).strip()
 
 
 def _spec_to_voice_ids(spec: Any) -> Set[str]:
