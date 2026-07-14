@@ -21,6 +21,7 @@ from abogen.constants import (
     SUPPORTED_SUBTITLE_FORMATS,
 )
 from abogen.voice_formulas import get_new_voice
+from abogen.infrastructure.subtitle_writer import _format_timestamp
 from abogen.domain.split_pattern import get_split_pattern
 import abogen.hf_tracker as hf_tracker
 import static_ffmpeg
@@ -1220,8 +1221,8 @@ class ConversionThread(QThread):
                                         )
                                         if "ass" in subtitle_format:
                                             for start, end, text in new_entries:
-                                                start_time = self._ass_time(start)
-                                                end_time = self._ass_time(end)
+                                                start_time = _format_timestamp(start, ass=True)
+                                                end_time = _format_timestamp(end, ass=True)
                                                 # Use karaoke effect for highlighting mode
                                                 effect = (
                                                     "karaoke"
@@ -1236,7 +1237,7 @@ class ConversionThread(QThread):
                                             for entry in new_entries:
                                                 start, end, text = entry
                                                 merged_subtitle_file.write(
-                                                    f"{merged_srt_index}\n{self._srt_time(start)} --> {self._srt_time(end)}\n{text}\n\n"
+                                                    f"{merged_srt_index}\n{_format_timestamp(start)} --> {_format_timestamp(end)}\n{text}\n\n"
                                                 )
                                                 merged_srt_index += 1
                                 # Per-chapter subtitle processing for both file and ffmpeg_proc
@@ -1254,8 +1255,8 @@ class ConversionThread(QThread):
                                         )
                                         if "ass" in subtitle_format:
                                             for start, end, text in new_chapter_entries:
-                                                start_time = self._ass_time(start)
-                                                end_time = self._ass_time(end)
+                                                start_time = _format_timestamp(start, ass=True)
+                                                end_time = _format_timestamp(end, ass=True)
                                                 # Use karaoke effect for highlighting mode
                                                 effect = (
                                                     "karaoke"
@@ -1270,7 +1271,7 @@ class ConversionThread(QThread):
                                             for entry in new_chapter_entries:
                                                 start, end, text = entry
                                                 chapter_subtitle_file.write(
-                                                    f"{chapter_srt_index}\n{self._srt_time(start)} --> {self._srt_time(end)}\n{text}\n\n"
+                                                    f"{chapter_srt_index}\n{_format_timestamp(start)} --> {_format_timestamp(end)}\n{text}\n\n"
                                                 )
                                                 chapter_srt_index += 1
                             if merge_chapters_at_end:
@@ -1900,11 +1901,11 @@ class ConversionThread(QThread):
                             else processed_text.replace("\n", "\\N")
                         )
                         subtitle_file.write(
-                            f"Dialogue: 0,{self._ass_time(start_time)},{self._ass_time(end_time)},Default,,{margin},{margin},0,{effect},{alignment}{ass_text}\n"
+                            f"Dialogue: 0,{_format_timestamp(start_time, ass=True)},{_format_timestamp(end_time, ass=True)},Default,,{margin},{margin},0,{effect},{alignment}{ass_text}\n"
                         )
                     else:
                         subtitle_file.write(
-                            f"{srt_index}\n{self._srt_time(start_time)} --> {self._srt_time(end_time)}\n{processed_text}\n\n"
+                            f"{srt_index}\n{_format_timestamp(start_time)} --> {_format_timestamp(end_time)}\n{processed_text}\n\n"
                         )
                         srt_index += 1
 
@@ -2065,22 +2066,6 @@ class ConversionThread(QThread):
 
         # Add these to ffmpeg command
         return metadata_options, cover_path
-
-    def _srt_time(self, t):
-        """Helper function to format time for SRT files"""
-        h = int(t // 3600)
-        m = int((t % 3600) // 60)
-        s = int(t % 60)
-        ms = int((t - int(t)) * 1000)
-        return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
-
-    def _ass_time(self, t):
-        """Helper function to format time for ASS files"""
-        h = int(t // 3600)
-        m = int((t % 3600) // 60)
-        s = int(t % 60)
-        cs = int((t - int(t)) * 100)  # Centiseconds for ASS format
-        return f"{h:01d}:{m:02d}:{s:02d}.{cs:02d}"
 
     def _process_subtitle_tokens(
         self,
