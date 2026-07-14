@@ -46,6 +46,14 @@ from abogen.voice_profiles import load_profiles, normalize_profile_entry
 from abogen.pronunciation_store import increment_usage
 from abogen.llm_client import LLMClientError
 from abogen.infrastructure.subtitle_writer import create_subtitle_writer, SubtitleMode
+from abogen.domain.chapter_titles import (
+    simplify_heading_text as _simplify_heading_text,
+    headings_equivalent as _headings_equivalent,
+    strip_duplicate_heading_line as _strip_duplicate_heading_line,
+    normalize_caps_word as _normalize_caps_word,
+    normalize_chapter_opening_caps as _normalize_chapter_opening_caps,
+    format_spoken_chapter_title as _format_spoken_chapter_title,
+)
 
 
 from .service import Job, JobStatus
@@ -148,207 +156,8 @@ def _coerce_truthy(value: Any, default: bool = True) -> bool:
     return bool(value)
 
 
-_HEADING_SANITIZE_RE = re.compile(r"[^a-z0-9]+")
-_HEADING_NUMBER_PREFIX_RE = re.compile(r"^\s*(?P<number>(?:\d+|[ivxlcdm]+))(?P<suffix>(?:[\s.:;-].*)?)$", re.IGNORECASE)
-_ACRONYM_ALLOWLIST = {
-    "AI",
-    "API",
-    "CPU",
-    "DIY",
-    "GPU",
-    "HTML",
-    "HTTP",
-    "HTTPS",
-    "ID",
-    "JSON",
-    "MP3",
-    "MP4",
-    "M4B",
-    "NASA",
-    "OCR",
-    "PDF",
-    "SQL",
-    "TV",
-    "TTS",
-    "UK",
-    "UN",
-    "UFO",
-    "OK",
-    "URL",
-    "USA",
-    "US",
-    "VR",
-}
-_ROMAN_NUMERAL_CHARS = frozenset("IVXLCDM")
-_CAPS_WORD_RE = re.compile(r"[A-Z][A-Z0-9'\u2019-]*")
 _OUTPUT_SANITIZE_RE = re.compile(r"[^\w\-_.]+")
 
-
-def _simplify_heading_text(text: str) -> str:
-    raw = str(text or "").strip().lower()
-    if not raw:
-        return ""
-    simplified = _HEADING_SANITIZE_RE.sub("", raw)
-    if simplified.startswith("chapter"):
-        simplified = simplified[7:]
-    return simplified
-
-
-def _headings_equivalent(left: str, right: str) -> bool:
-    simple_left = _simplify_heading_text(left)
-    simple_right = _simplify_heading_text(right)
-    if not simple_left or not simple_right:
-        return False
-    
-    # Exact match
-    if simple_left == simple_right:
-        return True
-        
-    # Check if one is a prefix of the other (e.g. "Chapter 2" vs "Chapter 2: The Return")
-    # But be careful not to match "Chapter 1" with "Chapter 10"
-    # _simplify_heading_text removes "chapter" prefix, so we are comparing "2" vs "2thereturn"
-    
-    # If left is "2" and right is "2thereturn", left is prefix of right.
-    if simple_right.startswith(simple_left):
-        return True
-        
-    # If left is "2thereturn" and right is "2", right is prefix of left.
-    if simple_left.startswith(simple_right):
-        return True
-        
-    # Also check if the line is contained in the heading if it's long enough
-    if len(simple_left) > 5 and simple_left in simple_right:
-        return True
-        
-    return False
-
-
-def _format_spoken_chapter_title(title: str, index: int, apply_prefix: bool) -> str:
-    base = str(title or "").strip()
-    if not base:
-        return f"Chapter {index}" if apply_prefix else ""
-    if not apply_prefix:
-        return base
-    lowered = base.lower()
-    if lowered.startswith("chapter") and (len(lowered) == 7 or not lowered[7].isalpha()):
-        return base
-    match = _HEADING_NUMBER_PREFIX_RE.match(base)
-    if match:
-        number = match.group("number") or ""
-        suffix = match.group("suffix") or ""
-        cleaned_suffix = suffix.lstrip(" .,:;-_\t\u2013\u2014\u00b7\u2022")
-        if cleaned_suffix:
-            return f"Chapter {number}. {cleaned_suffix}"
-        return f"Chapter {number}"
-    return base
-
-
-def _strip_duplicate_heading_line(text: str, heading: str) -> tuple[str, bool]:
-    source_text = str(text or "")
-    if not source_text:
-        return source_text, False
-    normalized_heading = _simplify_heading_text(heading)
-    if not normalized_heading:
-        return source_text, False
-    lines = source_text.splitlines()
-    new_lines: List[str] = []
-    removed = False
-    for line in lines:
-        stripped = line.strip()
-        if not removed and stripped:
-            if _headings_equivalent(stripped, heading):
-                removed = True
-                continue
-        new_lines.append(line)
-    if not removed:
-        return source_text, False
-    while new_lines and not new_lines[0].strip():
-        new_lines.pop(0)
-    return "\n".join(new_lines), True
-
-
-def _normalize_caps_word(word: str) -> str:
-    upper = word.upper()
-    letters = [char for char in upper if char.isalpha()]
-    if not letters:
-        return word
-    if upper in _ACRONYM_ALLOWLIST:
-        return word
-    if len(letters) <= 1:
-        return word
-    if all(char in _ROMAN_NUMERAL_CHARS for char in letters) and len(letters) <= 7:
-        return word
-
-    parts = re.split(r"(['\-\u2019])", word)
-    normalized_parts: List[str] = []
-    for part in parts:
-        if part in {"'", "-", "\u2019"}:
-            normalized_parts.append(part)
-            continue
-        if not part:
-            continue
-        normalized_parts.append(part[0].upper() + part[1:].lower())
-    return "".join(normalized_parts) or word
-
-
-def _normalize_chapter_opening_caps(text: str) -> tuple[str, bool]:
-    if not text:
-        return text, False
-
-    leading_len = len(text) - len(text.lstrip())
-    leading = text[:leading_len]
-    working = text[leading_len:]
-    if not working:
-        return text, False
-
-    builder: List[str] = []
-    pos = 0
-    changed = False
-
-    while pos < len(working):
-        char = working[pos]
-        if char in "\r\n":
-            builder.append(working[pos:])
-            pos = len(working)
-            break
-        if char.isspace():
-            builder.append(char)
-            pos += 1
-            continue
-        if char.islower():
-            builder.append(working[pos:])
-            pos = len(working)
-            break
-        if not char.isalpha():
-            builder.append(char)
-            pos += 1
-            continue
-
-        match = _CAPS_WORD_RE.match(working, pos)
-        if not match:
-            builder.append(char)
-            pos += 1
-            continue
-
-        word = match.group(0)
-        if any(ch.islower() for ch in word):
-            builder.append(working[pos:])
-            pos = len(working)
-            break
-
-        normalized = _normalize_caps_word(word)
-        if normalized != word:
-            changed = True
-        builder.append(normalized)
-        pos = match.end()
-
-    if pos < len(working):
-        builder.append(working[pos:])
-
-    if not changed:
-        return text, False
-
-    return leading + "".join(builder), True
 
 def _normalize_metadata_map(values: Optional[Mapping[str, Any]]) -> Dict[str, str]:
     normalized: Dict[str, str] = {}
