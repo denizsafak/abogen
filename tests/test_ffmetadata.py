@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
+from abogen.infrastructure.exporters import ExportService
 
-from abogen.webui.conversion_runner import _render_ffmetadata, _write_ffmetadata_file
+
+svc = ExportService()
 
 
 def test_render_ffmetadata_includes_chapters(tmp_path):
@@ -17,7 +18,7 @@ def test_render_ffmetadata_includes_chapters(tmp_path):
         {"start": 5.0, "end": 12.345, "title": "Chapter 2"},
     ]
 
-    rendered = _render_ffmetadata(metadata, chapters)
+    rendered = svc.render_ffmetadata(metadata, chapters)
 
     assert ";FFMETADATA1" in rendered
     assert "title=Sample Book" in rendered
@@ -30,7 +31,7 @@ def test_render_ffmetadata_includes_chapters(tmp_path):
     assert "voice=voice_a" in rendered
 
     audio_path = tmp_path / "book.m4b"
-    metadata_path = _write_ffmetadata_file(audio_path, metadata, chapters)
+    metadata_path = svc.write_ffmetadata_file(audio_path, metadata, chapters)
     assert metadata_path is not None
     assert metadata_path.exists()
 

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-import math
 import os
 import re
 import subprocess
 import sys
-import tempfile
 import traceback
 import gc
 from datetime import datetime
@@ -21,6 +19,7 @@ import soundfile as sf
 import static_ffmpeg
 
 from abogen.tts_plugin.utils import get_voices, is_plugin_registered, resolve_voice_to_plugin
+from abogen.infrastructure.exporters import ExportService
 from abogen.epub3.exporter import build_epub3_package
 from abogen.kokoro_text_normalization import ApostropheConfig, normalize_for_pipeline, HAS_NUM2WORDS
 from abogen.normalization_settings import (
@@ -51,6 +50,8 @@ from abogen.infrastructure.subtitle_writer import create_subtitle_writer, Subtit
 
 from .service import Job, JobStatus
 
+
+_export_svc = ExportService()
 
 SPLIT_PATTERN = r"\n+"
 SAMPLE_RATE = 24000
@@ -1277,85 +1278,6 @@ def _chunk_text_for_tts(entry: Mapping[str, Any]) -> str:
     ).strip()
 
 
-def _escape_ffmetadata_value(value: str) -> str:
-    escaped = str(value).replace("\\", "\\\\").replace("\n", "\\n")
-    escaped = escaped.replace("=", "\\=").replace(";", "\\;").replace("#", "\\#")
-    return escaped
-
-
-def _metadata_to_ffmpeg_args(metadata: Dict[str, Any]) -> List[str]:
-    args: List[str] = []
-    for key, value in (metadata or {}).items():
-        if value in (None, ""):
-            continue
-        key_str = str(key).strip()
-        if not key_str:
-            continue
-        normalized_key = key_str.lower()
-        if normalized_key == "year":
-            ffmpeg_key = "date"
-        else:
-            ffmpeg_key = key_str
-        args.extend(["-metadata", f"{ffmpeg_key}={value}"])
-    return args
-
-
-def _render_ffmetadata(metadata: Dict[str, Any], chapters: List[Dict[str, Any]]) -> str:
-    lines: List[str] = [";FFMETADATA1"]
-    for key, value in (metadata or {}).items():
-        if value is None:
-            continue
-        key_str = str(key).strip()
-        if not key_str:
-            continue
-        lines.append(f"{key_str}={_escape_ffmetadata_value(value)}")
-
-    for chapter in chapters or []:
-        start = chapter.get("start")
-        end = chapter.get("end")
-        if start is None or end is None:
-            continue
-        try:
-            start_ms = max(0, int(round(float(start) * 1000)))
-            end_ms = int(round(float(end) * 1000))
-        except (TypeError, ValueError):
-            continue
-        if end_ms <= start_ms:
-            end_ms = start_ms + 1
-        lines.append("[CHAPTER]")
-        lines.append("TIMEBASE=1/1000")
-        lines.append(f"START={start_ms}")
-        lines.append(f"END={end_ms}")
-        title = chapter.get("title")
-        if title:
-            lines.append(f"title={_escape_ffmetadata_value(title)}")
-        voice = chapter.get("voice")
-        if voice:
-            lines.append(f"voice={_escape_ffmetadata_value(voice)}")
-
-    return "\n".join(lines) + "\n"
-
-
-def _write_ffmetadata_file(
-    audio_path: Path,
-    metadata: Dict[str, Any],
-    chapters: List[Dict[str, Any]],
-) -> Optional[Path]:
-    content = _render_ffmetadata(metadata, chapters)
-    if content.strip() == ";FFMETADATA1":
-        return None
-    directory = audio_path.parent if audio_path.parent.exists() else Path(tempfile.gettempdir())
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        suffix=".ffmeta",
-        delete=False,
-        dir=str(directory),
-    ) as handle:
-        handle.write(content)
-        return Path(handle.name)
-
-
 def _apply_m4b_chapters_with_mutagen(
     audio_path: Path,
     chapters: List[Dict[str, Any]],
@@ -1427,14 +1349,14 @@ def _embed_m4b_metadata(
 ) -> None:
     metadata_map = dict(metadata_payload.get("metadata") or {})
     chapter_entries = list(metadata_payload.get("chapters") or [])
-    ffmetadata_path = _write_ffmetadata_file(audio_path, metadata_map, chapter_entries)
+    ffmetadata_path = _export_svc.write_ffmetadata_file(audio_path, metadata_map, chapter_entries)
     cover_path: Optional[Path] = None
     if job.cover_image_path:
         candidate = Path(job.cover_image_path)
         if candidate.exists():
             cover_path = candidate
 
-    metadata_args = _metadata_to_ffmpeg_args(metadata_map)
+    metadata_args = _export_svc._metadata_to_ffmpeg_args(metadata_map)
 
     if not ffmetadata_path and not cover_path and not metadata_args:
         return
@@ -2595,7 +2517,7 @@ def _build_ffmpeg_command(path: Path, fmt: str, metadata: Optional[Dict[str, str
         base += ["-c:a", "copy"]
 
     if metadata:
-        base.extend(_metadata_to_ffmpeg_args(metadata))
+        base.extend(_export_svc._metadata_to_ffmpeg_args(metadata))
     base.append(str(path))
     return base
 
