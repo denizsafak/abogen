@@ -14,7 +14,6 @@ from abogen.utils import (
 )
 from abogen.constants import (
     LANGUAGE_DESCRIPTIONS,
-    SAMPLE_VOICE_TEXTS,
     COLORS,
     CHAPTER_OPTIONS_COUNTDOWN,
     SUBTITLE_FORMATS,
@@ -22,11 +21,11 @@ from abogen.constants import (
     SUPPORTED_SUBTITLE_FORMATS,
 )
 from abogen.voice_formulas import get_new_voice
+from abogen.domain.split_pattern import get_split_pattern
 import abogen.hf_tracker as hf_tracker
 import static_ffmpeg
 import threading  # for efficient waiting
 import subprocess
-import platform
 
 # Configuration constants
 _USER_RESPONSE_TIMEOUT = (
@@ -43,10 +42,7 @@ from abogen.subtitle_utils import (
     get_sample_voice_text,
     sanitize_name_for_os,
     _CHAPTER_MARKER_SEARCH_PATTERN,
-    _VOICE_MARKER_PATTERN,
-    _VOICE_MARKER_SEARCH_PATTERN,
-    split_text_by_voice_markers,
-    validate_voice_name,
+    split_text_by_voice_markers
 )
 
 class CountdownDialog(QDialog):
@@ -216,40 +212,6 @@ class ConversionThread(QThread):
     PUNCTUATION_SENTENCE_COMMA = ".!?,।。！？、，"
     PUNCTUATION_COMMAS = ",，、"
 
-    def _get_split_pattern(self, lang_code, subtitle_mode):
-        """
-        Get the appropriate split pattern based on language and subtitle mode.
-
-        Args:
-            lang_code: Language code (a, b, e, f, etc.)
-            subtitle_mode: Subtitle mode ("Sentence", "Sentence + Comma", "Line", etc.)
-
-        Returns:
-            Split pattern string
-        """
-        # For English, always use newline splitting only
-        if lang_code in ["a", "b"]:
-            return "\n"
-
-        # Determine spacing pattern based on language
-        spacing_pattern = r"\s*" if lang_code in ["z", "j"] else r"\s+"
-
-        # For Chinese/Japanese, when subtitle mode is Disabled or Line, prefer
-        # punctuation-based splitting instead of plain newline splitting.
-        if subtitle_mode in ("Disabled", "Line") and lang_code in ["z", "j"]:
-            return r"(?<=[{}]){}|\n+".format(self.PUNCTUATION_SENTENCE, spacing_pattern)
-
-        if subtitle_mode == "Line":
-            return "\n"
-        elif subtitle_mode == "Sentence":
-            return r"(?<=[{}]){}|\n+".format(self.PUNCTUATION_SENTENCE, spacing_pattern)
-        elif subtitle_mode == "Sentence + Comma":
-            return r"(?<=[{}]){}|\n+".format(
-                self.PUNCTUATION_SENTENCE_COMMA, spacing_pattern
-            )
-        else:
-            return r"\n+"  # Default to line breaks
-
     def __init__(
         self,
         file_name,
@@ -298,7 +260,7 @@ class ConversionThread(QThread):
         self.silence_duration = 2.0  # Default value, will be overridden from GUI
         self.use_spacy_segmentation = True  # Default, will be overridden from GUI
         # Set split pattern based on language and subtitle mode
-        self.split_pattern = self._get_split_pattern(lang_code, subtitle_mode)
+        self.split_pattern = get_split_pattern(lang_code, subtitle_mode)
         self.voice_cache = {}  # Cache for loaded voices
 
     def load_voice_cached(self, voice_name, tts):
