@@ -66,6 +66,12 @@ from abogen.domain.title_builder import (
     build_title_intro_text as _build_title_intro_text,
     build_outro_text as _build_outro_text,
 )
+from abogen.domain.file_type import (
+    infer_file_type as _infer_file_type,
+    auto_select_relevant_chapters as _auto_select_relevant_chapters,
+    chapter_label as _chapter_label,
+    update_metadata_for_chapter_count as _update_metadata_for_chapter_count,
+)
 
 
 from .service import Job, JobStatus
@@ -269,128 +275,6 @@ def _initialize_voice_cache(job: Job) -> None:
 
     for voice_id, error in errors.items():
         job.add_log(f"Failed to cache voice '{voice_id}': {error}", level="warning")
-
-
-_SIGNIFICANT_LENGTH_THRESHOLDS: Dict[str, int] = {"epub": 1000, "markdown": 500}
-_MIN_SHORT_CONTENT: Dict[str, int] = {"epub": 240, "markdown": 160}
-_STRUCTURAL_KEYWORDS = (
-    "preface",
-    "prologue",
-    "introduction",
-    "foreword",
-    "epilogue",
-    "afterword",
-    "appendix",
-    "acknowledgment",
-    "acknowledgement",
-)
-_STRUCTURAL_MIN_LENGTH = 120
-_MAX_SHORT_CHAPTERS = 2
-
-
-def _infer_file_type(path: Path) -> str:
-    suffix = path.suffix.lower()
-    if suffix == ".epub":
-        return "epub"
-    if suffix in {".md", ".markdown"}:
-        return "markdown"
-    if suffix == ".pdf":
-        return "pdf"
-    if suffix == ".txt":
-        return "text"
-    return suffix.lstrip(".") or "text"
-
-
-def _looks_structural(title: str) -> bool:
-    lowered = title.strip().lower()
-    if not lowered:
-        return False
-    return any(keyword in lowered for keyword in _STRUCTURAL_KEYWORDS)
-
-
-def _auto_select_relevant_chapters(
-    chapters: List[ExtractedChapter],
-    file_type: str,
-) -> tuple[List[ExtractedChapter], List[tuple[str, int]]]:
-    if not chapters:
-        return [], []
-
-    normalized = file_type.lower()
-    threshold = _SIGNIFICANT_LENGTH_THRESHOLDS.get(normalized, 0)
-    min_short = _MIN_SHORT_CONTENT.get(normalized, 0)
-
-    kept: List[ExtractedChapter] = []
-    skipped: List[tuple[str, int]] = []
-    short_kept = 0
-
-    for chapter in chapters:
-        stripped = chapter.text.strip()
-        length = len(stripped)
-        if length == 0:
-            skipped.append((chapter.title, length))
-            continue
-
-        keep = False
-        if threshold == 0:
-            keep = True
-        elif length >= threshold:
-            keep = True
-        elif not kept:
-            keep = True
-        elif min_short and length >= min_short and short_kept < _MAX_SHORT_CHAPTERS:
-            keep = True
-            short_kept += 1
-        elif _looks_structural(chapter.title) and length >= _STRUCTURAL_MIN_LENGTH:
-            keep = True
-
-        if keep:
-            kept.append(chapter)
-        else:
-            skipped.append((chapter.title, length))
-
-    if kept:
-        return kept, skipped
-
-    # Fallback: retain the longest non-empty chapter so conversion can proceed.
-    longest_idx = None
-    longest_length = 0
-    for idx, chapter in enumerate(chapters):
-        stripped_length = len(chapter.text.strip())
-        if stripped_length > longest_length:
-            longest_length = stripped_length
-            longest_idx = idx
-
-    if longest_idx is None or longest_length == 0:
-        return [], []
-
-    fallback_chapter = chapters[longest_idx]
-    kept = [fallback_chapter]
-    skipped = [
-        (chapter.title, len(chapter.text.strip()))
-        for idx, chapter in enumerate(chapters)
-        if idx != longest_idx and chapter.text.strip()
-    ]
-    return kept, skipped
-
-
-def _chapter_label(file_type: str) -> str:
-    return "chapters" if file_type.lower() in {"epub", "markdown"} else "pages"
-
-
-def _update_metadata_for_chapter_count(metadata: Dict[str, Any], count: int, file_type: str) -> None:
-    if not metadata or count <= 0:
-        return
-
-    label = "Chapters" if file_type.lower() in {"epub", "markdown"} else "Pages"
-    metadata["chapter_count"] = str(count)
-
-    pattern = re.compile(r"\(\d+\s+(Chapters?|Pages?)\)")
-    replacement = f"({count} {label})"
-    for key in ("album", "ALBUM"):
-        value = metadata.get(key)
-        if not isinstance(value, str):
-            continue
-        metadata[key] = pattern.sub(replacement, value)
 
 
 def _apply_chapter_overrides(
