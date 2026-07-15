@@ -102,6 +102,15 @@ from abogen.domain.voice_utils import (
     infer_provider_from_spec as _infer_provider_from_spec,
     coerce_truthy as _coerce_truthy,
 )
+from abogen.domain.output_paths import (
+    slugify as _slugify,
+    sanitize_output_stem as _sanitize_output_stem,
+    output_timestamp_token as _output_timestamp_token,
+    build_output_path as _build_output_path,
+    apply_newline_policy as _apply_newline_policy,
+    resolve_output_directory as _resolve_output_directory,
+    resolve_project_layout as _resolve_project_layout,
+)
 
 
 from .service import Job, JobStatus
@@ -1250,67 +1259,25 @@ def _prepare_output_dir(job: Job) -> Path:
     from platformdirs import user_desktop_dir  # type: ignore[import-not-found]
 
     default_output = Path(str(get_user_cache_path("outputs")))
-    if job.save_mode == "Save to Desktop":
-        directory = Path(user_desktop_dir())
-    elif job.save_mode == "Save next to input file":
-        directory = job.stored_path.parent
-    elif job.save_mode == "Choose output folder" and job.output_folder:
-        directory = Path(job.output_folder)
-    elif job.save_mode == "Use default save location":
-        directory = Path(get_user_output_path())
-    else:
-        directory = default_output
+    directory = _resolve_output_directory(
+        save_mode=job.save_mode,
+        stored_path=job.stored_path,
+        output_folder=getattr(job, "output_folder", None),
+        desktop_dir=Path(user_desktop_dir()),
+        user_output_path=Path(get_user_output_path()),
+        user_cache_outputs=default_output,
+    )
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
 
-def _build_output_path(directory: Path, original_name: str, extension: str) -> Path:
-    sanitized = _sanitize_output_stem(original_name)
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory / f"{sanitized}.{extension}"
-
-
 def _prepare_project_layout(job: Job, base_dir: Path) -> tuple[Path, Path, Path, Optional[Path]]:
     base_dir.mkdir(parents=True, exist_ok=True)
-    sanitized = _sanitize_output_stem(job.original_filename)
-    folder_name = f"{_output_timestamp_token()}_{sanitized}"
-    project_root = base_dir / folder_name
-    project_root.mkdir(parents=True, exist_ok=True)
-
-    if job.save_as_project:
-        audio_dir = project_root / "audio"
-        subtitle_dir = project_root / "subtitles"
-        metadata_dir = project_root / "metadata"
-        for directory in (audio_dir, subtitle_dir, metadata_dir):
-            directory.mkdir(parents=True, exist_ok=True)
-        return project_root, audio_dir, subtitle_dir, metadata_dir
-
-    return project_root, project_root, project_root, None
-
-
-def _apply_newline_policy(chapters: List[ExtractedChapter], replace_single_newlines: bool) -> None:
-    if not replace_single_newlines:
-        return
-    newline_regex = re.compile(r"(?<!\n)\n(?!\n)")
-    for chapter in chapters:
-        chapter.text = newline_regex.sub(" ", chapter.text)
-
-
-def _slugify(title: str, index: int) -> str:
-    sanitized = re.sub(r"[^\w\-]+", "_", title.lower()).strip("_")
-    if not sanitized:
-        sanitized = f"chapter_{index:02d}"
-    return sanitized[:80]
-
-
-def _sanitize_output_stem(name: str) -> str:
-    base = Path(name or "").stem
-    sanitized = _OUTPUT_SANITIZE_RE.sub("_", base).strip("_")
-    return sanitized or "output"
-
-
-def _output_timestamp_token() -> str:
-    return datetime.now().strftime("%Y%m%d-%H%M%S")
+    return _resolve_project_layout(
+        original_filename=job.original_filename,
+        save_as_project=job.save_as_project,
+        base_dir=base_dir,
+    )
 
 
 def _open_audio_sink(
