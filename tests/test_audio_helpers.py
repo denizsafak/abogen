@@ -46,6 +46,7 @@ class TestBuildFfmpegCommand:
 
         cmd = build_ffmpeg_command(Path("/out.m4b"), "m4b")
         assert "aac" in cmd
+        assert "-q:a" in cmd
         assert "+faststart+use_metadata_tags" in cmd
 
     def test_wav_copy_codec(self):

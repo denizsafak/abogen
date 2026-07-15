@@ -23,6 +23,12 @@ from abogen.constants import (
 from abogen.voice_formulas import get_new_voice
 from abogen.infrastructure.subtitle_writer import _format_timestamp
 from abogen.domain.split_pattern import get_split_pattern
+from abogen.domain.output_paths import (
+    resolve_output_directory,
+    build_output_path,
+    sanitize_output_stem,
+)
+from abogen.domain.audio_helpers import build_ffmpeg_command, to_float32
 import abogen.hf_tracker as hf_tracker
 import static_ffmpeg
 import threading  # for efficient waiting
@@ -639,15 +645,17 @@ class ConversionThread(QThread):
                 base_path = self.display_path if self.display_path else self.file_name
 
             base_name = os.path.splitext(os.path.basename(base_path))[0]
-            # Sanitize base_name for folder/file creation based on OS
             sanitized_base_name = sanitize_name_for_os(base_name, is_folder=True)
 
-            if self.save_option == "Save to Desktop":
-                parent_dir = user_desktop_dir()
-            elif self.save_option == "Save next to input file":
-                parent_dir = os.path.dirname(base_path)
-            else:
-                parent_dir = self.output_folder or os.getcwd()
+            parent_dir = resolve_output_directory(
+                save_mode=self.save_option,
+                stored_path=Path(base_path),
+                output_folder=getattr(self, "output_folder", None),
+                desktop_dir=Path(user_desktop_dir()),
+                user_output_path=None,
+                user_cache_outputs=Path(os.getcwd()),
+            )
+            parent_dir = str(parent_dir)
             # Ensure the output folder exists, error if it doesn't
             if not os.path.exists(parent_dir):
                 self.log_updated.emit(
@@ -717,77 +725,40 @@ class ConversionThread(QThread):
                         format=self.output_format,
                     )
                     ffmpeg_proc = None
-                elif self.output_format == "m4b":
-                    # Real-time M4B generation using FFmpeg pipe
+                elif self.output_format in ("m4b", "opus"):
+                    # Real-time generation using FFmpeg pipe
                     static_ffmpeg.add_paths()
                     merged_out_file = None
                     ffmpeg_proc = None
                     metadata_options, cover_path = (
                         self._extract_and_add_metadata_tags_to_ffmpeg_cmd()
+                        if self.output_format == "m4b"
+                        else ([], None)
                     )
-                    # Prepare ffmpeg command for m4b output
-                    cmd = [
-                        "ffmpeg",
-                        "-y",
-                        "-thread_queue_size",
-                        "32768",
-                        "-f",
-                        "f32le",
-                        "-ar",
-                        "24000",
-                        "-ac",
-                        "1",
-                        "-i",
-                        "pipe:0",
-                    ]
-                    if cover_path and os.path.exists(cover_path):
-                        cmd.extend(
-                            [
-                                "-i",
-                                cover_path,
-                                "-map",
-                                "0:a",
-                                "-map",
-                                "1",
-                                "-c:v",
-                                "copy",
-                                "-disposition:v",
-                                "attached_pic",
-                            ]
-                        )
-                    cmd.extend(
-                        [
-                            "-c:a",
-                            "aac",
-                            "-q:a",
-                            "2",
-                            "-movflags",
-                            "+faststart+use_metadata_tags",
-                        ]
+                    cmd = build_ffmpeg_command(
+                        Path(merged_out_path),
+                        self.output_format,
                     )
-                    cmd += metadata_options
-                    cmd.append(merged_out_path)
+                    # Insert thread queue size after ffmpeg header
+                    cmd.insert(2, "-thread_queue_size")
+                    cmd.insert(3, "32768")
+                    if self.output_format == "m4b" and cover_path and os.path.exists(cover_path):
+                        # Insert cover image input before the output path
+                        output_path = cmd.pop()
+                        cmd.extend([
+                            "-i", cover_path,
+                            "-map", "0:a",
+                            "-map", "1",
+                            "-c:v", "copy",
+                            "-disposition:v", "attached_pic",
+                        ])
+                        cmd.extend(metadata_options)
+                        cmd.append(output_path)
+                    elif self.output_format == "m4b":
+                        output_path = cmd.pop()
+                        cmd.extend(metadata_options)
+                        cmd.append(output_path)
                     ffmpeg_proc = create_process(cmd, stdin=subprocess.PIPE, text=False)
-                elif self.output_format == "opus":
-                    static_ffmpeg.add_paths()
-                    cmd = [
-                        "ffmpeg",
-                        "-y",
-                        "-thread_queue_size",
-                        "32768",
-                        "-f",
-                        "f32le",
-                        "-ar",
-                        "24000",
-                        "-ac",
-                        "1",
-                        "-i",
-                        "pipe:0",
-                    ]
-                    cmd.extend(["-c:a", "libopus", "-b:a", "24000"])
-                    cmd.append(merged_out_path)
-                    ffmpeg_proc = create_process(cmd, stdin=subprocess.PIPE, text=False)
-                    merged_out_file = None
                 else:
                     self.log_updated.emit(
                         (f"Unsupported output format: {self.output_format}", "red")
@@ -1560,58 +1531,27 @@ class ConversionThread(QThread):
                 )
             else:
                 static_ffmpeg.add_paths()
-                cmd = [
-                    "ffmpeg",
-                    "-y",
-                    "-thread_queue_size",
-                    "32768",
-                    "-f",
-                    "f32le",
-                    "-ar",
-                    str(rate),
-                    "-ac",
-                    "1",
-                    "-i",
-                    "pipe:0",
-                ]
+                cmd = build_ffmpeg_command(
+                    Path(merged_out_path),
+                    self.output_format,
+                )
+                cmd.insert(2, "-thread_queue_size")
+                cmd.insert(3, "32768")
                 if self.output_format == "m4b":
                     metadata_options, cover_path = (
                         self._extract_and_add_metadata_tags_to_ffmpeg_cmd()
                     )
                     if cover_path and os.path.exists(cover_path):
-                        cmd.extend(
-                            [
-                                "-i",
-                                cover_path,
-                                "-map",
-                                "0:a",
-                                "-map",
-                                "1",
-                                "-c:v",
-                                "copy",
-                                "-disposition:v",
-                                "attached_pic",
-                            ]
-                        )
-                    cmd.extend(
-                        [
-                            "-c:a",
-                            "aac",
-                            "-q:a",
-                            "2",
-                            "-movflags",
-                            "+faststart+use_metadata_tags",
-                        ]
-                    )
+                        output_path = cmd.pop()
+                        cmd.extend([
+                            "-i", cover_path,
+                            "-map", "0:a",
+                            "-map", "1",
+                            "-c:v", "copy",
+                            "-disposition:v", "attached_pic",
+                        ])
+                        cmd.append(output_path)
                     cmd.extend(metadata_options)
-                elif self.output_format == "opus":
-                    cmd.extend(["-c:a", "libopus", "-b:a", "24000"])
-                else:
-                    self.log_updated.emit(
-                        (f"Unsupported output format: {self.output_format}", "red")
-                    )
-                    return
-                cmd.append(merged_out_path)
                 ffmpeg_proc = create_process(cmd, stdin=subprocess.PIPE, text=False)
 
             # Always generate subtitles for subtitle input files
