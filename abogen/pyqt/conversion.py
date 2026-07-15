@@ -29,6 +29,12 @@ from abogen.domain.output_paths import (
     sanitize_output_stem,
 )
 from abogen.domain.audio_helpers import build_ffmpeg_command, to_float32
+from abogen.domain.audio_buffer import (
+    create_silence,
+    mix_audio,
+    normalize_audio,
+    SAMPLE_RATE,
+)
 import abogen.hf_tracker as hf_tracker
 import static_ffmpeg
 import threading  # for efficient waiting
@@ -1285,10 +1291,7 @@ class ConversionThread(QThread):
 
                 # Add silence between chapters for merged output (except after the last chapter)
                 if merge_chapters_at_end and chapter_idx < total_chapters:
-                    silence_samples = int(
-                        self.silence_duration * 24000
-                    )  # Silence duration at 24,000 Hz
-                    silence_audio = np.zeros(silence_samples, dtype="float32")
+                    silence_audio = create_silence(self.silence_duration)
                     silence_bytes = silence_audio.tobytes()
 
                     if merged_out_file:
@@ -1596,9 +1599,8 @@ class ConversionThread(QThread):
             max_end_time = max(
                 (end for _, end, _ in subtitles if end is not None), default=0
             )
-            audio_buffer = np.zeros(
-                int(max_end_time * rate) + rate, dtype="float32"
-            )
+            buffer_samples = int(max_end_time * rate) + rate
+            audio_buffer = np.zeros(buffer_samples, dtype="float32")
 
             # Process each subtitle and mix into buffer
             self.etr_start_time = time.time()
@@ -1799,33 +1801,14 @@ class ConversionThread(QThread):
                 # Pad or trim to subtitle duration
                 target_samples = int(subtitle_duration * rate)
                 if len(full_audio) < target_samples:
-                    full_audio = np.concatenate(
-                        [
-                            full_audio,
-                            np.zeros(
-                                target_samples - len(full_audio), dtype="float32"
-                            ),
-                        ]
-                    )
+                    padding_duration = (target_samples - len(full_audio)) / rate
+                    full_audio = np.concatenate([full_audio, create_silence(padding_duration)])
                 elif len(full_audio) > target_samples:
                     full_audio = full_audio[:target_samples]
 
                 # Mix audio into buffer at the correct position (handles overlaps)
                 start_sample = int(start_time * rate)
-                end_sample = start_sample + len(full_audio)
-                if end_sample > len(audio_buffer):
-                    # Extend buffer if needed
-                    audio_buffer = np.concatenate(
-                        [
-                            audio_buffer,
-                            np.zeros(
-                                end_sample - len(audio_buffer), dtype="float32"
-                            ),
-                        ]
-                    )
-
-                # Mix (add) the audio - this handles overlaps by combining them
-                audio_buffer[start_sample:end_sample] += full_audio
+                mix_audio(audio_buffer, full_audio, start_sample)
 
                 # Write subtitle
                 if subtitle_file:
@@ -1860,12 +1843,11 @@ class ConversionThread(QThread):
                 self.progress_updated.emit(percent, etr_str)
 
             # Normalize audio buffer to prevent clipping from mixed overlaps
-            max_amplitude = np.abs(audio_buffer).max()
-            if max_amplitude > 1.0:
+            if np.abs(audio_buffer).max() > 1.0:
                 self.log_updated.emit(
-                    f"\n  -> Normalizing audio (peak: {max_amplitude:.2f})"
+                    f"\n  -> Normalizing audio (peak: {np.abs(audio_buffer).max():.2f})"
                 )
-                audio_buffer = audio_buffer / max_amplitude
+                audio_buffer = normalize_audio(audio_buffer)
 
             # Write the complete audio buffer
             self.log_updated.emit(("\nFinalizing audio. Please wait...", "grey"))

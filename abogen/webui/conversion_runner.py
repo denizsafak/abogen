@@ -116,6 +116,11 @@ from abogen.domain.audio_helpers import (
     to_float32 as _to_float32,
     apply_m4b_chapters_with_mutagen as _apply_m4b_chapters_with_mutagen,
 )
+from abogen.domain.audio_buffer import (
+    create_silence as _create_silence,
+    normalize_audio as _normalize_audio,
+    SAMPLE_RATE,
+)
 
 
 from .service import Job, JobStatus
@@ -640,10 +645,9 @@ def run_conversion_job(job: Job) -> None:
             nonlocal current_time
             if duration_seconds <= 0:
                 return
-            samples = int(round(duration_seconds * SAMPLE_RATE))
-            if samples <= 0:
+            silence = _create_silence(duration_seconds)
+            if silence.size == 0:
                 return
-            silence = np.zeros(samples, dtype="float32")
             if include_in_chapter and chapter_sink:
                 chapter_sink.write(silence)
             if audio_sink:
