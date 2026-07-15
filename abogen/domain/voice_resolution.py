@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Set
 
-from abogen.tts_plugin.utils import get_voices
+from abogen.tts_plugin.utils import get_voices, get_default_voice
 from abogen.voice_formulas import extract_voice_ids
 from abogen.voice_cache import ensure_voice_assets
 
@@ -164,3 +164,27 @@ def chunk_voice_spec(job: Any, chunk: Dict[str, Any], fallback: str) -> str:
     if fallback:
         return fallback
     return job_voice_fallback(job)
+
+
+def resolve_fallback_voice_spec(
+    base_spec: str,
+    job_voice: str,
+    voice_cache_keys: list[str],
+    provider: str = "kokoro",
+) -> str:
+    """Resolve the voice spec for intro/outro with a priority fallback chain.
+
+    Priority: base_spec → job_voice → first voice_cache key → default voice.
+    ``"__custom_mix"`` is treated as empty (it is not a usable voice spec).
+    """
+    spec = base_spec or job_voice
+    if spec == "__custom_mix":
+        spec = job_voice or ""
+    if not spec:
+        for key in voice_cache_keys:
+            if key and key != "__custom_mix":
+                spec = key.split(":", 1)[-1]
+                break
+    if not spec:
+        spec = get_default_voice(provider)
+    return spec

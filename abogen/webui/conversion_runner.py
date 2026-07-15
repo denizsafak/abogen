@@ -84,6 +84,7 @@ from abogen.domain.voice_resolution import (
     initialize_voice_cache as _initialize_voice_cache,
     chapter_voice_spec as _chapter_voice_spec,
     chunk_voice_spec as _chunk_voice_spec,
+    resolve_fallback_voice_spec as _resolve_fallback_voice_spec,
 )
 from abogen.domain.chapter_overrides import apply_chapter_overrides as _apply_chapter_overrides
 from abogen.domain.metadata_merge import merge_metadata as _merge_metadata
@@ -535,15 +536,9 @@ def run_conversion_job(job: Job) -> None:
                 preview = book_intro_text if len(book_intro_text) <= 120 else f"{book_intro_text[:117]}…"
                 job.add_log(f"Title intro enabled: {preview}", level="debug")
 
-                intro_voice_spec = base_voice_spec or job.voice
-                if intro_voice_spec == "__custom_mix":
-                    intro_voice_spec = base_voice_spec or ""
-                if not intro_voice_spec:
-                    fallback_key = next(iter(voice_cache.keys()), "")
-                    if fallback_key and fallback_key != "__custom_mix":
-                        intro_voice_spec = fallback_key.split(":", 1)[-1]
-                if not intro_voice_spec:
-                    intro_voice_spec = get_default_voice("kokoro")
+                intro_voice_spec = _resolve_fallback_voice_spec(
+                    base_voice_spec, job.voice, list(voice_cache.keys())
+                )
 
                 if intro_voice_spec:
                     intro_provider, _, intro_voice_choice, intro_speed, intro_steps = resolve_voice_choice(
@@ -960,16 +955,9 @@ def run_conversion_job(job: Job) -> None:
 
         if getattr(job, "read_closing_outro", True):
             outro_text = _build_outro_text(job.metadata_tags, job.original_filename)
-            outro_voice_spec = base_voice_spec or job.voice
-            if outro_voice_spec == "__custom_mix":
-                outro_voice_spec = base_voice_spec or ""
-            if not outro_voice_spec:
-                fallback_key = next(iter(voice_cache.keys()), "")
-                if fallback_key and fallback_key != "__custom_mix":
-                    # `voice_cache` keys are internal and include provider prefixes.
-                    outro_voice_spec = fallback_key.split(":", 1)[-1]
-            if not outro_voice_spec:
-                outro_voice_spec = get_default_voice("kokoro")
+            outro_voice_spec = _resolve_fallback_voice_spec(
+                base_voice_spec, job.voice, list(voice_cache.keys())
+            )
 
             if outro_text and outro_voice_spec:
                 outro_start_time = current_time
