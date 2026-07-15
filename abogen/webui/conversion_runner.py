@@ -111,6 +111,11 @@ from abogen.domain.output_paths import (
     resolve_output_directory as _resolve_output_directory,
     resolve_project_layout as _resolve_project_layout,
 )
+from abogen.domain.audio_helpers import (
+    build_ffmpeg_command as _build_ffmpeg_command,
+    to_float32 as _to_float32,
+    apply_m4b_chapters_with_mutagen as _apply_m4b_chapters_with_mutagen,
+)
 
 
 from .service import Job, JobStatus
@@ -156,63 +161,17 @@ def _apply_m4b_chapters_with_mutagen(
     chapters: List[Dict[str, Any]],
     job: Job,
 ) -> bool:
-    if not chapters:
-        return False
-
     try:
-        from fractions import Fraction
-        from mutagen.mp4 import MP4, MP4Chapter  # type: ignore[import]
+        return _apply_m4b_chapters_with_mutagen(audio_path, chapters)
     except ImportError:
         job.add_log(
             "Unable to write MP4 chapter atoms because mutagen is not installed.",
             level="warning",
         )
         return False
-
-    try:
-        mp4 = MP4(str(audio_path))
-    except Exception as exc:  # pragma: no cover - defensive
-        job.add_log(f"Failed to open m4b for chapter embedding: {exc}", level="warning")
+    except Exception as exc:
+        job.add_log(f"Failed to write MP4 chapter atoms: {exc}", level="warning")
         return False
-
-    chapter_objects: List[MP4Chapter] = []
-    for index, entry in enumerate(sorted(chapters, key=lambda item: float(item.get("start") or 0.0))):
-        start_raw = entry.get("start")
-        if start_raw is None:
-            continue
-        try:
-            start_seconds = max(0.0, float(start_raw))
-        except (TypeError, ValueError):
-            continue
-
-        title_value = entry.get("title")
-        title_text = str(title_value) if title_value else f"Chapter {index + 1}"
-
-        start_fraction = Fraction(int(round(start_seconds * 1000)), 1000)
-        chapter_atom = MP4Chapter(start_fraction, title_text)
-
-        end_raw = entry.get("end")
-        if end_raw is not None:
-            try:
-                end_seconds = float(end_raw)
-            except (TypeError, ValueError):
-                end_seconds = None
-            if end_seconds is not None and end_seconds > start_seconds:
-                chapter_atom.end = Fraction(int(round(end_seconds * 1000)), 1000)
-
-        chapter_objects.append(chapter_atom)
-
-    if not chapter_objects:
-        return False
-
-    try:
-        mp4.chapters = cast(Any, chapter_objects)
-        mp4.save()
-    except Exception as exc:  # pragma: no cover - defensive
-        job.add_log(f"Failed to persist MP4 chapter atoms: {exc}", level="warning")
-        return False
-
-    return True
 
 
 def _embed_m4b_metadata(
@@ -1325,61 +1284,12 @@ def _open_audio_sink(
     return AudioSink(write=_write)
 
 
-def _build_ffmpeg_command(path: Path, fmt: str, metadata: Optional[Dict[str, str]] = None) -> list[str]:
-    base = [
-        "ffmpeg",
-        "-y",
-        "-f",
-        "f32le",
-        "-ar",
-        str(SAMPLE_RATE),
-        "-ac",
-        "1",
-        "-i",
-        "pipe:0",
-    ]
-    if fmt == "mp3":
-        base += ["-c:a", "libmp3lame", "-qscale:a", "2"]
-    elif fmt == "opus":
-        base += ["-c:a", "libopus", "-b:a", "24000"]
-    elif fmt == "m4b":
-        base += ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart+use_metadata_tags"]
-    else:
-        base += ["-c:a", "copy"]
-
-    if metadata:
-        base.extend(_export_svc._metadata_to_ffmpeg_args(metadata))
-    base.append(str(path))
-    return base
-
-
 def _resolve_voice(pipeline, voice_spec: str, use_gpu: bool):
     if "*" in voice_spec:
-        # Voice formulas are a Kokoro-only feature (they require a pipeline that can
-        # load individual Kokoro voices). When running with SuperTonic (or when the
-        # pipeline is otherwise unavailable), treat the spec as a plain string and
-        # allow downstream provider-specific resolution to choose a safe fallback.
         if pipeline is None or not hasattr(pipeline, "load_single_voice"):
             return voice_spec
         return get_new_voice(pipeline, voice_spec, use_gpu)
     return voice_spec
-
-
-def _to_float32(audio_segment) -> np.ndarray:
-    if audio_segment is None:
-        return np.zeros(0, dtype="float32")
-
-    tensor = audio_segment
-    if hasattr(tensor, "detach"):
-        tensor = tensor.detach()
-    if hasattr(tensor, "cpu"):
-        try:
-            tensor = tensor.cpu()
-        except Exception:
-            pass
-    if hasattr(tensor, "numpy"):
-        return np.asarray(tensor.numpy(), dtype="float32").reshape(-1)
-    return np.asarray(tensor, dtype="float32").reshape(-1)
 
 
 def _create_subtitle_writer(job: Job, audio_path: Path):
