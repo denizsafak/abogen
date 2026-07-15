@@ -148,20 +148,20 @@ class TestNormalizeForPipeline:
     """normalize_for_pipeline normalizes text with runtime settings."""
 
     def test_basic_normalize(self):
-        from abogen.webui.conversion_runner import _normalize_for_pipeline
+        from abogen.domain.normalization import normalize_text_for_pipeline
 
-        result = _normalize_for_pipeline("Hello   World")
+        result = normalize_text_for_pipeline("Hello   World")
         assert isinstance(result, str)
         assert len(result) > 0
 
     def test_empty_string(self):
-        from abogen.webui.conversion_runner import _normalize_for_pipeline
+        from abogen.domain.normalization import normalize_text_for_pipeline
 
-        result = _normalize_for_pipeline("")
+        result = normalize_text_for_pipeline("")
         assert result == ""
 
     def test_with_overrides(self):
-        from abogen.webui.conversion_runner import _normalize_for_pipeline
+        from abogen.domain.normalization import normalize_text_for_pipeline
 
-        result = _normalize_for_pipeline("test", normalization_overrides={"number_format": "words"})
+        result = normalize_text_for_pipeline("test", normalization_overrides={"number_format": "words"})
         assert isinstance(result, str)

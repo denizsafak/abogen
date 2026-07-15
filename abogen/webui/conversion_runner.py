@@ -139,20 +139,6 @@ class AudioSink:
 _APOSTROPHE_CONFIG = ApostropheConfig()
 
 
-def _normalize_for_pipeline(
-    text: str,
-    *,
-    normalization_overrides: Optional[Mapping[str, Any]] = None,
-) -> str:
-    """Normalize text for tests or utilities with optional overrides."""
-
-    runtime_settings = get_runtime_settings()
-    if normalization_overrides:
-        runtime_settings = apply_normalization_overrides(runtime_settings, normalization_overrides)
-    apostrophe_config = build_apostrophe_config(settings=runtime_settings, base=_APOSTROPHE_CONFIG)
-    return normalize_for_pipeline(text, config=apostrophe_config, settings=runtime_settings)
-
-
 def _apply_m4b_chapters_with_mutagen(
     audio_path: Path,
     chapters: List[Dict[str, Any]],
