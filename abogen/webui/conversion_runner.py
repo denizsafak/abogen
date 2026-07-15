@@ -109,6 +109,7 @@ from abogen.domain.output_paths import (
     resolve_output_directory as _resolve_output_directory,
     resolve_project_layout as _resolve_project_layout,
 )
+from abogen.domain.device import select_device as _select_device
 from abogen.domain.audio_helpers import (
     build_ffmpeg_command as _build_ffmpeg_command,
     to_float32 as _to_float32,
@@ -1186,15 +1187,6 @@ def _load_pipeline(job: Job):
     if not disable_gpu:
         device = _select_device()
     return create_pipeline("kokoro", lang_code=job.language, device=device)
-
-
-def _select_device() -> str:
-    import platform
-
-    system = platform.system()
-    if system == "Darwin" and platform.processor() == "arm":
-        return "mps"
-    return "cuda"
 
 
 def _prepare_output_dir(job: Job) -> Path:

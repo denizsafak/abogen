@@ -6,6 +6,8 @@ import soundfile as sf
 from flask import current_app, send_file
 from flask.typing import ResponseReturnValue
 
+from abogen.domain.device import select_device as _select_device
+
 
 SPLIT_PATTERN = r"\n+"
 SAMPLE_RATE = 24000
@@ -23,31 +25,6 @@ def clear_preview_pipelines() -> None:
             except Exception:
                 pass
         _preview_pipelines.clear()
-
-
-def _select_device() -> str:
-    import platform
-
-    try:
-        import torch  # type: ignore[import-not-found]
-    except Exception:
-        return "cpu"
-
-    system = platform.system()
-    if system == "Darwin" and platform.processor() == "arm":
-        try:
-            if torch.backends.mps.is_available():
-                return "mps"
-        except Exception:
-            pass
-        return "cpu"
-
-    try:
-        if torch.cuda.is_available():
-            return "cuda"
-    except Exception:
-        pass
-    return "cpu"
 
 
 def _resolve_pipeline(language: str, use_gpu: bool) -> Tuple[Any, bool]:

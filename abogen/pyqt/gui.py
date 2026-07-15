@@ -7,6 +7,7 @@ import base64
 import re
 from abogen.pyqt.queue_manager_gui import QueueManager
 from abogen.pyqt.queued_item import QueuedItem
+from abogen.domain.device import select_device as _select_device
 import abogen.hf_tracker as hf_tracker
 import hashlib  # Added for cache path generation
 from PyQt6.QtWidgets import (
@@ -2428,10 +2429,7 @@ class abogen(QWidget):
 
             # Determine device based on GPU availability
             if gpu_ok:
-                if platform.system() == "Darwin" and platform.processor() == "arm":
-                    device = "mps"
-                else:
-                    device = "cuda"
+                device = _select_device()
             else:
                 device = "cpu"
 
@@ -2877,10 +2875,7 @@ class abogen(QWidget):
 
         # Determine device based on GPU availability
         if self.gpu_ok:
-            if platform.system() == "Darwin" and platform.processor() == "arm":
-                device = "mps"
-            else:
-                device = "cuda"
+            device = _select_device()
         else:
             device = "cpu"
 
