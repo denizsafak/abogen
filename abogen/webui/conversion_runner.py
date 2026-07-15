@@ -2,23 +2,21 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
 import traceback
 import gc
-from datetime import datetime
 from collections import defaultdict
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Set, cast
+from typing import Any, Callable, Dict, List, Mapping, Optional
 
 import numpy as np
 import soundfile as sf
 import static_ffmpeg
 
-from abogen.tts_plugin.utils import get_voices, is_plugin_registered, resolve_voice_to_plugin
+from abogen.tts_plugin.utils import is_plugin_registered
 from abogen.infrastructure.exporters import ExportService
 from abogen.epub3.exporter import build_epub3_package
 from abogen.kokoro_text_normalization import ApostropheConfig, normalize_for_pipeline, HAS_NUM2WORDS
@@ -29,8 +27,7 @@ from abogen.normalization_settings import (
     apply_overrides as apply_normalization_overrides,
 )
 from abogen.entity_analysis import normalize_token as normalize_entity_token
-from abogen.entity_analysis import normalize_manual_override_token
-from abogen.text_extractor import ExtractedChapter, extract_from_path
+from abogen.text_extractor import extract_from_path
 from abogen.utils import (
     calculate_text_length,
     create_process,
@@ -40,12 +37,10 @@ from abogen.utils import (
     load_config,
 )
 from abogen.tts_plugin.utils import create_pipeline
-from abogen.voice_cache import ensure_voice_assets
-from abogen.voice_formulas import extract_voice_ids, get_new_voice
+from abogen.voice_formulas import get_new_voice
 from abogen.voice_profiles import load_profiles, normalize_profile_entry
-from abogen.pronunciation_store import increment_usage
 from abogen.llm_client import LLMClientError
-from abogen.infrastructure.subtitle_writer import create_subtitle_writer, SubtitleMode
+from abogen.infrastructure.subtitle_writer import create_subtitle_writer
 from abogen.domain.chapter_titles import (
     simplify_heading_text as _simplify_heading_text,
     headings_equivalent as _headings_equivalent,
@@ -53,6 +48,7 @@ from abogen.domain.chapter_titles import (
     normalize_caps_word as _normalize_caps_word,
     normalize_chapter_opening_caps as _normalize_chapter_opening_caps,
     format_spoken_chapter_title as _format_spoken_chapter_title,
+    _HEADING_NUMBER_PREFIX_RE,
 )
 from abogen.domain.metadata_helpers import (
     normalize_metadata_map as _normalize_metadata_map,
@@ -71,6 +67,7 @@ from abogen.domain.file_type import (
     auto_select_relevant_chapters as _auto_select_relevant_chapters,
     chapter_label as _chapter_label,
     update_metadata_for_chapter_count as _update_metadata_for_chapter_count,
+    _SIGNIFICANT_LENGTH_THRESHOLDS,
 )
 from abogen.domain.pronunciation import (
     compile_pronunciation_rules as _compile_pronunciation_rules,
@@ -134,9 +131,6 @@ class _JobCancelled(Exception):
 @dataclass
 class AudioSink:
     write: Callable[[np.ndarray], None]
-
-
-_OUTPUT_SANITIZE_RE = re.compile(r"[^\w\-_.]+")
 
 
 _APOSTROPHE_CONFIG = ApostropheConfig()
