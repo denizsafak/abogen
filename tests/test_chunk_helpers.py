@@ -3,7 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from abogen.chunking import chunk_text
-from abogen.webui.conversion_runner import _chunk_voice_spec, _group_chunks_by_chapter
+from abogen.domain.voice_resolution import chunk_voice_spec
+from abogen.domain.chunk_utils import group_chunks_by_chapter
 
 
 def test_group_chunks_by_chapter_orders_and_groups() -> None:
@@ -13,7 +14,7 @@ def test_group_chunks_by_chapter_orders_and_groups() -> None:
         {"chapter_index": 1, "chunk_index": 0, "text": "next"},
     ]
 
-    grouped = _group_chunks_by_chapter(chunks)
+    grouped = group_chunks_by_chapter(chunks)
 
     assert [entry["text"] for entry in grouped[0]] == ["body", "tail"]
     assert grouped[1][0]["text"] == "next"
@@ -23,7 +24,7 @@ def test_chunk_voice_spec_prefers_chunk_overrides() -> None:
     job = SimpleNamespace(voice="base_voice", speakers={})
     chunk = {"voice": "override_voice", "speaker_id": "narrator"}
 
-    assert _chunk_voice_spec(job, chunk, "fallback") == "override_voice"
+    assert chunk_voice_spec(job, chunk, "fallback") == "override_voice"
 
 
 def test_chunk_voice_spec_falls_back_to_speaker_voice() -> None:
@@ -32,14 +33,14 @@ def test_chunk_voice_spec_falls_back_to_speaker_voice() -> None:
     )
     chunk = {"speaker_id": "narrator"}
 
-    assert _chunk_voice_spec(job, chunk, "fallback") == "speaker_voice"
+    assert chunk_voice_spec(job, chunk, "fallback") == "speaker_voice"
 
 
 def test_chunk_voice_spec_uses_fallback_when_no_overrides() -> None:
     job = SimpleNamespace(voice="base_voice", speakers={})
     chunk = {"speaker_id": "unknown"}
 
-    assert _chunk_voice_spec(job, chunk, "fallback") == "fallback"
+    assert chunk_voice_spec(job, chunk, "fallback") == "fallback"
 
 
 def test_chunk_text_merges_title_abbreviations() -> None:

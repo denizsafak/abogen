@@ -89,6 +89,12 @@ from abogen.domain.voice_resolution import (
 )
 from abogen.domain.chapter_overrides import apply_chapter_overrides as _apply_chapter_overrides
 from abogen.domain.metadata_merge import merge_metadata as _merge_metadata
+from abogen.domain.chunk_utils import (
+    safe_int as _safe_int,
+    group_chunks_by_chapter as _group_chunks_by_chapter,
+    record_override_usage as _record_override_usage,
+    chunk_text_for_tts as _chunk_text_for_tts,
+)
 
 
 from .service import Job, JobStatus
@@ -209,68 +215,6 @@ def _normalize_for_pipeline(
         runtime_settings = apply_normalization_overrides(runtime_settings, normalization_overrides)
     apostrophe_config = build_apostrophe_config(settings=runtime_settings, base=_APOSTROPHE_CONFIG)
     return normalize_for_pipeline(text, config=apostrophe_config, settings=runtime_settings)
-
-
-def _group_chunks_by_chapter(chunks: Iterable[Dict[str, Any]]) -> Dict[int, List[Dict[str, Any]]]:
-    grouped: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
-    for entry in chunks or []:
-        if not isinstance(entry, dict):
-            continue
-        try:
-            chapter_index = int(entry.get("chapter_index", 0))
-        except (TypeError, ValueError):
-            chapter_index = 0
-        grouped[chapter_index].append(dict(entry))
-
-    for chapter_index, items in grouped.items():
-        items.sort(key=lambda payload: _safe_int(payload.get("chunk_index")))
-
-    return grouped
-
-
-def _record_override_usage(
-    job: Job,
-    usage_counter: Mapping[str, int],
-    token_map: Mapping[str, str],
-) -> None:
-    if not usage_counter:
-        return
-
-    language = getattr(job, "language", "") or "a"
-    for normalized, amount in usage_counter.items():
-        if amount <= 0:
-            continue
-        token_value = token_map.get(normalized, normalized)
-        try:
-            increment_usage(language=language, token=token_value, amount=int(amount))
-        except Exception:  # pragma: no cover - defensive logging
-            job.add_log(f"Failed to record usage for override {token_value}", level="warning")
-
-
-def _safe_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _chunk_text_for_tts(entry: Mapping[str, Any]) -> str:
-    """Choose the best source text for synthesis.
-
-    We must prefer the raw chunk text (`text` / `original_text`) so manual/pronunciation
-    overrides can match against the original tokens (e.g. censored words like `Unfu*k`).
-    `normalized_text` may have already been run through `normalize_for_pipeline`, which
-    can remove punctuation and prevent overrides from triggering.
-    """
-
-    if not isinstance(entry, Mapping):
-        return ""
-    return str(
-        entry.get("text")
-        or entry.get("original_text")
-        or entry.get("normalized_text")
-        or ""
-    ).strip()
 
 
 def _apply_m4b_chapters_with_mutagen(
