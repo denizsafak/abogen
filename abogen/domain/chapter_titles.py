@@ -170,3 +170,35 @@ def format_spoken_chapter_title(title: str, index: int, apply_prefix: bool) -> s
             return f"Chapter {number}. {cleaned_suffix}"
         return f"Chapter {number}"
     return base
+
+
+def apply_chapter_text_transforms(
+    text: str,
+    *,
+    heading_text: str,
+    raw_title: str,
+    strip_heading: bool,
+    normalize_caps: bool,
+) -> Tuple[str, bool, bool]:
+    """Strip duplicate heading and normalize opening caps.
+
+    Returns ``(text, heading_removed, caps_changed)``.
+    The caller is responsible for state updates (pending flags, logging,
+    dict mutation, ``continue``).
+    """
+    heading_removed = False
+    caps_changed = False
+
+    if strip_heading and heading_text:
+        text, heading_removed = strip_duplicate_heading_line(text, heading_text)
+        if not heading_removed and raw_title:
+            match = _HEADING_NUMBER_PREFIX_RE.match(raw_title)
+            if match:
+                number = match.group("number")
+                if number:
+                    text, heading_removed = strip_duplicate_heading_line(text, number)
+
+    if normalize_caps and text:
+        text, caps_changed = normalize_chapter_opening_caps(text)
+
+    return text, heading_removed, caps_changed

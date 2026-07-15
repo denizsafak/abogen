@@ -48,6 +48,7 @@ from abogen.domain.chapter_titles import (
     normalize_caps_word as _normalize_caps_word,
     normalize_chapter_opening_caps as _normalize_chapter_opening_caps,
     format_spoken_chapter_title as _format_spoken_chapter_title,
+    apply_chapter_text_transforms as _apply_chapter_text_transforms,
     _HEADING_NUMBER_PREFIX_RE,
 )
 from abogen.domain.metadata_helpers import (
@@ -780,39 +781,32 @@ def run_conversion_job(job: Job) -> None:
                         continue
 
                     mutated_entry = False
-                    if pending_heading_strip and heading_text:
-                        chunk_text, removed_heading = _strip_duplicate_heading_line(chunk_text, heading_text)
-                        if not removed_heading and raw_title:
-                            match = _HEADING_NUMBER_PREFIX_RE.match(raw_title)
-                            if match:
-                                number = match.group("number")
-                                if number:
-                                    chunk_text, removed_heading = _strip_duplicate_heading_line(chunk_text, number)
-
-                        if removed_heading:
-                            pending_heading_strip = False
+                    chunk_text, heading_removed, caps_changed = _apply_chapter_text_transforms(
+                        chunk_text,
+                        heading_text=heading_text,
+                        raw_title=raw_title,
+                        strip_heading=pending_heading_strip,
+                        normalize_caps=opening_caps_pending,
+                    )
+                    if heading_removed:
+                        pending_heading_strip = False
+                        chunk_entry = dict(chunk_entry)
+                        chunk_entry["normalized_text"] = chunk_text
+                        mutated_entry = True
+                        if not chunk_text.strip():
+                            continue
+                    if caps_changed:
+                        if not mutated_entry:
                             chunk_entry = dict(chunk_entry)
-                            chunk_entry["normalized_text"] = chunk_text
-                            mutated_entry = True
-                            if not chunk_text.strip():
-                                continue
-
-                    if opening_caps_pending and chunk_text:
-                        normalized_text, normalized_changed = _normalize_chapter_opening_caps(chunk_text)
-                        if normalized_changed:
-                            if not mutated_entry:
-                                chunk_entry = dict(chunk_entry)
-                                mutated_entry = True
-                            chunk_entry["normalized_text"] = normalized_text
-                            chunk_text = normalized_text
-                            if not opening_caps_logged:
-                                job.add_log(
-                                    f"Normalized uppercase chapter opening for chapter {idx}.",
-                                    level="debug",
-                                )
-                                opening_caps_logged = True
-                        if chunk_text.strip():
-                            opening_caps_pending = False
+                        chunk_entry["normalized_text"] = chunk_text
+                        if not opening_caps_logged:
+                            job.add_log(
+                                f"Normalized uppercase chapter opening for chapter {idx}.",
+                                level="debug",
+                            )
+                            opening_caps_logged = True
+                    if chunk_text.strip():
+                        opening_caps_pending = False
 
                     chunk_voice_spec = _chunk_voice_spec(
                         job,
@@ -878,29 +872,24 @@ def run_conversion_job(job: Job) -> None:
                 if body_segments == 0:
                     chapter_body_start = current_time
                     chapter_text = str(chapter.text or "")
-                    if pending_heading_strip and heading_text:
-                        chapter_text, removed_heading = _strip_duplicate_heading_line(chapter_text, heading_text)
-                        if not removed_heading and raw_title:
-                            match = _HEADING_NUMBER_PREFIX_RE.match(raw_title)
-                            if match:
-                                number = match.group("number")
-                                if number:
-                                    chapter_text, removed_heading = _strip_duplicate_heading_line(chapter_text, number)
-
-                        if removed_heading:
-                            pending_heading_strip = False
-                    if opening_caps_pending and chapter_text:
-                        normalized_body, normalized_changed = _normalize_chapter_opening_caps(chapter_text)
-                        if normalized_changed:
-                            chapter_text = normalized_body
-                            if not opening_caps_logged:
-                                job.add_log(
-                                    f"Normalized uppercase chapter opening for chapter {idx}.",
-                                    level="debug",
-                                )
-                                opening_caps_logged = True
-                        if str(chapter_text or "").strip():
-                            opening_caps_pending = False
+                    chapter_text, heading_removed, caps_changed = _apply_chapter_text_transforms(
+                        chapter_text,
+                        heading_text=heading_text,
+                        raw_title=raw_title,
+                        strip_heading=pending_heading_strip,
+                        normalize_caps=opening_caps_pending,
+                    )
+                    if heading_removed:
+                        pending_heading_strip = False
+                    if caps_changed:
+                        if not opening_caps_logged:
+                            job.add_log(
+                                f"Normalized uppercase chapter opening for chapter {idx}.",
+                                level="debug",
+                            )
+                            opening_caps_logged = True
+                    if str(chapter_text or "").strip():
+                        opening_caps_pending = False
                     emitted = emit_text(
                         chapter_text,
                         voice_choice=voice_choice,

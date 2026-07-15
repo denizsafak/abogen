@@ -124,3 +124,117 @@ def test_normalize_chapter_opening_caps_keeps_mixed_case() -> None:
     normalized, changed = _normalize_chapter_opening_caps("Already Mixed Case")
     assert normalized == "Already Mixed Case"
     assert changed is False
+
+
+class TestApplyChapterTextTransforms:
+    """Tests for the combined heading-strip + opening-caps helper."""
+
+    def test_both_enabled_heading_matches(self) -> None:
+        from abogen.domain.chapter_titles import apply_chapter_text_transforms
+
+        text, heading_removed, caps_changed = apply_chapter_text_transforms(
+            "Chapter 1: The Beginning\nBody text here",
+            heading_text="Chapter 1: The Beginning",
+            raw_title="Chapter 1: The Beginning",
+            strip_heading=True,
+            normalize_caps=True,
+        )
+        assert heading_removed is True
+        assert "Body text here" in text
+        assert "Chapter 1" not in text
+
+    def test_heading_fallback_to_number(self) -> None:
+        from abogen.domain.chapter_titles import apply_chapter_text_transforms
+
+        text, heading_removed, caps_changed = apply_chapter_text_transforms(
+            "1. The Beginning\nBody text",
+            heading_text="Chapter 1: The Beginning",
+            raw_title="1: The Beginning",
+            strip_heading=True,
+            normalize_caps=False,
+        )
+        assert heading_removed is True
+        assert "Body text" in text
+
+    def test_only_heading_strip(self) -> None:
+        from abogen.domain.chapter_titles import apply_chapter_text_transforms
+
+        text, heading_removed, caps_changed = apply_chapter_text_transforms(
+            "Chapter 1: Title\nBody text",
+            heading_text="Chapter 1: Title",
+            raw_title="",
+            strip_heading=True,
+            normalize_caps=False,
+        )
+        assert heading_removed is True
+        assert caps_changed is False
+
+    def test_only_opening_caps(self) -> None:
+        from abogen.domain.chapter_titles import apply_chapter_text_transforms
+
+        text, heading_removed, caps_changed = apply_chapter_text_transforms(
+            "ALL CAPS START OF CHAPTER",
+            heading_text="Chapter 1",
+            raw_title="",
+            strip_heading=False,
+            normalize_caps=True,
+        )
+        assert heading_removed is False
+        assert caps_changed is True
+        assert text == "All Caps Start Of Chapter"
+
+    def test_both_disabled_no_change(self) -> None:
+        from abogen.domain.chapter_titles import apply_chapter_text_transforms
+
+        original = "Some text here"
+        text, heading_removed, caps_changed = apply_chapter_text_transforms(
+            original,
+            heading_text="Chapter 1",
+            raw_title="",
+            strip_heading=False,
+            normalize_caps=False,
+        )
+        assert text == original
+        assert heading_removed is False
+        assert caps_changed is False
+
+    def test_heading_not_matching(self) -> None:
+        from abogen.domain.chapter_titles import apply_chapter_text_transforms
+
+        text, heading_removed, caps_changed = apply_chapter_text_transforms(
+            "Completely different text",
+            heading_text="Chapter 1: Title",
+            raw_title="",
+            strip_heading=True,
+            normalize_caps=False,
+        )
+        assert heading_removed is False
+        assert text == "Completely different text"
+
+    def test_empty_text(self) -> None:
+        from abogen.domain.chapter_titles import apply_chapter_text_transforms
+
+        text, heading_removed, caps_changed = apply_chapter_text_transforms(
+            "",
+            heading_text="Chapter 1",
+            raw_title="",
+            strip_heading=True,
+            normalize_caps=True,
+        )
+        assert text == ""
+        assert heading_removed is False
+        assert caps_changed is False
+
+    def test_both_enabled_text_only_has_caps(self) -> None:
+        from abogen.domain.chapter_titles import apply_chapter_text_transforms
+
+        text, heading_removed, caps_changed = apply_chapter_text_transforms(
+            "NASA MISSION LOG",
+            heading_text="Chapter 1",
+            raw_title="",
+            strip_heading=True,
+            normalize_caps=True,
+        )
+        assert heading_removed is False
+        assert caps_changed is True
+        assert text == "NASA Mission Log"
