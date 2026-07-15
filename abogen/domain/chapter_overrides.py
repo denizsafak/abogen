@@ -1,25 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from abogen.text_extractor import ExtractedChapter
-
-
-@dataclass
-class ChapterOverrideResult:
-    selected: List[ExtractedChapter]
-    metadata_updates: Dict[str, str]
-    diagnostics: List[str]
+from abogen.domain.voice_utils import coerce_truthy
 
 
 def apply_chapter_overrides(
     extracted: List[ExtractedChapter],
     overrides: List[Dict[str, Any]],
-    coerce_truthy_fn,
-) -> ChapterOverrideResult:
+) -> Tuple[List[ExtractedChapter], Dict[str, str], List[str]]:
     if not overrides:
-        return ChapterOverrideResult(selected=[], metadata_updates={}, diagnostics=[])
+        return [], {}, []
 
     selected: List[ExtractedChapter] = []
     metadata_updates: Dict[str, str] = {}
@@ -32,7 +24,7 @@ def apply_chapter_overrides(
             )
             continue
 
-        enabled = coerce_truthy_fn(payload.get("enabled", True))
+        enabled = coerce_truthy(payload.get("enabled", True))
         payload["enabled"] = enabled
         if not enabled:
             continue
@@ -97,4 +89,4 @@ def apply_chapter_overrides(
 
         selected.append(ExtractedChapter(title=title_value, text=text_value))
 
-    return ChapterOverrideResult(selected=selected, metadata_updates=metadata_updates, diagnostics=diagnostics)
+    return selected, metadata_updates, diagnostics
