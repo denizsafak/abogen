@@ -36,6 +36,7 @@ from abogen.domain.audio_buffer import (
     SAMPLE_RATE,
 )
 from abogen.domain.subtitle_generation import process_subtitle_tokens
+from abogen.domain.voice_loader import load_voice_cached
 import abogen.hf_tracker as hf_tracker
 import static_ffmpeg
 import threading  # for efficient waiting
@@ -287,19 +288,12 @@ class ConversionThread(QThread):
         Returns:
             Loaded voice tensor or voice name string
         """
-        # Check cache first
-        if voice_name in self.voice_cache:
-            return self.voice_cache[voice_name]
-
-        # Load voice
-        if "*" in voice_name:
-            loaded_voice = get_new_voice(tts, voice_name, self.use_gpu)
-        else:
-            loaded_voice = voice_name
-
-        # Cache it
-        self.voice_cache[voice_name] = loaded_voice
-        return loaded_voice
+        return load_voice_cached(
+            voice_name=voice_name,
+            pipeline=tts,
+            use_gpu=self.use_gpu,
+            cache=self.voice_cache,
+        )
 
     def _stream_audio_in_chunks(
         self, segments, process_func, progress_prefix="Processing"
