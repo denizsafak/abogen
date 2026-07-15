@@ -95,6 +95,13 @@ from abogen.domain.chunk_utils import (
     record_override_usage as _record_override_usage,
     chunk_text_for_tts as _chunk_text_for_tts,
 )
+from abogen.domain.voice_utils import (
+    supertonic_voice_from_spec as _supertonic_voice_from_spec,
+    split_speaker_reference as _split_speaker_reference,
+    formula_from_kokoro_entry as _formula_from_kokoro_entry,
+    infer_provider_from_spec as _infer_provider_from_spec,
+    coerce_truthy as _coerce_truthy,
+)
 
 
 from .service import Job, JobStatus
@@ -106,73 +113,6 @@ SPLIT_PATTERN = r"\n+"
 SAMPLE_RATE = 24000
 
 
-def _supertonic_voice_from_spec(spec: Any, fallback: str) -> str:
-    """Normalize a voice specification for Supertonic.
-
-    This function only performs Supertonic-specific normalization (uppercase conversion
-    and fallback handling). Backend resolution is handled by the registry.
-    """
-    raw = str(spec or "").strip()
-    fallback_raw = str(fallback or "").strip()
-
-    # Normalize to uppercase for Supertonic voice IDs
-    upper = raw.upper() if raw else ""
-
-    # If empty or contains formula characters, use fallback
-    if not upper or "*" in upper or "+" in upper:
-        upper = fallback_raw.upper() if fallback_raw else ""
-
-    # If still empty, use default Supertonic voice
-    if not upper or "*" in upper or "+" in upper:
-        upper = "M1"
-
-    return upper
-
-
-def _split_speaker_reference(value: Any) -> tuple[Optional[str], str]:
-    raw = str(value or "").strip()
-    if not raw or ":" not in raw:
-        return None, raw
-    prefix, remainder = raw.split(":", 1)
-    prefix = prefix.strip().lower()
-    if prefix not in {"speaker", "profile"}:
-        return None, raw
-    name = remainder.strip()
-    return (name or None), raw
-
-
-def _formula_from_kokoro_entry(entry: Mapping[str, Any]) -> str:
-    voices = entry.get("voices") or []
-    if not voices:
-        return ""
-    total = 0.0
-    parts: list[tuple[str, float]] = []
-    for item in voices:
-        if not isinstance(item, (list, tuple)) or len(item) < 2:
-            continue
-        name = str(item[0] or "").strip()
-        try:
-            weight = float(item[1])
-        except (TypeError, ValueError):
-            continue
-        if not name or weight <= 0:
-            continue
-        parts.append((name, weight))
-        total += weight
-    if total <= 0 or not parts:
-        return ""
-
-    def _format_weight(value: float) -> str:
-        normalized = value / total if total else 0.0
-        return (f"{normalized:.4f}").rstrip("0").rstrip(".") or "0"
-
-    return "+".join(f"{name}*{_format_weight(weight)}" for name, weight in parts)
-
-
-def _infer_provider_from_spec(value: Any, fallback: str = "kokoro") -> str:
-    return resolve_voice_to_plugin(str(value or ""), fallback=fallback)
-
-
 class _JobCancelled(Exception):
     """Raised internally to abort a conversion when the client cancels."""
 
@@ -180,21 +120,6 @@ class _JobCancelled(Exception):
 @dataclass
 class AudioSink:
     write: Callable[[np.ndarray], None]
-
-
-def _coerce_truthy(value: Any, default: bool = True) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"true", "1", "yes", "on"}:
-            return True
-        if lowered in {"false", "0", "no", "off"}:
-            return False
-        return default
-    if value is None:
-        return default
-    return bool(value)
 
 
 _OUTPUT_SANITIZE_RE = re.compile(r"[^\w\-_.]+")
