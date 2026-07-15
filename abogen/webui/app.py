@@ -84,6 +84,12 @@ def create_app(config: Optional[dict[str, Any]] = None) -> Flask:
         "UPLOAD_FOLDER": str(uploads_dir),
         "OUTPUT_FOLDER": str(outputs_dir),
         "MAX_CONTENT_LENGTH": 1024 * 1024 * 400,  # 400 MB uploads
+        # Large books can submit four form fields per chapter. Werkzeug's
+        # defaults reject those requests before the wizard route can process
+        # them, even though the encoded payload is much smaller than the upload
+        # limit above.
+        "MAX_FORM_MEMORY_SIZE": 10 * 1024 * 1024,
+        "MAX_FORM_PARTS": 10_000,
     }
     if config:
         base_config.update(config)
