@@ -1803,7 +1803,7 @@ class ConversionThread(QThread):
 
                 # Mix audio into buffer at the correct position (handles overlaps)
                 start_sample = int(start_time * rate)
-                mix_audio(audio_buffer, full_audio, start_sample)
+                audio_buffer = mix_audio(audio_buffer, full_audio, start_sample)
 
                 # Write subtitle
                 if subtitle_file:

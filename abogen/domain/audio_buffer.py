@@ -42,20 +42,23 @@ def mix_audio(
     source: np.ndarray,
     start_sample: int,
     end_sample: Optional[int] = None,
-) -> None:
+) -> np.ndarray:
     """Mix source audio into target buffer at specified position.
     
     This performs additive mixing (target += source). The target buffer
     is extended if necessary to accommodate the source audio.
     
     Args:
-        target: The target audio buffer to mix into (modified in-place).
+        target: The target audio buffer to mix into.
         source: The source audio buffer to mix.
         start_sample: Starting sample index in target buffer.
         end_sample: Optional end sample index. If None, calculated from source length.
+        
+    Returns:
+        The target buffer (possibly extended). If target was extended, returns new array.
     """
     if source.size == 0:
-        return
+        return target
     
     if end_sample is None:
         end_sample = start_sample + len(source)
@@ -63,13 +66,15 @@ def mix_audio(
     # Extend target buffer if needed
     if end_sample > len(target):
         new_length = end_sample
-        target = np.concatenate([
+        new_target = np.concatenate([
             target,
             np.zeros(new_length - len(target), dtype="float32")
         ])
+        target = new_target
     
     # Perform the mix (additive)
     target[start_sample:end_sample] += source
+    return target
 
 
 def normalize_audio(
@@ -160,6 +165,8 @@ def samples_for_duration(duration_seconds: float, sample_rate: int = SAMPLE_RATE
         sample_rate: Sample rate in Hz (default SAMPLE_RATE).
         
     Returns:
-        Number of samples (rounded to nearest integer).
+        Number of samples (rounded to nearest integer), or 0 if duration is <= 0.
     """
+    if duration_seconds <= 0:
+        return 0
     return int(round(duration_seconds * sample_rate))

@@ -87,10 +87,10 @@ class TestMixAudio:
         target = np.ones(100, dtype="float32")
         source = np.ones(50, dtype="float32") * 2
         
-        # This should extend target to 150 samples
-        mix_audio(target, source, start_sample=120)
+        # This should extend target to 170 samples (120 + 50)
+        target = mix_audio(target, source, start_sample=120)
         
-        assert len(target) >= 170  # 120 + 50
+        assert len(target) == 170
         # Check that source was mixed correctly
         assert np.all(target[120:170] == 2.0)
 
@@ -124,7 +124,7 @@ class TestNormalizeAudio:
         audio = np.ones(100, dtype="float32") * 0.5
         result = normalize_audio(audio)
         
-        assert not np.share_memory(audio, result)  # Should be a copy
+        assert not np.shares_memory(audio, result)  # Should be a copy
         assert np.array_equal(result, audio)
 
     def test_normalization_applied(self):
