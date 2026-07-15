@@ -37,6 +37,10 @@ from abogen.domain.audio_buffer import (
 )
 from abogen.domain.subtitle_generation import process_subtitle_tokens
 from abogen.domain.voice_loader import load_voice_cached
+from abogen.domain.metadata_extraction import (
+    extract_metadata_and_build_args,
+    read_text_for_metadata,
+)
 import abogen.hf_tracker as hf_tracker
 import static_ffmpeg
 import threading  # for efficient waiting
@@ -1890,99 +1894,37 @@ class ConversionThread(QThread):
 
     def _extract_and_add_metadata_tags_to_ffmpeg_cmd(self):
         """Extract metadata tags from text content and add them to ffmpeg command"""
-        metadata_options = []
-
-        # Get the input text (either direct or from file)
-        text = ""
-        if self.is_direct_text:
-            text = self.file_name
-        else:
-            try:
-                encoding = detect_encoding(self.file_name)
-                with open(
-                    self.file_name, "r", encoding=encoding, errors="replace"
-                ) as file:
-                    text = file.read()
-            except Exception as e:
-                self.log_updated.emit(
-                    f"Warning: Could not read file for metadata extraction: {e}"
-                )
-                return []
-
-        # Extract metadata tags using regex
-        title_match = re.search(r"<<METADATA_TITLE:([^>]*)>>", text)
-        artist_match = re.search(r"<<METADATA_ARTIST:([^>]*)>>", text)
-        album_match = re.search(r"<<METADATA_ALBUM:([^>]*)>>", text)
-        year_match = re.search(r"<<METADATA_YEAR:([^>]*)>>", text)
-        album_artist_match = re.search(r"<<METADATA_ALBUM_ARTIST:([^>]*)>>", text)
-        composer_match = re.search(r"<<METADATA_COMPOSER:([^>]*)>>", text)
-        genre_match = re.search(r"<<METADATA_GENRE:([^>]*)>>", text)
-        cover_match = re.search(r"<<METADATA_COVER_PATH:([^>]*)>>", text)
-        cover_path = cover_match.group(1) if cover_match else None
-
-        # Use display path or filename as fallback for title
-
-        # Use file_name for logs if from_queue, otherwise use display_path if available
-        if getattr(self, "from_queue", False):
-            filename = os.path.splitext(os.path.basename(self.file_name))[0]
-        else:
-            filename = os.path.splitext(
-                os.path.basename(
-                    self.display_path if self.display_path else self.file_name
-                )
-            )[0]
-
-        if title_match:
-            metadata_options.extend(["-metadata", f"title={title_match.group(1)}"])
-        else:
-            metadata_options.extend(["-metadata", f"title={filename}"])
-
-        # Add artist metadata
-        if artist_match:
-            metadata_options.extend(["-metadata", f"artist={artist_match.group(1)}"])
-        else:
-            metadata_options.extend(["-metadata", f"artist=Unknown"])
-
-        # Add album metadata
-        if album_match:
-            metadata_options.extend(["-metadata", f"album={album_match.group(1)}"])
-        else:
-            metadata_options.extend(["-metadata", f"album={filename}"])
-
-        # Add year metadata
-        if year_match:
-            metadata_options.extend(["-metadata", f"date={year_match.group(1)}"])
-        else:
-            # Use current year if year is not specified
-            import datetime
-
-            current_year = datetime.datetime.now().year
-            metadata_options.extend(["-metadata", f"date={current_year}"])
-
-        # Add album artist metadata
-        if album_artist_match:
-            metadata_options.extend(
-                ["-metadata", f"album_artist={album_artist_match.group(1)}"]
+        # Read text for metadata extraction
+        text = read_text_for_metadata(
+            file_path=self.file_name,
+            is_direct_text=self.is_direct_text,
+            direct_text=self.file_name if self.is_direct_text else None,
+        )
+        
+        if not text:
+            self.log_updated.emit(
+                ("Warning: Could not read file for metadata extraction", "orange")
             )
-        else:
-            metadata_options.extend(["-metadata", f"album_artist=Unknown"])
-
-        # Add composer metadata
-        if composer_match:
-            metadata_options.extend(
-                ["-metadata", f"composer={composer_match.group(1)}"]
+            return [], None
+        
+        # Extract metadata and build ffmpeg args
+        filename = self.file_name if self.is_direct_text else (
+            self.display_path if self.display_path else self.file_name
+        )
+        
+        try:
+            metadata_options, cover_path = extract_metadata_and_build_args(
+                text=text,
+                filename=filename,
+                display_path=getattr(self, "display_path", None),
+                from_queue=getattr(self, "from_queue", False),
             )
-        else:
-            metadata_options.extend(["-metadata", f"composer=Narrator"])
-
-        # Add genre metadata
-        if genre_match:
-            metadata_options.extend(["-metadata", f"genre={genre_match.group(1)}"])
-        else:
-            metadata_options.extend(["-metadata", f"genre=Audiobook"])
-
-        # Add these to ffmpeg command
-        return metadata_options, cover_path
+            return metadata_options, cover_path
+        except Exception as e:
+            self.log_updated.emit(
+                (f"Warning: Metadata extraction error: {e}", "orange")
+            )
+            return [], None
 
     def _process_subtitle_tokens(
         self,

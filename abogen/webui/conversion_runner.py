@@ -114,7 +114,6 @@ from abogen.domain.device import select_device as _select_device
 from abogen.domain.audio_helpers import (
     build_ffmpeg_command as _build_ffmpeg_command,
     to_float32 as _to_float32,
-    apply_m4b_chapters_with_mutagen as _apply_m4b_chapters_with_mutagen,
 )
 from abogen.domain.audio_buffer import (
     create_silence as _create_silence,
@@ -142,112 +141,6 @@ class AudioSink:
 
 
 _APOSTROPHE_CONFIG = ApostropheConfig()
-
-
-def _apply_m4b_chapters_with_mutagen(
-    audio_path: Path,
-    chapters: List[Dict[str, Any]],
-    job: Job,
-) -> bool:
-    try:
-        return _apply_m4b_chapters_with_mutagen(audio_path, chapters)
-    except ImportError:
-        job.add_log(
-            "Unable to write MP4 chapter atoms because mutagen is not installed.",
-            level="warning",
-        )
-        return False
-    except Exception as exc:
-        job.add_log(f"Failed to write MP4 chapter atoms: {exc}", level="warning")
-        return False
-
-
-def _embed_m4b_metadata(
-    audio_path: Path,
-    metadata_payload: Dict[str, Any],
-    job: Job,
-) -> None:
-    metadata_map = dict(metadata_payload.get("metadata") or {})
-    chapter_entries = list(metadata_payload.get("chapters") or [])
-    ffmetadata_path = _export_svc.write_ffmetadata_file(audio_path, metadata_map, chapter_entries)
-    cover_path: Optional[Path] = None
-    if job.cover_image_path:
-        candidate = Path(job.cover_image_path)
-        if candidate.exists():
-            cover_path = candidate
-
-    metadata_args = _export_svc._metadata_to_ffmpeg_args(metadata_map)
-
-    if not ffmetadata_path and not cover_path and not metadata_args:
-        return
-
-    job.add_log("Embedding metadata into m4b output")
-
-    command: List[str] = ["ffmpeg", "-y", "-i", str(audio_path)]
-    metadata_index: Optional[int] = None
-    cover_index: Optional[int] = None
-    next_index = 1
-
-    if ffmetadata_path:
-        command += ["-f", "ffmetadata", "-i", str(ffmetadata_path)]
-        metadata_index = next_index
-        next_index += 1
-
-    if cover_path:
-        command += ["-i", str(cover_path)]
-        cover_index = next_index
-        next_index += 1
-
-    command += ["-map", "0:a"]
-    command += ["-c:a", "copy"]
-
-    if cover_index is not None:
-        command += ["-map", f"{cover_index}:v:0"]
-        command += ["-c:v:0", "mjpeg"]
-        command += ["-disposition:v:0", "attached_pic"]
-        command += ["-metadata:s:v:0", "title=Cover Art"]
-        if job.cover_image_mime:
-            command += ["-metadata:s:v:0", f"mimetype={job.cover_image_mime}"]
-
-    if metadata_index is not None:
-        command += ["-map_metadata", str(metadata_index)]
-        command += ["-map_chapters", str(metadata_index)]
-    else:
-        command += ["-map_metadata", "0"]
-
-    if metadata_args:
-        command.extend(metadata_args)
-
-    command += ["-movflags", "+faststart+use_metadata_tags"]
-
-    temp_output = audio_path.with_suffix(audio_path.suffix + ".tmp")
-    if audio_path.suffix.lower() in {".m4b", ".mp4", ".m4a"}:
-        command += ["-f", "mp4"]
-    command.append(str(temp_output))
-
-    process = create_process(command, text=True)
-    try:
-        return_code = process.wait()
-    finally:
-        if ffmetadata_path and ffmetadata_path.exists():
-            try:
-                ffmetadata_path.unlink()
-            except OSError:
-                pass
-
-    if return_code != 0:
-        if temp_output.exists():
-            temp_output.unlink(missing_ok=True)
-        raise RuntimeError(f"ffmpeg failed to embed metadata (exit code {return_code})")
-
-    temp_output.replace(audio_path)
-    job.add_log("Embedded metadata and chapters into m4b output", level="info")
-
-    mutagen_applied = _apply_m4b_chapters_with_mutagen(audio_path, chapter_entries, job)
-    if mutagen_applied:
-        job.add_log(
-            f"Applied {len(chapter_entries)} chapter markers via mutagen", level="info"
-        )
 
 
 def run_conversion_job(job: Job) -> None:
@@ -1141,7 +1034,20 @@ def run_conversion_job(job: Job) -> None:
             and job.status not in {JobStatus.FAILED, JobStatus.CANCELLED}
         ):
             try:
-                _embed_m4b_metadata(audio_output_path, metadata_payload, job)
+                cover_path = None
+                if job.cover_image_path:
+                    candidate = Path(job.cover_image_path)
+                    if candidate.exists():
+                        cover_path = candidate
+                
+                _export_svc.embed_m4b_metadata(
+                    audio_path=audio_output_path,
+                    metadata=metadata_payload.get("metadata") or {},
+                    chapters=metadata_payload.get("chapters") or [],
+                    cover_path=cover_path,
+                    cover_mime=job.cover_image_mime,
+                    log_callback=lambda msg, level="info": job.add_log(msg, level=level),
+                )
             except Exception as exc:  # pragma: no cover - ensure failure propagates
                 job.add_log(
                     f"Failed to embed metadata into m4b output: {exc}",
