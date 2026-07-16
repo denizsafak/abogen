@@ -137,6 +137,7 @@ class Job:
     progress: float = 0.0
     total_characters: int = 0
     processed_characters: int = 0
+    etr_str: str = ""
     logs: List[JobLog] = field(default_factory=list)
     error: Optional[str] = None
     result: JobResult = field(default_factory=JobResult)
@@ -168,20 +169,25 @@ class Job:
     @property
     def estimated_time_remaining(self) -> Optional[float]:
         """
-        Returns the estimated seconds remaining based on current progress and elapsed time.
-        Returns None if the job hasn't started, is finished, or progress is 0.
+        Returns the estimated seconds remaining.
+        Uses the same calc_etr_str from domain/progress.py as the PyQt desktop GUI.
         """
-        if self.status != JobStatus.RUNNING or not self.started_at or self.progress <= 0:
+        from abogen.domain.progress import calc_etr_str
+
+        if self.status != JobStatus.RUNNING or not self.started_at or self.total_characters <= 0:
             return None
-        
+
         elapsed = time.time() - self.started_at
         if elapsed <= 0:
             return None
-            
-        # Estimate total time based on current progress
-        total_estimated = elapsed / self.progress
-        remaining = total_estimated - elapsed
-        return max(0.0, remaining)
+
+        etr = calc_etr_str(elapsed, self.processed_characters, self.total_characters)
+        if etr == "Processing...":
+            return None
+
+        # Parse "HH:MM:SS" back to seconds for backward compatibility
+        parts = etr.split(":")
+        return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
 
     def add_log(self, message: str, level: str = "info") -> None:
         entry = JobLog(timestamp=time.time(), message=message, level=level)
@@ -200,6 +206,7 @@ class Job:
             "progress": self.progress,
             "total_characters": self.total_characters,
             "processed_characters": self.processed_characters,
+            "etr_str": self.etr_str,
             "error": self.error,
             "logs": [log.__dict__ for log in self.logs],
             "result": {

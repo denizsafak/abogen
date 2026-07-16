@@ -37,6 +37,7 @@ from abogen.domain.audio_buffer import (
 )
 from abogen.domain.subtitle_generation import process_subtitle_tokens
 from abogen.domain.voice_loader import load_voice_cached
+from abogen.domain.progress import calc_etr_str
 from abogen.domain.metadata_extraction import (
     extract_metadata_and_build_args,
     read_text_for_metadata,
@@ -1266,24 +1267,11 @@ class ConversionThread(QThread):
                             )
 
                             # Calculate ETR based on characters processed
-                            etr_str = "Processing..."
-                            chars_done = self.processed_char_count
-                            elapsed = time.time() - self.etr_start_time
-
-                            # Calculate ETR if enough data is available
-                            if (
-                                chars_done > 0 and elapsed > 0.5
-                            ):  # Check elapsed > 0.5 to avoid instability
-                                avg_time_per_char = elapsed / chars_done
-                                remaining = (
-                                    self.total_char_count - self.processed_char_count
-                                )
-                                if remaining > 0:
-                                    secs = avg_time_per_char * remaining
-                                    h = int(secs // 3600)
-                                    m = int((secs % 3600) // 60)
-                                    s = int(secs % 60)
-                                    etr_str = f"{h:02d}:{m:02d}:{s:02d}"
+                            etr_str = calc_etr_str(
+                                time.time() - self.etr_start_time,
+                                self.processed_char_count,
+                                self.total_char_count,
+                            )
 
                             # Update progress more frequently (after each result)
                             self.progress_updated.emit(percent, etr_str)
@@ -1833,11 +1821,10 @@ class ConversionThread(QThread):
 
                 # Update progress
                 percent = min(int(idx / len(subtitles) * 100), 99)
-                elapsed = time.time() - self.etr_start_time
-                etr_str = (
-                    "Processing..."
-                    if elapsed <= 0.5
-                    else f"{int(elapsed*(len(subtitles)-idx)/idx)//3600:02d}:{(int(elapsed*(len(subtitles)-idx)/idx)%3600)//60:02d}:{int(elapsed*(len(subtitles)-idx)/idx)%60:02d}"
+                etr_str = calc_etr_str(
+                    time.time() - self.etr_start_time,
+                    idx,
+                    len(subtitles),
                 )
                 self.progress_updated.emit(percent, etr_str)
 

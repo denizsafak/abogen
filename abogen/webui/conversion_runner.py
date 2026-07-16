@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import traceback
 import gc
 from collections import defaultdict
@@ -112,6 +113,7 @@ from abogen.domain.output_paths import (
 )
 from abogen.domain.device import select_device as _select_device
 from abogen.domain.split_pattern import get_split_pattern
+from abogen.domain.progress import ProgressTracker, calc_etr_str
 from abogen.domain.audio_helpers import (
     build_ffmpeg_command as _build_ffmpeg_command,
     to_float32 as _to_float32,
@@ -408,6 +410,7 @@ def run_conversion_job(job: Job) -> None:
             voice_cache[f"kokoro:{base_voice_resolved}"] = _resolve_voice(kokoro_backend, base_voice_resolved, job.use_gpu)
         processed_chars = 0
         current_time = 0.0
+        etr_start_time = time.time()
         total_chapters = len(extraction.chapters)
         if chunk_groups:
             chunk_groups = {
@@ -508,6 +511,11 @@ def run_conversion_job(job: Job) -> None:
                     job.processed_characters = processed_chars
                     if job.total_characters:
                         job.progress = min(processed_chars / job.total_characters, 0.999)
+                        job.etr_str = calc_etr_str(
+                            time.time() - etr_start_time,
+                            processed_chars,
+                            job.total_characters,
+                        )
                     else:
                         job.progress = 0.0 if processed_chars == 0 else 0.999
 

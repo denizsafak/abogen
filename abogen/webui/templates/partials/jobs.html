@@ -28,8 +28,8 @@
             </div>
             <div class="job-card__progress-meta">
               <small>{{ progress_value }}% · {{ job.processed_characters }} / {{ job.total_characters or '—' }}</small>
-              {% if job.estimated_time_remaining %}
-                <small class="job-card__eta">~{{ job.estimated_time_remaining | durationformat }} remaining</small>
+              {% if job.etr_str and job.etr_str != 'Processing...' %}
+                <small class="job-card__eta">~{{ job.etr_str }} remaining</small>
               {% endif %}
             </div>
           </div>
