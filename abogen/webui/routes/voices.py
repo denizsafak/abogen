@@ -9,7 +9,7 @@ from abogen.webui.routes.utils.voice import (
     parse_voice_formula,
 )
 from abogen.webui.routes.utils.settings import load_settings, coerce_bool
-from abogen.webui.routes.utils.preview import synthesize_preview
+from abogen.webui.routes.utils.synthesize import synthesize_preview
 from abogen.speaker_configs import (
     list_configs,
     get_config,

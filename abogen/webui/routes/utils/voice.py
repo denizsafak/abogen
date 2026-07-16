@@ -1,6 +1,4 @@
-import threading
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, cast
-import numpy as np
 
 from abogen.speaker_configs import slugify_label
 from abogen.speaker_analysis import analyze_speakers
@@ -10,7 +8,7 @@ from abogen.voice_profiles import (
     load_profiles,
     serialize_profiles,
 )
-from abogen.voice_formulas import get_new_voice, parse_formula_terms
+from abogen.voice_formulas import parse_formula_terms
 from abogen.constants import (
     LANGUAGE_DESCRIPTIONS,
     SUBTITLE_FORMATS,
@@ -20,14 +18,7 @@ from abogen.constants import (
 )
 from abogen.tts_plugin.utils import get_voices
 from abogen.speaker_configs import list_configs
-from abogen.tts_plugin.utils import create_pipeline
-from abogen.domain.device import select_device as _select_device
-from abogen.domain.audio_helpers import to_float32 as _to_float32, SAMPLE_RATE
 
-SPLIT_PATTERN = r"\n+"
-
-_preview_pipeline_lock = threading.RLock()
-_preview_pipelines: Dict[Tuple[str, str], Any] = {}
 
 def build_narrator_roster(
     voice: str,
@@ -736,76 +727,3 @@ def pairs_to_formula(pairs: Iterable[Tuple[str, float]]) -> Optional[str]:
 
 def profiles_payload() -> Dict[str, Any]:
     return {"profiles": serialize_profiles()}
-
-
-def get_preview_pipeline(language: str, device: str):
-    key = (language, device)
-    with _preview_pipeline_lock:
-        pipeline = _preview_pipelines.get(key)
-        if pipeline is not None:
-            return pipeline
-        pipeline = create_pipeline("kokoro", lang_code=language, device=device)
-        _preview_pipelines[key] = pipeline
-        return pipeline
-
-
-def synthesize_audio_from_normalized(
-    *,
-    normalized_text: str,
-    voice_spec: str,
-    language: str,
-    speed: float,
-    use_gpu: bool,
-    max_seconds: float,
-) -> np.ndarray:
-    if not normalized_text.strip():
-        raise ValueError("Preview text is required")
-
-    device = "cpu"
-    if use_gpu:
-        try:
-            device = _select_device()
-        except Exception:
-            device = "cpu"
-            use_gpu = False
-
-    pipeline = get_preview_pipeline(language, device)
-    if pipeline is None:
-        raise RuntimeError("Preview pipeline is unavailable")
-
-    voice_choice: Any = voice_spec
-    if voice_spec and "*" in voice_spec:
-        voice_choice = get_new_voice(pipeline, voice_spec, use_gpu)
-
-    segments = pipeline(
-        normalized_text,
-        voice=voice_choice,
-        speed=speed,
-        split_pattern=SPLIT_PATTERN,
-    )
-
-    audio_chunks: List[np.ndarray] = []
-    accumulated = 0
-    max_samples = int(max(1.0, max_seconds) * SAMPLE_RATE)
-
-    for segment in segments:
-        graphemes = getattr(segment, "graphemes", "").strip()
-        if not graphemes:
-            continue
-        audio = _to_float32(getattr(segment, "audio", None))
-        if audio.size == 0:
-            continue
-        remaining = max_samples - accumulated
-        if remaining <= 0:
-            break
-        if audio.shape[0] > remaining:
-            audio = audio[:remaining]
-        audio_chunks.append(audio)
-        accumulated += audio.shape[0]
-        if accumulated >= max_samples:
-            break
-
-    if not audio_chunks:
-        raise RuntimeError("Preview could not be generated")
-
-    return np.concatenate(audio_chunks)

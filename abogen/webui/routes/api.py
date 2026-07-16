@@ -25,7 +25,7 @@ from abogen.voice_profiles import (
     normalize_profile_entry,
 )
 from abogen.webui.routes.utils.common import split_profile_spec
-from abogen.webui.routes.utils.preview import synthesize_preview, generate_preview_audio
+from abogen.webui.routes.utils.synthesize import synthesize_preview, generate_preview_audio
 from abogen.webui.routes.utils.voice import formula_from_profile
 from abogen.normalization_settings import (
     build_llm_configuration,

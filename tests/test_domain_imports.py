@@ -2,8 +2,15 @@
 import pathlib
 
 
+_MODULE_SOURCE_CACHE: dict[str, str] = {}
+
+
 def _read_source(module_file: str) -> str:
-    return pathlib.Path(module_file).read_text(encoding="utf-8")
+    if module_file not in _MODULE_SOURCE_CACHE:
+        _MODULE_SOURCE_CACHE[module_file] = pathlib.Path(module_file).read_text(
+            encoding="utf-8"
+        )
+    return _MODULE_SOURCE_CACHE[module_file]
 
 
 def test_voice_module_does_not_import_conversion_runner():
@@ -17,56 +24,50 @@ def test_voice_module_does_not_import_conversion_runner():
     )
 
 
-def test_voice_module_imports_select_device_from_domain():
-    """voice.py must import select_device from abogen.domain.device."""
-    import abogen.webui.routes.utils.voice as voice_mod
+def test_synthesize_module_does_not_import_conversion_runner():
+    """synthesize.py must not import from conversion_runner."""
+    import abogen.webui.routes.utils.synthesize as synthesize_mod
 
-    with open(voice_mod.__file__, "r", encoding="utf-8") as fh:
-        source_text = fh.read()
-
-    assert "from abogen.domain.device import" in source_text
-
-
-def test_voice_module_imports_to_float32_from_domain():
-    """voice.py must import to_float32 from abogen.domain.audio_helpers."""
-    import abogen.webui.routes.utils.voice as voice_mod
-
-    with open(voice_mod.__file__, "r", encoding="utf-8") as fh:
-        source_text = fh.read()
-
-    assert "from abogen.domain.audio_helpers import" in source_text
-
-
-def test_voice_module_has_sample_rate():
-    """voice.py must define SAMPLE_RATE = 24000."""
-    from abogen.webui.routes.utils.voice import SAMPLE_RATE
-
-    assert SAMPLE_RATE == 24000
-
-
-def test_voice_module_has_split_pattern():
-    """voice.py must define SPLIT_PATTERN."""
-    from abogen.webui.routes.utils.voice import SPLIT_PATTERN
-
-    assert isinstance(SPLIT_PATTERN, str)
-    assert len(SPLIT_PATTERN) > 0
-
-
-def test_preview_module_does_not_import_conversion_runner():
-    """preview.py must not import from conversion_runner."""
-    import abogen.webui.routes.utils.preview as preview_mod
-
-    with open(preview_mod.__file__, "r", encoding="utf-8") as fh:
-        source_text = fh.read()
+    source_text = _read_source(synthesize_mod.__file__)
 
     assert "from abogen.webui.conversion_runner import" not in source_text
 
 
-def test_preview_module_imports_select_device_from_domain():
-    """preview.py must import select_device from abogen.domain.device."""
-    import abogen.webui.routes.utils.preview as preview_mod
+def test_synthesize_module_imports_select_device_from_domain():
+    """synthesize.py must import select_device from abogen.domain.device."""
+    import abogen.webui.routes.utils.synthesize as synthesize_mod
 
-    with open(preview_mod.__file__, "r", encoding="utf-8") as fh:
-        source_text = fh.read()
-
+    source_text = _read_source(synthesize_mod.__file__)
     assert "from abogen.domain.device import" in source_text
+
+
+def test_voice_module_does_not_define_synthesize_audio_from_normalized():
+    """Dead code: synthesize_audio_from_normalized must be removed from voice.py."""
+    import abogen.webui.routes.utils.voice as voice_mod
+
+    source_text = _read_source(voice_mod.__file__)
+    assert "def synthesize_audio_from_normalized(" not in source_text
+
+
+def test_voice_module_does_not_define_get_preview_pipeline():
+    """Dead code: get_preview_pipeline must be removed from voice.py."""
+    import abogen.webui.routes.utils.voice as voice_mod
+
+    source_text = _read_source(voice_mod.__file__)
+    assert "def get_preview_pipeline(" not in source_text
+
+
+def test_voice_module_does_not_import_domain_audio_helpers():
+    """After removing dead code, voice.py no longer needs audio_helpers imports."""
+    import abogen.webui.routes.utils.voice as voice_mod
+
+    source_text = _read_source(voice_mod.__file__)
+    assert "from abogen.domain.audio_helpers import" not in source_text
+
+
+def test_voice_module_does_not_import_domain_device():
+    """After removing dead code, voice.py no longer needs device imports."""
+    import abogen.webui.routes.utils.voice as voice_mod
+
+    source_text = _read_source(voice_mod.__file__)
+    assert "from abogen.domain.device import" not in source_text

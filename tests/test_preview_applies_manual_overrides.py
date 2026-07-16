@@ -1,11 +1,11 @@
-from abogen.webui.routes.utils import preview
+from abogen.webui.routes.utils import synthesize
 
 
 def test_preview_applies_manual_override_before_normalization(monkeypatch):
     # Don't run real TTS/normalization; just exercise the override stage by
     # forcing provider=kokoro and then stubbing normalize_for_pipeline.
 
-    monkeypatch.setattr(preview, "get_preview_pipeline", lambda language, device: None)
+    monkeypatch.setattr(synthesize, "get_preview_pipeline", lambda language, device: None)
 
     # Stub normalize_for_pipeline to be identity; we only care that overrides run.
     class _Norm:
@@ -42,7 +42,7 @@ def test_preview_applies_manual_override_before_normalization(monkeypatch):
     monkeypatch.setattr(utils, "create_pipeline", _mock_create_pipeline)
 
     try:
-        preview.generate_preview_audio(
+        synthesize.generate_preview_audio(
             text="He said Unfu*k loudly.",
             voice_spec="M1",
             language="en",
