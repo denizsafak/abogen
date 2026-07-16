@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -145,6 +146,23 @@ def engine_config() -> Any:
     """
     from abogen.tts_plugin.types import EngineConfig
     return EngineConfig(device="cpu")
+
+
+@pytest.fixture(autouse=True)
+def _mock_kokoro_pipeline():
+    """Prevent real KPipeline initialization during generic plugin tests.
+
+    The real KPipeline requires spacy model downloads which aren't available
+    in externally-managed environments.  Mock spacy's download and load so
+    the engine contract can be tested without heavy dependencies.
+    """
+    from unittest.mock import MagicMock
+
+    mock_nlp = MagicMock()
+
+    with patch("spacy.cli.download"), \
+         patch("spacy.load", return_value=mock_nlp):
+        yield
 
 
 @pytest.fixture

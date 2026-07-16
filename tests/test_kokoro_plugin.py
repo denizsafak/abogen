@@ -38,8 +38,10 @@ from tests.contracts.engine_contract import EngineContractMixin
 def _kokoro_available() -> bool:
     try:
         from kokoro import KPipeline  # type: ignore[import-not-found]
+        import spacy
+        spacy.load("en_core_web_sm")
         return True
-    except ImportError:
+    except (ImportError, OSError):
         return False
 
 
