@@ -21,7 +21,10 @@ from abogen.constants import (
 from abogen.tts_plugin.utils import get_voices
 from abogen.speaker_configs import list_configs
 from abogen.tts_plugin.utils import create_pipeline
-from abogen.webui.conversion_runner import _select_device, _to_float32, SAMPLE_RATE, SPLIT_PATTERN
+from abogen.domain.device import select_device as _select_device
+from abogen.domain.audio_helpers import to_float32 as _to_float32, SAMPLE_RATE
+
+SPLIT_PATTERN = r"\n+"
 
 _preview_pipeline_lock = threading.RLock()
 _preview_pipelines: Dict[Tuple[str, str], Any] = {}
