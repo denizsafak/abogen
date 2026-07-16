@@ -7,9 +7,9 @@ from flask import current_app, send_file
 from flask.typing import ResponseReturnValue
 
 from abogen.domain.device import select_device as _select_device
+from abogen.domain.split_pattern import get_split_pattern
 
 
-SPLIT_PATTERN = r"\n+"
 SAMPLE_RATE = 24000
 
 _preview_pipelines: Dict[Tuple[str, str], Any] = {}
@@ -123,6 +123,8 @@ def generate_preview_audio(
             current_app.logger.exception("Preview normalization failed; using raw text")
             normalized_text = source_text
 
+    preview_split = get_split_pattern(str(language or "a"), "Disabled")
+
     if provider == "supertonic":
         from abogen.tts_plugin.utils import create_pipeline
 
@@ -131,7 +133,7 @@ def generate_preview_audio(
             normalized_text,
             voice=voice_spec,
             speed=speed,
-            split_pattern=SPLIT_PATTERN,
+            split_pattern=preview_split,
             total_steps=supertonic_total_steps,
         )
     else:
@@ -149,7 +151,7 @@ def generate_preview_audio(
             normalized_text,
             voice=voice_choice,
             speed=speed,
-            split_pattern=SPLIT_PATTERN,
+            split_pattern=preview_split,
         )
 
     audio_chunks: List[np.ndarray] = []

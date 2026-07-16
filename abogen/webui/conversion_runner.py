@@ -111,6 +111,7 @@ from abogen.domain.output_paths import (
     resolve_project_layout as _resolve_project_layout,
 )
 from abogen.domain.device import select_device as _select_device
+from abogen.domain.split_pattern import get_split_pattern
 from abogen.domain.audio_helpers import (
     build_ffmpeg_command as _build_ffmpeg_command,
     to_float32 as _to_float32,
@@ -127,7 +128,7 @@ from .service import Job, JobStatus
 
 _export_svc = ExportService()
 
-SPLIT_PATTERN = r"\n+"
+SPLIT_PATTERN = r"\n+"  # Kept for backward compatibility; prefer get_split_pattern()
 SAMPLE_RATE = 24000
 
 
@@ -171,6 +172,12 @@ def run_conversion_job(job: Job) -> None:
             raise RuntimeError(
                 "LLM-based apostrophe normalization is selected, but the LLM configuration is incomplete."
             )
+
+    # Compute language-aware split pattern once for the entire job
+    job_split_pattern = get_split_pattern(
+        str(job.language or "a"),
+        str(job.subtitle_mode or "Disabled"),
+    )
 
     sink_stack = ExitStack()
     subtitle_writer = None
@@ -438,12 +445,14 @@ def run_conversion_job(job: Job) -> None:
             voice_choice: Any,
             chapter_sink: Optional[AudioSink],
             preview_prefix: Optional[str] = None,
-            split_pattern: Optional[str] = SPLIT_PATTERN,
+            split_pattern: Optional[str] = None,
             tts_provider: Optional[str] = None,
             speed_override: Optional[float] = None,
             supertonic_steps_override: Optional[int] = None,
         ) -> int:
             nonlocal processed_chars, current_time
+            if split_pattern is None:
+                split_pattern = job_split_pattern
             source_text = str(text or "")
             try:
                 normalized = prepare_text_for_tts(
@@ -625,7 +634,6 @@ def run_conversion_job(job: Job) -> None:
                         voice_choice=voice_choice,
                         chapter_sink=chapter_sink,
                         preview_prefix=f"Chapter {idx} title",
-                        split_pattern=SPLIT_PATTERN,
                         tts_provider=chapter_provider,
                         speed_override=chapter_speed,
                         supertonic_steps_override=chapter_steps,
