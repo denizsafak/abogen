@@ -29,7 +29,7 @@ from abogen.webui.routes.utils.voice import (
 )
 from abogen.webui.routes.utils.entity import sync_pronunciation_overrides
 from abogen.webui.routes.utils.epub import job_download_flags
-from abogen.webui.routes.utils.common import split_profile_spec
+from abogen.webui.routes.utils.common import split_profile_spec, extract_checkbox
 from abogen.utils import calculate_text_length
 from abogen.voice_profiles import serialize_profiles, normalize_profile_entry
 from abogen.chunking import ChunkLevel, build_chunks_for_chapters
@@ -537,28 +537,11 @@ def apply_book_step_form(
     else:
         pending.normalize_chapter_opening_caps = caps_default
 
-    def _extract_checkbox(name: str, default: bool) -> bool:
-        values: List[str] = []
-        getter = getattr(form, "getlist", None)
-        if callable(getter):
-            raw_values = getter(name)
-            if raw_values:
-                values = list(cast(Iterable[str], raw_values))
-        else:
-            raw_flag = form.get(name)
-            if raw_flag is not None:
-                values = [raw_flag]
-        if values:
-            return coerce_bool(values[-1], default)
-        if hasattr(form, "__contains__") and name in form:
-            return False
-        return default
-
     overrides_existing = getattr(pending, "normalization_overrides", None)
     overrides: Dict[str, Any] = dict(overrides_existing or {})
     for key in _NORMALIZATION_BOOLEAN_KEYS:
         default_toggle = overrides.get(key, bool(settings.get(key, True)))
-        overrides[key] = _extract_checkbox(key, default_toggle)
+        overrides[key] = extract_checkbox(form, key, default_toggle)
     for key in _NORMALIZATION_STRING_KEYS:
         default_val = overrides.get(key, str(settings.get(key, "")))
         val = form.get(key)
@@ -886,25 +869,10 @@ def build_pending_job_from_extraction(
         apply_config=bool(speaker_config_payload),
     )
 
-    def _extract_checkbox(name: str, default: bool) -> bool:
-        values: List[str] = []
-        getter = getattr(form, "getlist", None)
-        if callable(getter):
-            raw_values = getter(name)
-            if raw_values:
-                values = list(cast(Iterable[str], raw_values))
-        else:
-            raw_flag = form.get(name)
-            if raw_flag is not None:
-                values = [raw_flag]
-        if values:
-            return coerce_bool(values[-1], default)
-        return default
-
     normalization_overrides = {}
     for key in _NORMALIZATION_BOOLEAN_KEYS:
         default_val = bool(settings.get(key, True))
-        normalization_overrides[key] = _extract_checkbox(key, default_val)
+        normalization_overrides[key] = extract_checkbox(form, key, default_val)
 
     for key in _NORMALIZATION_STRING_KEYS:
         default_val = str(settings.get(key, ""))

@@ -19,6 +19,7 @@ from abogen.webui.routes.utils.settings import (
     _NORMALIZATION_STRING_KEYS,
     _DEFAULT_ANALYSIS_THRESHOLD,
 )
+from abogen.webui.routes.utils.common import extract_checkbox
 from abogen.webui.routes.utils.voice import template_options
 from abogen.webui.debug_tts_runner import run_debug_tts_wavs
 from abogen.debug_tts_samples import DEBUG_TTS_SAMPLES
@@ -93,17 +94,9 @@ def update_settings() -> ResponseReturnValue:
         maximum=25,
     )
 
-    def _extract_checkbox(name: str, default: bool) -> bool:
-        values = form.getlist(name) if hasattr(form, "getlist") else []
-        if values:
-            return coerce_bool(values[-1], default)
-        if hasattr(form, "__contains__") and name in form:
-            return False
-        return default
-
     # Normalization settings
     for key in _NORMALIZATION_BOOLEAN_KEYS:
-        current[key] = _extract_checkbox(key, bool(current.get(key, True)))
+        current[key] = extract_checkbox(form, key, bool(current.get(key, True)))
     for key in _NORMALIZATION_STRING_KEYS:
         if hasattr(form, "__contains__") and key in form:
             current[key] = (form.get(key) or "").strip()

@@ -15,7 +15,7 @@ from abogen.normalization_settings import (
 from abogen.utils import load_config, save_config
 from abogen.integrations.calibre_opds import CalibreOPDSClient
 from abogen.integrations.audiobookshelf import AudiobookshelfConfig
-from abogen.webui.routes.utils.common import split_profile_spec
+from abogen.webui.routes.utils.common import split_profile_spec, coerce_bool
 
 SAVE_MODE_LABELS = {
     "save_next_to_input": "Save next to input file",
@@ -243,16 +243,6 @@ def render_prompt_template(template: str, context: Mapping[str, str]) -> str:
         return context.get(key, "")
 
     return _PROMPT_TOKEN_RE.sub(_replace, template)
-
-
-def coerce_bool(value: Any, default: bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.lower() in {"true", "1", "yes", "on"}
-    if value is None:
-        return default
-    return bool(value)
 
 
 def coerce_float(value: Any, default: float) -> float:
