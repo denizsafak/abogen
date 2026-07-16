@@ -38,6 +38,7 @@ from abogen.domain.audio_buffer import (
 from abogen.domain.subtitle_generation import process_subtitle_tokens
 from abogen.domain.voice_loader import load_voice_cached
 from abogen.domain.progress import calc_etr_str
+from abogen.domain.normalization import prepare_text_for_tts
 from abogen.domain.metadata_extraction import (
     extract_metadata_and_build_args,
     read_text_for_metadata,
@@ -534,6 +535,22 @@ class ConversionThread(QThread):
                     replace_nums,
                     fix_punct,
                 )
+
+            # --- Compile normalization rules (heteronym + pronunciation) ---
+            from abogen.domain.pronunciation import (
+                compile_pronunciation_rules,
+                compile_heteronym_sentence_rules,
+                merge_pronunciation_overrides,
+            )
+            pronunciation_overrides = merge_pronunciation_overrides(
+                getattr(self, "pronunciation_overrides", None),
+                getattr(self, "manual_overrides", None),
+            )
+            self._pronunciation_rules = compile_pronunciation_rules(pronunciation_overrides)
+            self._heteronym_rules = compile_heteronym_sentence_rules(
+                getattr(self, "heteronym_overrides", None)
+            )
+            self._usage_counter = {}
 
             # --- Chapter splitting logic ---
             # Use pre-compiled pattern for better performance
@@ -1092,6 +1109,21 @@ class ConversionThread(QThread):
                         print("Using split pattern: (unprintable)")
 
                     for text_segment in text_segments:
+                        # Normalize text through the shared pipeline
+                        # (heteronym + pronunciation + apostrophe normalization)
+                        try:
+                            text_segment = prepare_text_for_tts(
+                                text_segment,
+                                heteronym_rules=getattr(self, "_heteronym_rules", None),
+                                pronunciation_rules=getattr(self, "_pronunciation_rules", None),
+                                normalization_overrides=getattr(self, "normalization_overrides", None),
+                                usage_counter=getattr(self, "_usage_counter", None),
+                            )
+                        except Exception as exc:
+                            self.log_updated.emit(
+                                (f"Warning: Text normalization failed: {exc}", "orange")
+                            )
+
                         for result in self.backend(
                             text_segment,
                             voice=loaded_voice,
