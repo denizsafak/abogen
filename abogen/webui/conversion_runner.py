@@ -73,10 +73,10 @@ from abogen.domain.file_type import (
 from abogen.domain.pronunciation import (
     compile_pronunciation_rules as _compile_pronunciation_rules,
     compile_heteronym_sentence_rules as _compile_heteronym_sentence_rules,
-    apply_heteronym_sentence_rules as _apply_heteronym_sentence_rules,
     apply_pronunciation_rules as _apply_pronunciation_rules,
     merge_pronunciation_overrides as _merge_pronunciation_overrides,
 )
+from abogen.domain.normalization import prepare_text_for_tts
 from abogen.domain.voice_resolution import (
     spec_to_voice_ids as _spec_to_voice_ids,
     job_voice_fallback as _job_voice_fallback,
@@ -445,19 +445,13 @@ def run_conversion_job(job: Job) -> None:
         ) -> int:
             nonlocal processed_chars, current_time
             source_text = str(text or "")
-            if heteronym_sentence_rules:
-                source_text = _apply_heteronym_sentence_rules(source_text, heteronym_sentence_rules)
-            if pronunciation_rules:
-                source_text = _apply_pronunciation_rules(
-                    source_text,
-                    pronunciation_rules,
-                    usage_counter,
-                )
             try:
-                normalized = normalize_for_pipeline(
+                normalized = prepare_text_for_tts(
                     source_text,
-                    config=apostrophe_config,
-                    settings=normalization_settings,
+                    heteronym_rules=heteronym_sentence_rules,
+                    pronunciation_rules=pronunciation_rules,
+                    normalization_overrides=getattr(job, "normalization_overrides", None),
+                    usage_counter=usage_counter,
                 )
             except LLMClientError as exc:
                 job.add_log(f"LLM normalization failed: {exc}", level="error")
