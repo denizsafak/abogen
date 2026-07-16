@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import os
-import re
 import shutil
 import sys
 import threading
@@ -14,7 +12,7 @@ import traceback
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Mapping, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Mapping
 
 from abogen.utils import get_internal_cache_path, get_user_settings_dir, load_config
 from abogen.voice_cache import bootstrap_voice_cache
@@ -22,6 +20,17 @@ from abogen.integrations.audiobookshelf import (
     AudiobookshelfClient,
     AudiobookshelfConfig,
     AudiobookshelfUploadError,
+)
+from abogen.domain.metadata_helpers import (
+    normalize_metadata_casefold as _normalize_metadata_casefold,
+    split_people_field as _split_people_field,
+    split_simple_list as _split_simple_list,
+    first_nonempty as _first_nonempty,
+    extract_year as _extract_year,
+    normalize_series_sequence as _normalize_series_sequence,
+    build_audiobookshelf_metadata as _build_abs_metadata,
+    load_audiobookshelf_chapters as _load_abs_chapters,
+    _SERIES_SEQUENCE_TAG_KEYS,
 )
 
 
@@ -51,9 +60,6 @@ _JOB_LEVEL_MAP: Dict[str, int] = {
     "debug": logging.DEBUG,
     "trace": logging.DEBUG,
 }
-
-
-_PEOPLE_SPLIT_RE = re.compile(r"[;,/&]|\band\b", re.IGNORECASE)
 
 
 def _emit_job_log(job_id: str, level: str, message: str) -> None:
@@ -252,234 +258,13 @@ class Job:
         }
 
 
-def _normalize_metadata_casefold(values: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
-    normalized: Dict[str, Any] = {}
-    if not values:
-        return normalized
-    for key, value in values.items():
-        if value is None:
-            continue
-        key_text = str(key).strip().lower()
-        if not key_text:
-            continue
-        if isinstance(value, (list, tuple, set)):
-            normalized[key_text] = value
-        else:
-            text = str(value).strip()
-            if text:
-                normalized[key_text] = text
-    return normalized
-
-
-def _split_people_field(raw: Any) -> List[str]:
-    if raw is None:
-        return []
-    if isinstance(raw, (list, tuple, set)):
-        results: List[str] = []
-        for item in raw:
-            results.extend(_split_people_field(item))
-        return results
-    text = str(raw or "").strip()
-    if not text:
-        return []
-    tokens = [_token.strip() for _token in _PEOPLE_SPLIT_RE.split(text) if _token.strip()]
-    seen: set[str] = set()
-    ordered: List[str] = []
-    for token in tokens:
-        key = token.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        ordered.append(token)
-    return ordered
-
-
-_LIST_SPLIT_RE = re.compile(r"[;,\n]")
-_SERIES_SEQUENCE_NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
-
-_SERIES_SEQUENCE_TAG_KEYS: Tuple[str, ...] = (
-    "series_index",
-    "series_position",
-    "series_sequence",
-    "series_number",
-    "seriesnumber",
-    "book_number",
-    "booknumber",
-)
-
-
-def _split_simple_list(raw: Any) -> List[str]:
-    if raw is None:
-        return []
-    if isinstance(raw, (list, tuple, set)):
-        results: List[str] = []
-        for item in raw:
-            results.extend(_split_simple_list(item))
-        return results
-    text = str(raw or "").strip()
-    if not text:
-        return []
-    tokens = [_token.strip() for _token in _LIST_SPLIT_RE.split(text) if _token.strip()]
-    seen: set[str] = set()
-    ordered: List[str] = []
-    for token in tokens:
-        key = token.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        ordered.append(token)
-    return ordered
-
-
-def _first_nonempty(*values: Any) -> Optional[str]:
-    for value in values:
-        if value is None:
-            continue
-        if isinstance(value, (list, tuple, set)):
-            items = list(value)
-            if not items:
-                continue
-            value = items[0]
-        text = str(value).strip()
-        if text:
-            return text
-    return None
-
-
-def _extract_year(raw: Optional[str]) -> Optional[int]:
-    if not raw:
-        return None
-    text = str(raw).strip()
-    if not text:
-        return None
-    match = re.search(r"(19|20)\d{2}", text)
-    if match:
-        try:
-            return int(match.group(0))
-        except ValueError:
-            return None
-    try:
-        parsed = int(text)
-    except ValueError:
-        return None
-    if 0 < parsed < 3000:
-        return parsed
-    return None
-
-
 def build_audiobookshelf_metadata(job: Job) -> Dict[str, Any]:
-    tags = _normalize_metadata_casefold(job.metadata_tags)
     filename = Path(job.original_filename or "").stem or job.original_filename or "Audiobook"
-    title = _first_nonempty(
-        tags.get("title"),
-        tags.get("book_title"),
-        tags.get("name"),
-        tags.get("album"),
-        filename,
+    return _build_abs_metadata(
+        job.metadata_tags,
+        language=job.language or "",
+        filename=filename,
     )
-    authors = _split_people_field(
-        tags.get("authors")
-        or tags.get("author")
-        or tags.get("album_artist")
-        or tags.get("artist")
-    )
-    narrators = _split_people_field(tags.get("narrators") or tags.get("narrator"))
-    description = _first_nonempty(tags.get("description"), tags.get("summary"), tags.get("comment"))
-    genres = _split_simple_list(tags.get("genre"))
-    keywords = _split_simple_list(tags.get("tags") or tags.get("keywords"))
-    language = _first_nonempty(tags.get("language"), tags.get("lang")) or job.language or ""
-    series_name = _first_nonempty(
-        tags.get("series"),
-        tags.get("series_name"),
-        tags.get("seriesname"),
-        tags.get("series_title"),
-        tags.get("seriestitle"),
-    )
-    
-    series_sequence = None
-    for key in _SERIES_SEQUENCE_TAG_KEYS:
-        raw_value = tags.get(key)
-        normalized_sequence = _normalize_series_sequence(raw_value)
-        if normalized_sequence:
-            series_sequence = normalized_sequence
-            break
-    if not series_name:
-        series_sequence = None
-    data: Dict[str, Any] = {
-        "title": title,
-        "subtitle": tags.get("subtitle"),
-        "authors": authors,
-        "narrators": narrators,
-        "description": description,
-        "publisher": tags.get("publisher"),
-        "genres": genres,
-        "tags": keywords,
-        "language": language,
-        "publishedYear": _extract_year(tags.get("published") or tags.get("publication_year") or tags.get("date") or tags.get("year")),
-        "seriesName": series_name,
-        "seriesSequence": series_sequence,
-        "isbn": _first_nonempty(tags.get("isbn"), tags.get("asin")),
-    }
-    published_date = _first_nonempty(tags.get("published"), tags.get("publication_date"), tags.get("date"))
-    if published_date:
-        data["publishedDate"] = published_date
-
-    rating_text = _first_nonempty(tags.get("rating"), tags.get("my_rating"))
-    if rating_text:
-        try:
-            data["rating"] = float(str(rating_text).strip())
-        except ValueError:
-            pass
-        rating_max_text = _first_nonempty(tags.get("rating_max"), tags.get("rating_scale"))
-        if rating_max_text:
-            try:
-                data["ratingMax"] = float(str(rating_max_text).strip())
-            except ValueError:
-                pass
-    # Remove empty values
-    cleaned: Dict[str, Any] = {}
-    for key, value in data.items():
-        if value is None:
-            continue
-        if isinstance(value, str) and not value.strip():
-            continue
-        if isinstance(value, (list, tuple)) and not value:
-            continue
-        cleaned[key] = value
-    return cleaned
-
-
-def _normalize_series_sequence(raw: Any) -> Optional[str]:
-    if raw is None:
-        return None
-
-    if isinstance(raw, (int, float)):
-        if isinstance(raw, float) and (math.isnan(raw) or math.isinf(raw)):
-            return None
-        text = str(raw)
-    else:
-        text = str(raw).strip()
-
-    if not text:
-        return None
-
-    candidate = text.replace(",", ".")
-    match = _SERIES_SEQUENCE_NUMBER_RE.search(candidate)
-    if not match:
-        return None
-
-    normalized = match.group(0)
-    if "." in normalized:
-        normalized = normalized.rstrip("0").rstrip(".")
-        if not normalized:
-            normalized = "0"
-        return normalized
-
-    try:
-        return str(int(normalized))
-    except ValueError:
-        cleaned = normalized.lstrip("0")
-        return cleaned or "0"
 
 
 def load_audiobookshelf_chapters(job: Job) -> Optional[List[Dict[str, Any]]]:
@@ -487,32 +272,7 @@ def load_audiobookshelf_chapters(job: Job) -> Optional[List[Dict[str, Any]]]:
     if not metadata_ref:
         return None
     metadata_path = metadata_ref if isinstance(metadata_ref, Path) else Path(str(metadata_ref))
-    if not metadata_path.exists():
-        return None
-    try:
-        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    chapters = payload.get("chapters")
-    if not isinstance(chapters, list):
-        return None
-    cleaned: List[Dict[str, Any]] = []
-    for entry in chapters:
-        if not isinstance(entry, Mapping):
-            continue
-        title = _first_nonempty(entry.get("title"), entry.get("original_title"))
-        start = entry.get("start")
-        end = entry.get("end")
-        if title is None or not isinstance(start, (int, float)):
-            continue
-        chapter_payload: Dict[str, Any] = {
-            "title": title,
-            "start": float(start),
-        }
-        if isinstance(end, (int, float)):
-            chapter_payload["end"] = float(end)
-        cleaned.append(chapter_payload)
-    return cleaned or None
+    return _load_abs_chapters(metadata_path)
 
 
 def _existing_paths(paths: Iterable[Any]) -> List[Path]:

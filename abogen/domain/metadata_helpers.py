@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+import math
 import re
+from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 
@@ -136,3 +139,267 @@ def format_series_sentence(series_name: Optional[str], series_number: Optional[s
     article = "the " if not name.lower().startswith("the ") else ""
     phrase = f"Book {number} of {article}{name}"
     return re.sub(r"\s+", " ", phrase).strip()
+
+
+_PEOPLE_SPLIT_RE = re.compile(r"[;,/&]|\band\b", re.IGNORECASE)
+_LIST_SPLIT_RE = re.compile(r"[;,\n]")
+_SERIES_SEQUENCE_TAG_KEYS: Tuple[str, ...] = (
+    "series_index",
+    "series_position",
+    "series_sequence",
+    "series_number",
+    "seriesnumber",
+    "book_number",
+    "booknumber",
+)
+
+
+def normalize_metadata_casefold(values: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    normalized: Dict[str, Any] = {}
+    if not values:
+        return normalized
+    for key, value in values.items():
+        if value is None:
+            continue
+        key_text = str(key).strip().lower()
+        if not key_text:
+            continue
+        if isinstance(value, (list, tuple, set)):
+            normalized[key_text] = value
+        else:
+            text = str(value).strip()
+            if text:
+                normalized[key_text] = text
+    return normalized
+
+
+def split_people_field(raw: Any) -> List[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple, set)):
+        results: List[str] = []
+        for item in raw:
+            results.extend(split_people_field(item))
+        return results
+    text = str(raw or "").strip()
+    if not text:
+        return []
+    tokens = [_token.strip() for _token in _PEOPLE_SPLIT_RE.split(text) if _token.strip()]
+    seen: set[str] = set()
+    ordered: List[str] = []
+    for token in tokens:
+        key = token.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(token)
+    return ordered
+
+
+def split_simple_list(raw: Any) -> List[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple, set)):
+        results: List[str] = []
+        for item in raw:
+            results.extend(split_simple_list(item))
+        return results
+    text = str(raw or "").strip()
+    if not text:
+        return []
+    tokens = [_token.strip() for _token in _LIST_SPLIT_RE.split(text) if _token.strip()]
+    seen: set[str] = set()
+    ordered: List[str] = []
+    for token in tokens:
+        key = token.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(token)
+    return ordered
+
+
+def first_nonempty(*values: Any) -> Optional[str]:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, (list, tuple, set)):
+            items = list(value)
+            if not items:
+                continue
+            value = items[0]
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
+def extract_year(raw: Optional[str]) -> Optional[int]:
+    if not raw:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    match = re.search(r"(19|20)\d{2}", text)
+    if match:
+        try:
+            return int(match.group(0))
+        except ValueError:
+            return None
+    try:
+        parsed = int(text)
+    except ValueError:
+        return None
+    if 0 < parsed < 3000:
+        return parsed
+    return None
+
+
+def normalize_series_sequence(raw: Any) -> Optional[str]:
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        if isinstance(raw, float) and (math.isnan(raw) or math.isinf(raw)):
+            return None
+        text = str(raw)
+    else:
+        text = str(raw).strip()
+    if not text:
+        return None
+    candidate = text.replace(",", ".")
+    match = _SERIES_NUMBER_RE.search(candidate)
+    if not match:
+        return None
+    normalized = match.group(0)
+    if "." in normalized:
+        normalized = normalized.rstrip("0").rstrip(".")
+        if not normalized:
+            normalized = "0"
+        return normalized
+    try:
+        return str(int(normalized))
+    except ValueError:
+        cleaned = normalized.lstrip("0")
+        return cleaned or "0"
+
+
+def build_audiobookshelf_metadata(
+    tags: Mapping[str, Any],
+    *,
+    language: str = "",
+    filename: str = "",
+) -> Dict[str, Any]:
+    normalized = normalize_metadata_casefold(tags)
+    title = first_nonempty(
+        normalized.get("title"),
+        normalized.get("book_title"),
+        normalized.get("name"),
+        normalized.get("album"),
+        filename,
+    )
+    authors = split_people_field(
+        normalized.get("authors")
+        or normalized.get("author")
+        or normalized.get("album_artist")
+        or normalized.get("artist")
+    )
+    narrators = split_people_field(normalized.get("narrators") or normalized.get("narrator"))
+    description = first_nonempty(
+        normalized.get("description"), normalized.get("summary"), normalized.get("comment")
+    )
+    genres = split_simple_list(normalized.get("genre"))
+    keywords = split_simple_list(normalized.get("tags") or normalized.get("keywords"))
+    lang = first_nonempty(normalized.get("language"), normalized.get("lang")) or language or ""
+    series_name = first_nonempty(
+        normalized.get("series"),
+        normalized.get("series_name"),
+        normalized.get("seriesname"),
+        normalized.get("series_title"),
+        normalized.get("seriestitle"),
+    )
+
+    series_sequence = None
+    for key in _SERIES_SEQUENCE_TAG_KEYS:
+        raw_value = normalized.get(key)
+        seq = normalize_series_sequence(raw_value)
+        if seq:
+            series_sequence = seq
+            break
+    if not series_name:
+        series_sequence = None
+
+    data: Dict[str, Any] = {
+        "title": title,
+        "subtitle": normalized.get("subtitle"),
+        "authors": authors,
+        "narrators": narrators,
+        "description": description,
+        "publisher": normalized.get("publisher"),
+        "genres": genres,
+        "tags": keywords,
+        "language": lang,
+        "publishedYear": extract_year(
+            normalized.get("published")
+            or normalized.get("publication_year")
+            or normalized.get("date")
+            or normalized.get("year")
+        ),
+        "seriesName": series_name,
+        "seriesSequence": series_sequence,
+        "isbn": first_nonempty(normalized.get("isbn"), normalized.get("asin")),
+    }
+    published_date = first_nonempty(
+        normalized.get("published"), normalized.get("publication_date"), normalized.get("date")
+    )
+    if published_date:
+        data["publishedDate"] = published_date
+
+    rating_text = first_nonempty(normalized.get("rating"), normalized.get("my_rating"))
+    if rating_text:
+        try:
+            data["rating"] = float(str(rating_text).strip())
+        except ValueError:
+            pass
+        rating_max_text = first_nonempty(
+            normalized.get("rating_max"), normalized.get("rating_scale")
+        )
+        if rating_max_text:
+            try:
+                data["ratingMax"] = float(str(rating_max_text).strip())
+            except ValueError:
+                pass
+
+    cleaned: Dict[str, Any] = {}
+    for key, value in data.items():
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        if isinstance(value, (list, tuple)) and not value:
+            continue
+        cleaned[key] = value
+    return cleaned
+
+
+def load_audiobookshelf_chapters(
+    metadata_path: Path,
+) -> Optional[List[Dict[str, Any]]]:
+    if not metadata_path.exists():
+        return None
+    try:
+        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    chapters = payload.get("chapters")
+    if not isinstance(chapters, list):
+        return None
+    cleaned: List[Dict[str, Any]] = []
+    for entry in chapters:
+        if not isinstance(entry, Mapping):
+            continue
+        title = first_nonempty(entry.get("title"), entry.get("original_title"))
+        start = entry.get("start")
+        end = entry.get("end")
+        if title and start is not None and end is not None:
+            cleaned.append({"title": str(title), "start": start, "end": end})
+    return cleaned or None

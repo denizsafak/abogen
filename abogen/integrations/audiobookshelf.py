@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import mimetypes
-import re
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import httpx
+
+from abogen.domain.metadata_helpers import normalize_series_sequence
 
 logger = logging.getLogger(__name__)
 
@@ -641,40 +641,7 @@ class AudiobookshelfClient:
         for key in preferred_keys:
             if key not in metadata:
                 continue
-            normalized = AudiobookshelfClient._normalize_series_sequence(metadata.get(key))
+            normalized = normalize_series_sequence(metadata.get(key))
             if normalized:
                 return normalized
         return ""
-
-    @staticmethod
-    def _normalize_series_sequence(raw: Any) -> str:
-        if raw is None:
-            return ""
-
-        if isinstance(raw, (int, float)):
-            if isinstance(raw, float) and (math.isnan(raw) or math.isinf(raw)):
-                return ""
-            text = str(raw)
-        else:
-            text = str(raw).strip()
-
-        if not text:
-            return ""
-
-        candidate = text.replace(",", ".")
-        match = re.search(r"\d+(?:\.\d+)?", candidate)
-        if not match:
-            return ""
-
-        normalized = match.group(0)
-        if "." in normalized:
-            normalized = normalized.rstrip("0").rstrip(".")
-            if not normalized:
-                normalized = "0"
-            return normalized
-
-        try:
-            return str(int(normalized))
-        except ValueError:
-            cleaned = normalized.lstrip("0")
-            return cleaned or "0"

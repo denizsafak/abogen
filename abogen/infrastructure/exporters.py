@@ -9,6 +9,17 @@ from typing import Any, Dict, List, Optional, Mapping, Sequence
 
 import static_ffmpeg
 
+from abogen.domain.metadata_helpers import (
+    normalize_metadata_casefold,
+    split_people_field,
+    split_simple_list,
+    first_nonempty,
+    extract_year,
+    normalize_series_sequence,
+    build_audiobookshelf_metadata as _build_abs_metadata,
+    load_audiobookshelf_chapters as _load_abs_chapters,
+    _SERIES_SEQUENCE_TAG_KEYS,
+)
 from abogen.epub3.exporter import build_epub3_package
 from abogen.integrations.audiobookshelf import (
     AudiobookshelfClient,
@@ -305,125 +316,20 @@ class ExportService:
     
     def build_audiobookshelf_metadata(self, job: Any) -> Dict[str, Any]:
         """Build Audiobookshelf metadata from job."""
-        tags = self._normalize_metadata_casefold(getattr(job, "metadata_tags", {}))
         filename = Path(getattr(job, "original_filename", "") or "").stem or "Audiobook"
-        
-        title = self._first_nonempty(
-            tags.get("title"),
-            tags.get("book_title"),
-            tags.get("name"),
-            tags.get("album"),
-            filename,
+        return _build_abs_metadata(
+            getattr(job, "metadata_tags", {}),
+            language=getattr(job, "language", "") or "",
+            filename=filename,
         )
-        authors = self._split_people_field(
-            tags.get("authors")
-            or tags.get("author")
-            or tags.get("album_artist")
-            or tags.get("artist")
-        )
-        narrators = self._split_people_field(tags.get("narrators") or tags.get("narrator"))
-        description = self._first_nonempty(
-            tags.get("description"), tags.get("summary"), tags.get("comment")
-        )
-        genres = self._split_simple_list(tags.get("genre"))
-        keywords = self._split_simple_list(tags.get("tags") or tags.get("keywords"))
-        language = self._first_nonempty(tags.get("language"), tags.get("lang")) or getattr(job, "language", "") or ""
-        series_name = self._first_nonempty(
-            tags.get("series"),
-            tags.get("series_name"),
-            tags.get("seriesname"),
-            tags.get("series_title"),
-            tags.get("seriestitle"),
-        )
-        
-        series_sequence = None
-        for key in ("series_index", "series_position", "series_sequence", "series_number", "seriesnumber", "book_number", "booknumber"):
-            raw = tags.get(key)
-            normalized = self._normalize_series_sequence(raw)
-            if normalized:
-                series_sequence = normalized
-                break
-        if not series_name:
-            series_sequence = None
-        
-        data = {
-            "title": title,
-            "subtitle": tags.get("subtitle"),
-            "authors": authors,
-            "narrators": narrators,
-            "description": description,
-            "publisher": tags.get("publisher"),
-            "genres": genres,
-            "tags": keywords,
-            "language": language,
-            "publishedYear": self._extract_year(
-                tags.get("published") or tags.get("publication_year") or tags.get("date") or tags.get("year")
-            ),
-            "seriesName": series_name,
-            "seriesSequence": series_sequence,
-            "isbn": self._first_nonempty(tags.get("isbn"), tags.get("asin")),
-        }
-        
-        published_date = self._first_nonempty(
-            tags.get("published"), tags.get("publication_date"), tags.get("date")
-        )
-        if published_date:
-            data["publishedDate"] = published_date
-        
-        rating_text = self._first_nonempty(tags.get("rating"), tags.get("my_rating"))
-        if rating_text:
-            try:
-                data["rating"] = float(str(rating_text).strip())
-            except ValueError:
-                pass
-            rating_max_text = self._first_nonempty(tags.get("rating_max"), tags.get("rating_scale"))
-            if rating_max_text:
-                try:
-                    data["ratingMax"] = float(str(rating_max_text).strip())
-                except ValueError:
-                    pass
-        
-        # Remove empty values
-        cleaned = {}
-        for key, value in data.items():
-            if value is None:
-                continue
-            if isinstance(value, str) and not value.strip():
-                continue
-            if isinstance(value, (list, tuple)) and not value:
-                continue
-            cleaned[key] = value
-        return cleaned
-    
+
     def load_audiobookshelf_chapters(self, job: Any) -> Optional[List[Dict[str, Any]]]:
         """Load chapters from job artifacts for Audiobookshelf."""
         metadata_ref = job.result.artifacts.get("metadata") if getattr(job, "result", None) else None
         if not metadata_ref:
             return None
         metadata_path = metadata_ref if isinstance(metadata_ref, Path) else Path(str(metadata_ref))
-        if not metadata_path.exists():
-            return None
-        try:
-            payload = json.loads(metadata_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return None
-        chapters = payload.get("chapters")
-        if not isinstance(chapters, list):
-            return None
-        cleaned = []
-        for entry in chapters:
-            if not isinstance(entry, Mapping):
-                continue
-            title = self._first_nonempty(entry.get("title"), entry.get("original_title"))
-            start = entry.get("start")
-            end = entry.get("end")
-            if title is None or not isinstance(start, (int, float)):
-                continue
-            chapter_payload = {"title": title, "start": float(start)}
-            if isinstance(end, (int, float)):
-                chapter_payload["end"] = float(end)
-            cleaned.append(chapter_payload)
-        return cleaned or None
+        return _load_abs_chapters(metadata_path)
     
     def upload_audiobookshelf(
         self,
@@ -519,137 +425,6 @@ class ExportService:
     # ----------------------------------------------------------------------
     # Helpers
     # ----------------------------------------------------------------------
-    
-    @staticmethod
-    def _normalize_metadata_casefold(values: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
-        normalized = {}
-        if not values:
-            return normalized
-        for key, value in values.items():
-            if value is None:
-                continue
-            key_text = str(key).strip().lower()
-            if not key_text:
-                continue
-            if isinstance(value, (list, tuple, set)):
-                normalized[key_text] = value
-            else:
-                text = str(value).strip()
-                if text:
-                    normalized[key_text] = text
-        return normalized
-    
-    @staticmethod
-    def _split_people_field(raw: Any) -> List[str]:
-        if raw is None:
-            return []
-        if isinstance(raw, (list, tuple, set)):
-            results = []
-            for item in raw:
-                results.extend(ExportService._split_people_field(item))
-            return results
-        text = str(raw or "").strip()
-        if not text:
-            return []
-        import re
-        tokens = [token.strip() for token in re.split(r"[;,/&]|\band\b", text, flags=re.IGNORECASE) if token.strip()]
-        seen = set()
-        ordered = []
-        for token in tokens:
-            key = token.casefold()
-            if key in seen:
-                continue
-            seen.add(key)
-            ordered.append(token)
-        return ordered
-    
-    @staticmethod
-    def _split_simple_list(raw: Any) -> List[str]:
-        if raw is None:
-            return []
-        if isinstance(raw, (list, tuple, set)):
-            results = []
-            for item in raw:
-                results.extend(ExportService._split_simple_list(item))
-            return results
-        text = str(raw or "").strip()
-        if not text:
-            return []
-        import re
-        tokens = [token.strip() for token in re.split(r"[;,\n]", text) if token.strip()]
-        seen = set()
-        ordered = []
-        for token in tokens:
-            key = token.casefold()
-            if key in seen:
-                continue
-            seen.add(key)
-            ordered.append(token)
-        return ordered
-    
-    @staticmethod
-    def _first_nonempty(*values: Any) -> Optional[str]:
-        for value in values:
-            if value is None:
-                continue
-            if isinstance(value, (list, tuple, set)):
-                items = list(value)
-                if not items:
-                    continue
-                value = items[0]
-            text = str(value).strip()
-            if text:
-                return text
-        return None
-    
-    @staticmethod
-    def _extract_year(raw: Optional[str]) -> Optional[int]:
-        if not raw:
-            return None
-        text = str(raw).strip()
-        if not text:
-            return None
-        import re
-        match = re.search(r"(19|20)\d{2}", text)
-        if match:
-            try:
-                return int(match.group(0))
-            except ValueError:
-                return None
-        try:
-            parsed = int(text)
-        except ValueError:
-            return None
-        if 0 < parsed < 3000:
-            return parsed
-        return None
-    
-    @staticmethod
-    def _normalize_series_sequence(raw: Any) -> Optional[str]:
-        if raw is None:
-            return None
-        if isinstance(raw, (int, float)):
-            if isinstance(raw, float) and (raw != raw or raw == float("inf") or raw == float("-inf")):
-                return None
-            text = str(raw)
-        else:
-            text = str(raw).strip()
-        if not text:
-            return None
-        candidate = text.replace(",", ".")
-        import re
-        match = re.search(r"\d+(?:\.\d+)?", candidate)
-        if not match:
-            return None
-        normalized = match.group(0)
-        if "." in normalized:
-            normalized = normalized.rstrip("0").rstrip(".")
-            return normalized or "0"
-        try:
-            return str(int(normalized))
-        except ValueError:
-            cleaned = normalized.lstrip("0")
-            return cleaned or "0"
     
     @staticmethod
     def _coerce_bool(value: Any, default: bool = True) -> bool:
