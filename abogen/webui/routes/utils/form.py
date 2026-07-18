@@ -826,6 +826,8 @@ def build_pending_job_from_extraction(
         analysis_requested=initial_analysis,
     )
 
+    apply_book_step_form(pending, form, settings=settings, profiles=profiles_map)
+
     return PendingBuildResult(
         pending=pending,
         selected_speaker_config=selected_speaker_config or None,
