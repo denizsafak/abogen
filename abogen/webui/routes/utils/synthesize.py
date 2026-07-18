@@ -44,22 +44,6 @@ def _resolve_pipeline(language: str, use_gpu: bool) -> Tuple[Any, bool]:
     raise RuntimeError("Preview pipeline is unavailable") from last_error
 
 
-def _to_float32(audio_segment) -> np.ndarray:
-    if audio_segment is None:
-        return np.zeros(0, dtype="float32")
-
-    tensor = audio_segment
-    if hasattr(tensor, "detach"):
-        tensor = tensor.detach()
-    if hasattr(tensor, "cpu"):
-        try:
-            tensor = tensor.cpu()
-        except Exception:
-            pass
-    if hasattr(tensor, "numpy"):
-        return np.asarray(tensor.numpy(), dtype="float32").reshape(-1)
-    return np.asarray(tensor, dtype="float32").reshape(-1)
-
 def get_preview_pipeline(language: str, device: str) -> Any:
     key = (language, device)
     with _preview_pipeline_lock:

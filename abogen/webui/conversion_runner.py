@@ -114,6 +114,7 @@ from abogen.domain.output_paths import (
 from abogen.domain.device import select_device as _select_device
 from abogen.domain.split_pattern import get_split_pattern
 from abogen.domain.progress import ProgressTracker, calc_etr_str
+from abogen.domain.subtitle_generation import process_subtitle_tokens
 from abogen.domain.audio_helpers import (
     build_ffmpeg_command as _build_ffmpeg_command,
     to_float32 as _to_float32,
@@ -491,6 +492,9 @@ def run_conversion_job(job: Job) -> None:
                 )
 
             try:
+                # Accumulate tokens for subtitle processing (token-level grouping)
+                accumulated_tokens: List[dict] = []
+
                 for segment in segment_iter:
                     canceller()
                     graphemes_raw = getattr(segment, "graphemes", "") or ""
@@ -507,6 +511,7 @@ def run_conversion_job(job: Job) -> None:
                         audio_sink.write(audio)
 
                     duration = len(audio) / SAMPLE_RATE
+                    chunk_start = current_time
                     processed_chars += len(graphemes)
                     job.processed_characters = processed_chars
                     if job.total_characters:
@@ -523,15 +528,45 @@ def run_conversion_job(job: Job) -> None:
                     prefix = f"{preview_prefix} · " if preview_prefix else ""
                     job.add_log(f"{prefix}{processed_chars:,}/{job.total_characters or '—'}: {preview_text[:80]}")
 
-                    if subtitle_writer and audio_sink and graphemes:
-                        subtitle_writer.write_entry(
-                            start=current_time,
-                            end=current_time + duration,
-                            text=graphemes,
-                        )
+                    # Accumulate tokens from this segment for subtitle processing
+                    if subtitle_writer and audio_sink:
+                        tokens_list = getattr(segment, "tokens", [])
+
+                        # Fallback for languages without token support: create a single token
+                        if not tokens_list and graphemes:
+                            class _FakeToken:
+                                def __init__(self, text, start, end):
+                                    self.text = text
+                                    self.start_ts = start
+                                    self.end_ts = end
+                                    self.whitespace = ""
+                            tokens_list = [_FakeToken(graphemes, 0, duration)]
+
+                        for tok in tokens_list:
+                            accumulated_tokens.append({
+                                "start": chunk_start + (tok.start_ts or 0),
+                                "end": chunk_start + (tok.end_ts or 0),
+                                "text": tok.text,
+                                "whitespace": tok.whitespace,
+                            })
 
                     if audio_sink:
                         current_time += duration
+
+                # Flush accumulated tokens through process_subtitle_tokens
+                if subtitle_writer and audio_sink and accumulated_tokens:
+                    new_entries: List[tuple] = []
+                    process_subtitle_tokens(
+                        accumulated_tokens,
+                        new_entries,
+                        job.max_subtitle_words,
+                        job.subtitle_mode,
+                        job.language,
+                        use_spacy_segmentation=False,
+                        fallback_end_time=current_time,
+                    )
+                    for start, end, text in new_entries:
+                        subtitle_writer.write_entry(start=start, end=end, text=text)
 
             except OverflowError as exc:
                 job.add_log(
