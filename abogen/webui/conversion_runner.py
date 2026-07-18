@@ -135,6 +135,16 @@ SPLIT_PATTERN = r"\n+"  # Kept for backward compatibility; prefer get_split_patt
 SAMPLE_RATE = 24000
 
 
+class _FakeToken:
+    """Minimal token stub for languages without per-word token support."""
+
+    def __init__(self, text: str, start: float, end: float):
+        self.text = text
+        self.start_ts = start
+        self.end_ts = end
+        self.whitespace = ""
+
+
 class _JobCancelled(Exception):
     """Raised internally to abort a conversion when the client cancels."""
 
@@ -534,12 +544,6 @@ def run_conversion_job(job: Job) -> None:
 
                         # Fallback for languages without token support: create a single token
                         if not tokens_list and graphemes:
-                            class _FakeToken:
-                                def __init__(self, text, start, end):
-                                    self.text = text
-                                    self.start_ts = start
-                                    self.end_ts = end
-                                    self.whitespace = ""
                             tokens_list = [_FakeToken(graphemes, 0, duration)]
 
                         for tok in tokens_list:
@@ -555,6 +559,7 @@ def run_conversion_job(job: Job) -> None:
 
                 # Flush accumulated tokens through process_subtitle_tokens
                 if subtitle_writer and audio_sink and accumulated_tokens:
+                    _use_spacy = job.subtitle_mode not in ("Disabled", "Line")
                     new_entries: List[tuple] = []
                     process_subtitle_tokens(
                         accumulated_tokens,
@@ -562,7 +567,7 @@ def run_conversion_job(job: Job) -> None:
                         job.max_subtitle_words,
                         job.subtitle_mode,
                         job.language,
-                        use_spacy_segmentation=False,
+                        use_spacy_segmentation=_use_spacy,
                         fallback_end_time=current_time,
                     )
                     for start, end, text in new_entries:

@@ -39,6 +39,11 @@ from abogen.domain.subtitle_generation import process_subtitle_tokens
 from abogen.domain.voice_loader import load_voice_cached
 from abogen.domain.progress import calc_etr_str
 from abogen.domain.normalization import prepare_text_for_tts
+from abogen.domain.pronunciation import (
+    compile_pronunciation_rules,
+    compile_heteronym_sentence_rules,
+    merge_pronunciation_overrides,
+)
 from abogen.domain.metadata_extraction import (
     extract_metadata_and_build_args,
     read_text_for_metadata,
@@ -537,11 +542,6 @@ class ConversionThread(QThread):
                 )
 
             # --- Compile normalization rules (heteronym + pronunciation) ---
-            from abogen.domain.pronunciation import (
-                compile_pronunciation_rules,
-                compile_heteronym_sentence_rules,
-                merge_pronunciation_overrides,
-            )
             pronunciation_overrides = merge_pronunciation_overrides(
                 getattr(self, "pronunciation_overrides", None),
                 getattr(self, "manual_overrides", None),
