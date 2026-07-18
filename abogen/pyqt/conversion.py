@@ -21,7 +21,6 @@ from abogen.constants import (
     SUPPORTED_SOUND_FORMATS,
     SUPPORTED_SUBTITLE_FORMATS,
 )
-from abogen.voice_formulas import get_new_voice
 from abogen.infrastructure.subtitle_writer import _format_timestamp
 from abogen.domain.split_pattern import get_split_pattern
 from abogen.domain.output_paths import (
@@ -39,7 +38,7 @@ from abogen.domain.audio_buffer import (
     SAMPLE_RATE,
 )
 from abogen.domain.subtitle_generation import process_subtitle_tokens
-from abogen.domain.voice_loader import load_voice_cached
+from abogen.domain.voice_loader import load_voice_cached, resolve_voice
 from abogen.domain.progress import calc_etr_str
 from abogen.domain.normalization import prepare_text_for_tts
 from abogen.domain.pronunciation import (
@@ -1462,11 +1461,7 @@ class ConversionThread(QThread):
                 alignment = "{\\an5}" if is_centered else ""
 
             # Load voice
-            loaded_voice = (
-                get_new_voice(tts, self.voice, self.use_gpu)
-                if "*" in self.voice
-                else self.voice
-            )
+            loaded_voice = resolve_voice(self.voice, tts, self.use_gpu)
 
             # Calculate initial audio buffer size from timed subtitles only
             max_end_time = max(
@@ -1920,10 +1915,7 @@ class VoicePreviewThread(QThread):
         try:
 
             # Enable voice formula support for preview
-            if "*" in self.voice:
-                loaded_voice = get_new_voice(self.backend, self.voice, self.use_gpu)
-            else:
-                loaded_voice = self.voice
+            loaded_voice = resolve_voice(self.voice, self.backend, self.use_gpu)
             sample_text = get_sample_voice_text(self.lang_code)
             audio_segments = []
             for result in self.backend(
