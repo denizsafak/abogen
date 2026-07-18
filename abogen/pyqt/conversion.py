@@ -31,6 +31,7 @@ from abogen.domain.output_paths import (
 )
 from abogen.domain.audio_helpers import build_ffmpeg_command, to_float32
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
+from abogen.domain.tokens import FakeToken
 from abogen.domain.audio_buffer import (
     create_silence,
     mix_audio,
@@ -1086,14 +1087,6 @@ class ConversionThread(QThread):
                                 # Fallback for languages without token support (non-English)
                                 # Create a single token representing the entire segment duration
                                 if not tokens_list and result.graphemes:
-
-                                    class FakeToken:
-                                        def __init__(self, text, start, end):
-                                            self.text = text
-                                            self.start_ts = start
-                                            self.end_ts = end
-                                            self.whitespace = ""
-
                                     tokens_list = [
                                         FakeToken(result.graphemes, 0, chunk_dur)
                                     ]

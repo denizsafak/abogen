@@ -121,6 +121,7 @@ from abogen.domain.audio_buffer import (
     SAMPLE_RATE,
 )
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
+from abogen.domain.tokens import FakeToken
 
 
 from .service import Job, JobStatus
@@ -130,16 +131,6 @@ _export_svc = ExportService()
 
 SPLIT_PATTERN = r"\n+"  # Kept for backward compatibility; prefer get_split_pattern()
 SAMPLE_RATE = 24000
-
-
-class _FakeToken:
-    """Minimal token stub for languages without per-word token support."""
-
-    def __init__(self, text: str, start: float, end: float):
-        self.text = text
-        self.start_ts = start
-        self.end_ts = end
-        self.whitespace = ""
 
 
 class _JobCancelled(Exception):
@@ -543,7 +534,7 @@ def run_conversion_job(job: Job) -> None:
 
                         # Fallback for languages without token support: create a single token
                         if not tokens_list and graphemes:
-                            tokens_list = [_FakeToken(graphemes, 0, duration)]
+                            tokens_list = [FakeToken(graphemes, 0, duration)]
 
                         for tok in tokens_list:
                             accumulated_tokens.append({
