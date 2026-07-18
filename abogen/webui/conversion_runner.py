@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import sys
 import time
 import traceback
 import gc
@@ -14,8 +12,6 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional
 
 import numpy as np
-import soundfile as sf
-import static_ffmpeg
 
 from abogen.tts_plugin.utils import is_plugin_registered
 from abogen.infrastructure.exporters import ExportService
@@ -124,6 +120,7 @@ from abogen.domain.audio_buffer import (
     normalize_audio as _normalize_audio,
     SAMPLE_RATE,
 )
+from abogen.domain.audio_sink import AudioSink, open_audio_sink
 
 
 from .service import Job, JobStatus
@@ -147,11 +144,6 @@ class _FakeToken:
 
 class _JobCancelled(Exception):
     """Raised internally to abort a conversion when the client cancels."""
-
-
-@dataclass
-class AudioSink:
-    write: Callable[[np.ndarray], None]
 
 
 _APOSTROPHE_CONFIG = ApostropheConfig()
@@ -402,7 +394,14 @@ def run_conversion_job(job: Job) -> None:
         if merged_required:
             audio_path = _build_output_path(audio_dir, job.original_filename, job.output_format)
             meta_for_sink = job.metadata_tags if job.metadata_tags else None
-            audio_sink = _open_audio_sink(audio_path, job, sink_stack, metadata=meta_for_sink)
+            audio_sink = sink_stack.enter_context(
+                open_audio_sink(
+                    audio_path,
+                    job.output_format,
+                    metadata=meta_for_sink,
+                    cancel_check=lambda: job.cancel_requested,
+                )
+            )
             subtitle_writer = _create_subtitle_writer(job, audio_path)
             job.result.audio_path = audio_path
             if subtitle_writer:
@@ -638,11 +637,12 @@ def run_conversion_job(job: Job) -> None:
                         f"{Path(job.original_filename).stem}_{_slugify(chapter_display_title, idx)}",
                         job.separate_chapters_format,
                     )
-                    chapter_sink = _open_audio_sink(
-                        chapter_audio_path,
-                        job,
-                        chapter_sink_stack,
-                        fmt=job.separate_chapters_format,
+                    chapter_sink = chapter_sink_stack.enter_context(
+                        open_audio_sink(
+                            chapter_audio_path,
+                            job.separate_chapters_format,
+                            cancel_check=lambda: job.cancel_requested,
+                        )
                     )
 
                 speak_heading = bool(heading_text)
@@ -907,11 +907,12 @@ def run_conversion_job(job: Job) -> None:
                             f"{Path(job.original_filename).stem}_outro",
                             job.separate_chapters_format,
                         )
-                        chapter_sink = _open_audio_sink(
-                            outro_audio_path,
-                            job,
-                            outro_sink_stack,
-                            fmt=job.separate_chapters_format,
+                        chapter_sink = outro_sink_stack.enter_context(
+                            open_audio_sink(
+                                outro_audio_path,
+                                job.separate_chapters_format,
+                                cancel_check=lambda: job.cancel_requested,
+                            )
                         )
 
                     outro_segments = emit_text(
@@ -1147,50 +1148,6 @@ def _prepare_project_layout(job: Job, base_dir: Path) -> tuple[Path, Path, Path,
         base_dir=base_dir,
     )
 
-
-def _open_audio_sink(
-    path: Path,
-    job: Job,
-    stack: ExitStack,
-    *,
-    fmt: Optional[str] = None,
-    metadata: Optional[Dict[str, str]] = None,
-) -> AudioSink:
-    ffmpeg_cache_root = get_internal_cache_path("ffmpeg")
-    platform_cache = os.path.join(ffmpeg_cache_root, sys.platform)
-    os.makedirs(platform_cache, exist_ok=True)
-    try:
-        import static_ffmpeg.run as static_ffmpeg_run  # type: ignore
-
-        static_ffmpeg_run.LOCK_FILE = os.path.join(ffmpeg_cache_root, "lock.file")
-    except Exception:
-        pass
-
-    static_ffmpeg.add_paths(weak=True, download_dir=platform_cache)
-    fmt_value = (fmt or job.output_format).lower()
-
-    if fmt_value in {"wav", "flac"}:
-        soundfile = stack.enter_context(
-            sf.SoundFile(path, mode="w", samplerate=SAMPLE_RATE, channels=1, format=fmt_value.upper())
-        )
-        return AudioSink(write=lambda data: soundfile.write(data))
-
-    cmd = _build_ffmpeg_command(path, fmt_value, metadata=metadata)
-    process = create_process(cmd, stdin=subprocess.PIPE, text=False)
-
-    def _finalize() -> None:
-        if process.stdin and not process.stdin.closed:
-            process.stdin.close()
-        process.wait()
-
-    stack.callback(_finalize)
-
-    def _write(data: np.ndarray) -> None:
-        if job.cancel_requested or process.stdin is None:
-            return
-        process.stdin.write(data.tobytes())  # type: ignore[arg-type]
-
-    return AudioSink(write=_write)
 
 
 def _resolve_voice(pipeline, voice_spec: str, use_gpu: bool):

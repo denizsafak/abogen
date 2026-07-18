@@ -5,6 +5,7 @@ import hashlib  # For generating unique cache filenames
 from platformdirs import user_desktop_dir
 from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer
 from PyQt6.QtWidgets import QCheckBox, QVBoxLayout, QDialog, QLabel, QDialogButtonBox
+from contextlib import ExitStack
 import numpy as np
 import soundfile as sf
 from abogen.utils import (
@@ -29,6 +30,7 @@ from abogen.domain.output_paths import (
     sanitize_output_stem,
 )
 from abogen.domain.audio_helpers import build_ffmpeg_command, to_float32
+from abogen.domain.audio_sink import AudioSink, open_audio_sink
 from abogen.domain.audio_buffer import (
     create_silence,
     mix_audio,
@@ -361,6 +363,7 @@ class ConversionThread(QThread):
         )
         try:
             hf_tracker.set_log_callback(lambda msg: self.log_updated.emit(msg))
+            sink_stack = ExitStack()
             # Show configuration
             self.log_updated.emit("Configuration:")
 
@@ -735,57 +738,12 @@ class ConversionThread(QThread):
                 # SRT numbering fix: use a global counter
                 merged_srt_index = 1  # SRT numbering for merged file
                 # Prepare output file/ffmpeg process for merged output
-                if self.output_format in ["wav", "mp3", "flac"]:
-                    merged_out_file = sf.SoundFile(
+                merged_sink = sink_stack.enter_context(
+                    self._open_merged_sink(
                         merged_out_path,
-                        "w",
-                        samplerate=24000,
-                        channels=1,
-                        format=self.output_format,
+                        cancel_check=lambda: self.cancel_requested,
                     )
-                    ffmpeg_proc = None
-                elif self.output_format in ("m4b", "opus"):
-                    # Real-time generation using FFmpeg pipe
-                    static_ffmpeg.add_paths()
-                    merged_out_file = None
-                    ffmpeg_proc = None
-                    metadata_options, cover_path = (
-                        self._extract_and_add_metadata_tags_to_ffmpeg_cmd()
-                        if self.output_format == "m4b"
-                        else ([], None)
-                    )
-                    cmd = build_ffmpeg_command(
-                        Path(merged_out_path),
-                        self.output_format,
-                    )
-                    # Insert thread queue size after ffmpeg header
-                    cmd.insert(2, "-thread_queue_size")
-                    cmd.insert(3, "32768")
-                    if self.output_format == "m4b" and cover_path and os.path.exists(cover_path):
-                        # Insert cover image input before the output path
-                        output_path = cmd.pop()
-                        cmd.extend([
-                            "-i", cover_path,
-                            "-map", "0:a",
-                            "-map", "1",
-                            "-c:v", "copy",
-                            "-disposition:v", "attached_pic",
-                        ])
-                        cmd.extend(metadata_options)
-                        cmd.append(output_path)
-                    elif self.output_format == "m4b":
-                        output_path = cmd.pop()
-                        cmd.extend(metadata_options)
-                        cmd.append(output_path)
-                    ffmpeg_proc = create_process(cmd, stdin=subprocess.PIPE, text=False)
-                else:
-                    self.log_updated.emit(
-                        (f"Unsupported output format: {self.output_format}", "red")
-                    )
-                    self.conversion_finished.emit(
-                        ("Audio generation failed.", "red"), None
-                    )
-                    return
+                )
                 # Open merged subtitle file for incremental writing if needed
                 merged_subtitle_file = None
                 if self.subtitle_mode != "Disabled":
@@ -849,9 +807,8 @@ class ConversionThread(QThread):
                     merged_subtitle_path = None
                     merged_subtitle_file = None
             else:
-                # If not merging, set merged_out_file and related variables to None
-                merged_out_file = None
-                ffmpeg_proc = None
+                # If not merging, set merged_sink and related variables to None
+                merged_sink = None
                 merged_out_path = None
                 subtitle_entries = []
                 current_time = 0.0
@@ -868,8 +825,7 @@ class ConversionThread(QThread):
             # Instead of processing the whole text, process by chapter
             for chapter_idx, (chapter_name, voice_segments) in enumerate(chapters, 1):
                 chapter_out_path = None
-                chapter_out_file = None
-                chapter_ffmpeg_proc = None
+                chapter_sink = None
                 chapter_subtitle_file = None
                 chapter_subtitle_path = None
                 if total_chapters > 1:
@@ -904,37 +860,12 @@ class ConversionThread(QThread):
                         chapters_out_dir,
                         f"{chapter_filename}.{separate_chapters_format}",
                     )
-                    if separate_chapters_format in ["wav", "mp3", "flac"]:
-                        chapter_out_file = sf.SoundFile(
-                            chapter_out_path,
-                            "w",
-                            samplerate=24000,
-                            channels=1,
-                            format=separate_chapters_format,
-                        )
-                        chapter_ffmpeg_proc = None
-                    elif separate_chapters_format == "opus":
-                        static_ffmpeg.add_paths()
-                        cmd = [
-                            "ffmpeg",
-                            "-y",
-                            "-thread_queue_size",
-                            "32768",
-                            "-f",
-                            "f32le",
-                            "-ar",
-                            "24000",
-                            "-ac",
-                            "1",
-                            "-i",
-                            "pipe:0",
-                        ]
-                        cmd.extend(["-c:a", "libopus", "-b:a", "24000"])
-                        cmd.append(chapter_out_path)
-                        chapter_ffmpeg_proc = create_process(
-                            cmd, stdin=subprocess.PIPE, text=False
-                        )
-                        chapter_out_file = None
+                    if separate_chapters_format in ("wav", "flac", "mp3", "opus"):
+                        chapter_sink = sink_stack.enter_context(open_audio_sink(
+                            Path(chapter_out_path),
+                            separate_chapters_format,
+                            cancel_check=lambda: self.cancel_requested,
+                        ))
                     else:
                         self.log_updated.emit(
                             (
@@ -1129,10 +1060,7 @@ class ConversionThread(QThread):
                             # Print the result for debugging
                             # print(f"Result: {result}")
                             if self.cancel_requested:
-                                if chapter_out_file:
-                                    chapter_out_file.close()
-                                if merged_out_file:
-                                    merged_out_file.close()
+                                sink_stack.close()
                                 self.conversion_finished.emit("Cancelled", None)
                                 return
                             current_segment += 1
@@ -1147,14 +1075,10 @@ class ConversionThread(QThread):
                             chunk_start = current_time
                             audio_np = to_float32(result.audio)
                             # Write audio directly to merged file ONLY if merging
-                            if merge_chapters_at_end and merged_out_file:
-                                merged_out_file.write(audio_np)
-                            elif merge_chapters_at_end and ffmpeg_proc:
-                                ffmpeg_proc.stdin.write(audio_np.tobytes())
-                            if chapter_out_file:
-                                chapter_out_file.write(audio_np)
-                            elif chapter_ffmpeg_proc:
-                                chapter_ffmpeg_proc.stdin.write(audio_np.tobytes())
+                            if merge_chapters_at_end and merged_sink:
+                                merged_sink.write(audio_np)
+                            if chapter_sink:
+                                chapter_sink.write(audio_np)
                             # Subtitle logic
                             if self.subtitle_mode != "Disabled":
                                 tokens_list = getattr(result, "tokens", [])
@@ -1187,7 +1111,7 @@ class ConversionThread(QThread):
                                             "whitespace": tok.whitespace,
                                         }
                                     )
-                                    if chapter_out_file or chapter_ffmpeg_proc:
+                                    if chapter_sink:
                                         chapter_tokens_with_timestamps.append(
                                             {
                                                 "start": chapter_current_time
@@ -1234,8 +1158,8 @@ class ConversionThread(QThread):
                                                     f"{merged_srt_index}\n{_format_timestamp(start)} --> {_format_timestamp(end)}\n{text}\n\n"
                                                 )
                                                 merged_srt_index += 1
-                                # Per-chapter subtitle processing for both file and ffmpeg_proc
-                                if chapter_out_file or chapter_ffmpeg_proc:
+                                # Per-chapter subtitle processing for both file and sink
+                                if chapter_sink:
                                     new_chapter_entries = []
                                     self._process_subtitle_tokens(
                                         chapter_tokens_with_timestamps,
@@ -1270,10 +1194,10 @@ class ConversionThread(QThread):
                                                 chapter_srt_index += 1
                             if merge_chapters_at_end:
                                 current_time += chunk_dur
-                                if chapter_out_file or chapter_ffmpeg_proc:
+                                if chapter_sink:
                                     chapter_current_time += chunk_dur
                             else:
-                                if chapter_out_file or chapter_ffmpeg_proc:
+                                if chapter_sink:
                                     chapter_current_time += chunk_dur
                             # Calculate percentage based on characters processed
                             percent = min(
@@ -1296,29 +1220,22 @@ class ConversionThread(QThread):
                 # Add silence between chapters for merged output (except after the last chapter)
                 if merge_chapters_at_end and chapter_idx < total_chapters:
                     silence_audio = create_silence(self.silence_duration)
-                    silence_bytes = silence_audio.tobytes()
 
-                    if merged_out_file:
-                        merged_out_file.write(silence_audio)
-                    elif ffmpeg_proc:
-                        ffmpeg_proc.stdin.write(silence_bytes)
+                    if merged_sink:
+                        merged_sink.write(silence_audio)
+                    
 
                     # Update timing for the silence
                     current_time += self.silence_duration
-                    if chapter_out_file or chapter_ffmpeg_proc:
+                    if chapter_sink:
                         chapter_current_time += self.silence_duration
 
                 # Set chapter end time after processing
                 if merge_chapters_at_end:
                     chapter_time["end"] = current_time
                 # Finalize chapter file for ffmpeg formats
-                if chapter_out_file or chapter_ffmpeg_proc:
+                if chapter_sink:
                     self.log_updated.emit(("\nProcessing chapter audio...", "grey"))
-                if chapter_ffmpeg_proc:
-                    chapter_ffmpeg_proc.stdin.close()
-                    chapter_ffmpeg_proc.wait()
-                if chapter_out_file:
-                    chapter_out_file.close()
                 # Close chapter subtitle file if open
                 if chapter_subtitle_file:
                     chapter_subtitle_file.close()
@@ -1344,11 +1261,8 @@ class ConversionThread(QThread):
             # Finalize merged output file ONLY if merging
             if merge_chapters_at_end:
                 self.log_updated.emit(("\nFinalizing audio. Please wait...", "grey"))
-                if self.output_format in ["wav", "mp3", "flac"]:
-                    merged_out_file.close()
-                elif self.output_format == "m4b":
-                    ffmpeg_proc.stdin.close()
-                    ffmpeg_proc.wait()
+                merged_sink.close()
+                if self.output_format == "m4b":
                     # Add chapters via fast post-processing
                     if total_chapters > 1:
                         chapters_info_path = f"{base_filepath_no_ext}_chapters.txt"
@@ -1412,8 +1326,7 @@ class ConversionThread(QThread):
                         os.replace(tmp_path, orig_path)
                         os.remove(chapters_info_path)
                 elif self.output_format in ["opus"]:
-                    ffmpeg_proc.stdin.close()
-                    ffmpeg_proc.wait()
+                    merged_sink.close()
                 self.progress_updated.emit(100, "00:00:00")
                 # Close merged subtitle file if open
                 if merged_subtitle_file:
@@ -1442,23 +1355,15 @@ class ConversionThread(QThread):
                     chapters_dir,
                 )
         except Exception as e:
-            # Cleanup ffmpeg subprocesses on error
+            # Cleanup all sinks on error
             try:
-                if "ffmpeg_proc" in locals() and ffmpeg_proc:
-                    ffmpeg_proc.stdin.close()
-                    ffmpeg_proc.terminate()
-                    ffmpeg_proc.wait()
-            except Exception:
-                pass
-            try:
-                if "chapter_ffmpeg_proc" in locals() and chapter_ffmpeg_proc:
-                    chapter_ffmpeg_proc.stdin.close()
-                    chapter_ffmpeg_proc.terminate()
-                    chapter_ffmpeg_proc.wait()
+                sink_stack.close()
             except Exception:
                 pass
             self.log_updated.emit((f"Error occurred: {str(e)}", "red"))
             self.conversion_finished.emit(("Audio generation failed.", "red"), None)
+        finally:
+            sink_stack.close()
 
     def _process_subtitle_file(self, tts, base_path, is_timestamp_text=False):
         """Process subtitle files with precise timing and generate output subtitles."""
@@ -1527,39 +1432,10 @@ class ConversionThread(QThread):
             rate = 24000
 
             # Setup audio output
-            merged_out_file, ffmpeg_proc = None, None
-            if self.output_format in ["wav", "mp3", "flac"]:
-                merged_out_file = sf.SoundFile(
-                    merged_out_path,
-                    "w",
-                    samplerate=rate,
-                    channels=1,
-                    format=self.output_format,
-                )
-            else:
-                static_ffmpeg.add_paths()
-                cmd = build_ffmpeg_command(
-                    Path(merged_out_path),
-                    self.output_format,
-                )
-                cmd.insert(2, "-thread_queue_size")
-                cmd.insert(3, "32768")
-                if self.output_format == "m4b":
-                    metadata_options, cover_path = (
-                        self._extract_and_add_metadata_tags_to_ffmpeg_cmd()
-                    )
-                    if cover_path and os.path.exists(cover_path):
-                        output_path = cmd.pop()
-                        cmd.extend([
-                            "-i", cover_path,
-                            "-map", "0:a",
-                            "-map", "1",
-                            "-c:v", "copy",
-                            "-disposition:v", "attached_pic",
-                        ])
-                        cmd.append(output_path)
-                    cmd.extend(metadata_options)
-                ffmpeg_proc = create_process(cmd, stdin=subprocess.PIPE, text=False)
+            merged_sink = self._open_merged_sink(
+                merged_out_path,
+                cancel_check=lambda: self.cancel_requested,
+            ).__enter__()
 
             # Always generate subtitles for subtitle input files
             subtitle_file, subtitle_path = None, None
@@ -1851,13 +1727,9 @@ class ConversionThread(QThread):
 
             # Write the complete audio buffer
             self.log_updated.emit(("\nFinalizing audio. Please wait...", "grey"))
-            if merged_out_file:
-                merged_out_file.write(audio_buffer)
-                merged_out_file.close()
-            elif ffmpeg_proc:
-                ffmpeg_proc.stdin.write(to_float32(audio_buffer).tobytes())
-                ffmpeg_proc.stdin.close()
-                ffmpeg_proc.wait()
+            if merged_sink:
+                merged_sink.write(to_float32(audio_buffer))
+                merged_sink.close()
 
             if subtitle_file:
                 subtitle_file.close()
@@ -1870,10 +1742,8 @@ class ConversionThread(QThread):
 
         except Exception as e:
             try:
-                if "ffmpeg_proc" in locals() and ffmpeg_proc:
-                    ffmpeg_proc.stdin.close()
-                    ffmpeg_proc.terminate()
-                    ffmpeg_proc.wait()
+                if "merged_sink" in locals() and merged_sink:
+                    merged_sink.close()
                 if "subtitle_file" in locals() and subtitle_file:
                     subtitle_file.close()
             except:
@@ -1892,6 +1762,52 @@ class ConversionThread(QThread):
         """Set whether to treat timestamp text file as subtitle."""
         self._timestamp_response = treat_as_subtitle
         self._timestamp_response_event.set()
+
+    @contextmanager
+    def _open_merged_sink(self, path, cancel_check=None):
+        """Open audio sink for the merged output, handling m4b cover art."""
+        if self.output_format in ("wav", "flac", "mp3", "opus"):
+            with open_audio_sink(
+                Path(path),
+                self.output_format,
+                cancel_check=cancel_check,
+            ) as sink:
+                yield sink
+        elif self.output_format == "m4b":
+            static_ffmpeg.add_paths()
+            metadata_options, cover_path = (
+                self._extract_and_add_metadata_tags_to_ffmpeg_cmd()
+            )
+            cmd = build_ffmpeg_command(
+                Path(path),
+                self.output_format,
+            )
+            cmd.insert(2, "-thread_queue_size")
+            cmd.insert(3, "32768")
+            if cover_path and os.path.exists(cover_path):
+                output_path = cmd.pop()
+                cmd.extend([
+                    "-i", cover_path,
+                    "-map", "0:a",
+                    "-map", "1",
+                    "-c:v", "copy",
+                    "-disposition:v", "attached_pic",
+                ])
+                cmd.extend(metadata_options)
+                cmd.append(output_path)
+            else:
+                output_path = cmd.pop()
+                cmd.extend(metadata_options)
+                cmd.append(output_path)
+            with open_audio_sink(
+                Path(path),
+                self.output_format,
+                ffmpeg_cmd=cmd,
+                cancel_check=cancel_check,
+            ) as sink:
+                yield sink
+        else:
+            raise ValueError(f"Unsupported output format: {self.output_format}")
 
     def _extract_and_add_metadata_tags_to_ffmpeg_cmd(self):
         """Extract metadata tags from text content and add them to ffmpeg command"""
@@ -1960,21 +1876,6 @@ class ConversionThread(QThread):
                 self.process.terminate()
             except Exception:
                 pass
-        # Terminate ffmpeg subprocesses if running
-        try:
-            if hasattr(self, "ffmpeg_proc") and self.ffmpeg_proc:
-                self.ffmpeg_proc.stdin.close()
-                self.ffmpeg_proc.terminate()
-                self.ffmpeg_proc.wait()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "chapter_ffmpeg_proc") and self.chapter_ffmpeg_proc:
-                self.chapter_ffmpeg_proc.stdin.close()
-                self.chapter_ffmpeg_proc.terminate()
-                self.chapter_ffmpeg_proc.wait()
-        except Exception:
-            pass
 
 
 class VoicePreviewThread(QThread):
