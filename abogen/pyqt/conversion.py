@@ -329,11 +329,7 @@ class ConversionThread(QThread):
         # Stream each segment individually
         for i, segment in enumerate(segments):
             try:
-                # Handle both NumPy arrays and PyTorch tensors
-                if hasattr(segment, "astype"):
-                    segment_bytes = segment.astype("float32").tobytes()
-                else:
-                    segment_bytes = segment.cpu().numpy().astype("float32").tobytes()
+                segment_bytes = to_float32(segment).tobytes()
                 is_last = i == len(segments) - 1
 
                 # Update progress periodically - skip if there's only one segment
@@ -1149,27 +1145,16 @@ class ConversionThread(QThread):
 
                             chunk_dur = len(result.audio) / rate
                             chunk_start = current_time
+                            audio_np = to_float32(result.audio)
                             # Write audio directly to merged file ONLY if merging
                             if merge_chapters_at_end and merged_out_file:
-                                merged_out_file.write(result.audio)
+                                merged_out_file.write(audio_np)
                             elif merge_chapters_at_end and ffmpeg_proc:
-                                if hasattr(result.audio, "numpy"):
-                                    audio_bytes = (
-                                        result.audio.numpy().astype("float32").tobytes()
-                                    )
-                                else:
-                                    audio_bytes = result.audio.astype("float32").tobytes()
-                                ffmpeg_proc.stdin.write(audio_bytes)
+                                ffmpeg_proc.stdin.write(audio_np.tobytes())
                             if chapter_out_file:
-                                chapter_out_file.write(result.audio)
+                                chapter_out_file.write(audio_np)
                             elif chapter_ffmpeg_proc:
-                                if hasattr(result.audio, "numpy"):
-                                    audio_bytes = (
-                                        result.audio.numpy().astype("float32").tobytes()
-                                    )
-                                else:
-                                    audio_bytes = result.audio.astype("float32").tobytes()
-                                chapter_ffmpeg_proc.stdin.write(audio_bytes)
+                                chapter_ffmpeg_proc.stdin.write(audio_np.tobytes())
                             # Subtitle logic
                             if self.subtitle_mode != "Disabled":
                                 tokens_list = getattr(result, "tokens", [])
@@ -1700,7 +1685,7 @@ class ConversionThread(QThread):
                 # Concatenate audio and determine duration
                 full_audio = (
                     np.concatenate(
-                        [a.numpy() if hasattr(a, "numpy") else a for a in audio_chunks]
+                        [to_float32(a) for a in audio_chunks]
                     )
                     if audio_chunks
                     else np.zeros(
@@ -1797,10 +1782,7 @@ class ConversionThread(QThread):
 
                         full_audio = (
                             np.concatenate(
-                                [
-                                    a.numpy() if hasattr(a, "numpy") else a
-                                    for a in audio_chunks
-                                ]
+                                [to_float32(a) for a in audio_chunks]
                             )
                             if audio_chunks
                             else np.zeros(
@@ -1873,7 +1855,7 @@ class ConversionThread(QThread):
                 merged_out_file.write(audio_buffer)
                 merged_out_file.close()
             elif ffmpeg_proc:
-                ffmpeg_proc.stdin.write(audio_buffer.astype("float32").tobytes())
+                ffmpeg_proc.stdin.write(to_float32(audio_buffer).tobytes())
                 ffmpeg_proc.stdin.close()
                 ffmpeg_proc.wait()
 
