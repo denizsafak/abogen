@@ -23,11 +23,16 @@ from abogen.constants import (
 )
 from abogen.infrastructure.subtitle_writer import create_subtitle_writer
 from abogen.domain.split_pattern import get_split_pattern
+from abogen.domain.subtitle_processor import (
+    parse_subtitle_file,
+    process_subtitle_entries,
+)
 from abogen.domain.output_paths import (
     resolve_output_directory,
     build_output_path,
     sanitize_output_stem,
     sanitize_filename_for_chapter,
+    resolve_unique_path,
 )
 from abogen.domain.audio_helpers import build_ffmpeg_command, to_float32
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
@@ -79,11 +84,7 @@ _USER_RESPONSE_TIMEOUT = (
 
 from abogen.subtitle_utils import (
     clean_text,
-    parse_srt_file,
-    parse_vtt_file,
     detect_timestamps_in_text,
-    parse_timestamp_text_file,
-    parse_ass_file,
     get_sample_voice_text,
     sanitize_name_for_os,
     split_text_by_voice_markers
@@ -1178,16 +1179,7 @@ class ConversionThread(QThread):
         """Process subtitle files with precise timing and generate output subtitles."""
         try:
             # Parse subtitle file
-            if is_timestamp_text:
-                subtitles = parse_timestamp_text_file(self.file_name)
-            else:
-                file_ext = os.path.splitext(self.file_name)[1].lower()
-                if file_ext == ".srt":
-                    subtitles = parse_srt_file(self.file_name)
-                elif file_ext == ".vtt":
-                    subtitles = parse_vtt_file(self.file_name)
-                else:
-                    subtitles = parse_ass_file(self.file_name)
+            subtitles = parse_subtitle_file(self.file_name, is_timestamp_text)
 
             if not subtitles:
                 self.log_updated.emit(("No valid subtitle entries found.", "red"))
@@ -1202,7 +1194,6 @@ class ConversionThread(QThread):
 
             # Setup output paths
             base_name = os.path.splitext(os.path.basename(base_path))[0]
-            sanitized_base_name = sanitize_name_for_os(base_name, is_folder=True)
             parent_dir = (
                 user_desktop_dir()
                 if self.save_option == "Save to Desktop"
@@ -1219,24 +1210,11 @@ class ConversionThread(QThread):
                 )
                 return
 
-            # Find unique filename
-            counter = 1
             allowed_exts = set(SUPPORTED_SOUND_FORMATS + SUPPORTED_SUBTITLE_FORMATS)
-            while True:
-                suffix = f"_{counter}" if counter > 1 else ""
-                # Use generator expression to avoid processing all files upfront
-                file_parts = (os.path.splitext(f) for f in os.listdir(parent_dir))
-                if not any(
-                    name == f"{sanitized_base_name}{suffix}"
-                    and ext[1:].lower() in allowed_exts
-                    for name, ext in file_parts
-                ):
-                    break
-                counter += 1
-
-            base_filepath_no_ext = os.path.join(
-                parent_dir, f"{sanitized_base_name}{suffix}"
+            sanitized_base_path = resolve_unique_path(
+                parent_dir, base_name, self.output_format, allowed_exts
             )
+            base_filepath_no_ext = sanitized_base_path
             merged_out_path = f"{base_filepath_no_ext}.{self.output_format}"
             rate = 24000
 
@@ -1265,241 +1243,36 @@ class ConversionThread(QThread):
             # Load voice
             loaded_voice = resolve_voice(self.voice, tts, self.use_gpu)
 
-            # Calculate initial audio buffer size from timed subtitles only
-            max_end_time = max(
-                (end for _, end, _ in subtitles if end is not None), default=0
+            # Process all subtitles via domain
+            audio_buffer = process_subtitle_entries(
+                subtitles,
+                backend=self.backend,
+                voice=loaded_voice,
+                speed=self.speed,
+                cancel_check=lambda: self.cancel_requested,
+                log_callback=lambda msg: self.log_updated.emit((msg, "grey")),
+                progress_callback=self.progress_updated.emit,
+                replace_newlines=getattr(self, "replace_single_newlines", True),
+                use_gaps=getattr(self, "use_silent_gaps", False),
+                is_timestamp_text=is_timestamp_text,
+                subtitle_speed_method=getattr(self, "subtitle_speed_method", "tts"),
             )
-            buffer_samples = int(max_end_time * rate) + rate
-            audio_buffer = np.zeros(buffer_samples, dtype="float32")
 
-            # Process each subtitle and mix into buffer
-            self.etr_start_time = time.time()
-
-            for idx, (start_time, end_time, text) in enumerate(subtitles, 1):
-                if self.cancel_requested:
-                    if subtitle_writer:
-                        subtitle_writer.close()
-                    self.conversion_finished.emit("Cancelled", None)
-                    return
-
-                # Process text and timing
-                replace_nl = getattr(self, "replace_single_newlines", True)
-                processed_text = text.replace("\n", " ") if replace_nl else text
-                use_gaps = getattr(self, "use_silent_gaps", False)
-                next_start = (
-                    subtitles[idx][0]
-                    if (use_gaps and idx < len(subtitles))
-                    else float("inf")
-                )
-                subtitle_duration = None if end_time is None else end_time - start_time
-
-                h1, m1, s1 = (
-                    int(start_time // 3600),
-                    int(start_time % 3600 // 60),
-                    int(start_time % 60),
-                )
-                ms1 = int((start_time - int(start_time)) * 1000)
-                is_last = (
-                    is_timestamp_text
-                    or (use_gaps and idx == len(subtitles))
-                    or end_time is None
-                )
-                if is_last:
-                    time_str = (
-                        f"{h1:02d}:{m1:02d}:{s1:02d}"
-                        + (f",{ms1:03d}" if ms1 > 0 else "")
-                        + " - AUTO"
-                    )
-                else:
-                    h2, m2, s2 = (
-                        int(end_time // 3600),
-                        int(end_time % 3600 // 60),
-                        int(end_time % 60),
-                    )
-                    ms2 = int((end_time - int(end_time)) * 1000)
-                    time_str = (
-                        f"{h1:02d}:{m1:02d}:{s1:02d}"
-                        + (f",{ms1:03d}" if ms1 > 0 else "")
-                        + " - "
-                        + f"{h2:02d}:{m2:02d}:{s2:02d}"
-                        + (f",{ms2:03d}" if ms2 > 0 else "")
-                    )
-                self.log_updated.emit(
-                    f"\n[{idx}/{len(subtitles)}] {time_str}: {processed_text}"
-                )
-
-                # Generate TTS audio
-                tts_results = [
-                    r
-                    for r in self.backend(
-                        processed_text,
-                        voice=loaded_voice,
-                        speed=self.speed,
-                        split_pattern=None,
-                    )
-                    if not self.cancel_requested
-                ]
-                audio_chunks = [r.audio for r in tts_results]
-
-                if self.cancel_requested:
-                    if subtitle_writer:
-                        subtitle_writer.close()
-                    self.conversion_finished.emit("Cancelled", None)
-                    return
-
-                # Concatenate audio and determine duration
-                full_audio = (
-                    np.concatenate(
-                        [to_float32(a) for a in audio_chunks]
-                    )
-                    if audio_chunks
-                    else np.zeros(
-                        int((subtitle_duration or 0) * rate), dtype="float32"
-                    )
-                )
-                audio_duration = len(full_audio) / rate
-
-                # Use actual audio length for timing
-                if is_timestamp_text:
-                    end_time = start_time + audio_duration
-                    subtitle_duration = audio_duration
-                elif use_gaps:
-                    end_time = min(start_time + audio_duration, next_start)
-                    subtitle_duration = end_time - start_time
-                elif subtitle_duration is None:
-                    subtitle_duration = audio_duration
-                    end_time = start_time + audio_duration
-
-                # Speed up if needed
-                speedup_threshold = (
-                    next_start - start_time if use_gaps else subtitle_duration
-                )
-                if audio_duration > speedup_threshold:
-                    speed_factor = audio_duration / speedup_threshold
-
-                    if getattr(self, "subtitle_speed_method", "tts") == "ffmpeg":
-                        # FFmpeg time-stretch (faster processing)
-                        self.log_updated.emit(
-                            (f"  -> FFmpeg time-stretch: {speed_factor:.2f}x", "grey")
-                        )
-
-                        static_ffmpeg.add_paths()
-                        num_stages = max(
-                            1,
-                            int(
-                                np.ceil(
-                                    np.log(speed_factor) / np.log(2.0)
-                                )
-                            ),
-                        )
-                        tempo = speed_factor ** (1.0 / num_stages)
-                        filter_str = ",".join([f"atempo={tempo:.6f}"] * num_stages)
-
-                        speed_proc = subprocess.Popen(
-                            [
-                                "ffmpeg",
-                                "-y",
-                                "-f",
-                                "f32le",
-                                "-ar",
-                                str(rate),
-                                "-ac",
-                                "1",
-                                "-i",
-                                "pipe:0",
-                                "-filter:a",
-                                filter_str,
-                                "-f",
-                                "f32le",
-                                "-ar",
-                                str(rate),
-                                "-ac",
-                                "1",
-                                "pipe:1",
-                            ],
-                            stdin=subprocess.PIPE,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                        )
-                        full_audio = np.frombuffer(
-                            speed_proc.communicate(input=full_audio.tobytes())[0],
-                            dtype="float32",
-                        )
-                        audio_duration = len(full_audio) / rate
-                    else:
-                        # TTS regeneration (better quality)
-                        new_speed = self.speed * speed_factor
-                        self.log_updated.emit(
-                            (f"  -> Regenerating at {new_speed:.2f}x speed", "grey")
-                        )
-
-                        tts_results = [
-                            r
-                            for r in self.backend(
-                                processed_text,
-                                voice=loaded_voice,
-                                speed=new_speed,
-                                split_pattern=None,
-                            )
-                            if not self.cancel_requested
-                        ]
-                        audio_chunks = [r.audio for r in tts_results]
-
-                        full_audio = (
-                            np.concatenate(
-                                [to_float32(a) for a in audio_chunks]
-                            )
-                            if audio_chunks
-                            else np.zeros(
-                                int(subtitle_duration * rate), dtype="float32"
-                            )
-                        )
-                        audio_duration = len(full_audio) / rate
-
-                # Adjust duration after potential speed changes
-                if use_gaps:
-                    end_time = min(start_time + audio_duration, next_start)
-                    subtitle_duration = end_time - start_time
-                elif subtitle_duration is None:
-                    subtitle_duration = audio_duration
-                    end_time = start_time + audio_duration
-
-                # Pad or trim to subtitle duration
-                target_samples = int(subtitle_duration * rate)
-                if len(full_audio) < target_samples:
-                    padding_duration = (target_samples - len(full_audio)) / rate
-                    full_audio = np.concatenate([full_audio, create_silence(padding_duration)])
-                elif len(full_audio) > target_samples:
-                    full_audio = full_audio[:target_samples]
-
-                # Mix audio into buffer at the correct position (handles overlaps)
-                start_sample = int(start_time * rate)
-                audio_buffer = mix_audio(audio_buffer, full_audio, start_sample)
-
-                # Write subtitle
+            if self.cancel_requested:
                 if subtitle_writer:
-                    display_text = (
-                        processed_text
-                        if "ass" in subtitle_format or replace_nl
-                        else processed_text.replace("\n", "\\N")
-                    )
-                    subtitle_writer.write_entry(start_time, end_time, display_text)
+                    subtitle_writer.close()
+                self.conversion_finished.emit("Cancelled", None)
+                return
 
-                # Update progress
-                percent = min(int(idx / len(subtitles) * 100), 99)
-                etr_str = calc_etr_str(
-                    time.time() - self.etr_start_time,
-                    idx,
-                    len(subtitles),
+            # Write subtitle entries (post-loop)
+            for start_time, end_time, text in subtitles:
+                processed_text = text.replace("\n", " ") if getattr(self, "replace_single_newlines", True) else text
+                display_text = (
+                    processed_text
+                    if "ass" in subtitle_format
+                    else processed_text.replace("\n", "\\N")
                 )
-                self.progress_updated.emit(percent, etr_str)
-
-            # Normalize audio buffer to prevent clipping from mixed overlaps
-            if np.abs(audio_buffer).max() > 1.0:
-                self.log_updated.emit(
-                    f"\n  -> Normalizing audio (peak: {np.abs(audio_buffer).max():.2f})"
-                )
-                audio_buffer = normalize_audio(audio_buffer)
+                subtitle_writer.write_entry(start_time, end_time, display_text)
 
             # Write the complete audio buffer
             self.log_updated.emit(("\nFinalizing audio. Please wait...", "grey"))

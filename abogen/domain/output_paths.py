@@ -6,12 +6,14 @@ and computing project folder layouts.
 
 from __future__ import annotations
 
+import os
 import platform
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple
 
+from abogen.subtitle_utils import sanitize_name_for_os
 from abogen.text_extractor import ExtractedChapter
 
 
@@ -139,3 +141,40 @@ def resolve_project_layout(
         return project_root, audio_dir, subtitle_dir, metadata_dir
 
     return project_root, project_root, project_root, None
+
+
+def resolve_unique_path(
+    parent_dir: str,
+    base_name: str,
+    extension: str,
+    allowed_extensions: Optional[set] = None,
+) -> str:
+    """Find a unique file path by appending _2, _3, etc. on collision.
+
+    Args:
+        parent_dir: Directory to check for collisions.
+        base_name: Base filename (without extension).
+        extension: File extension (without dot).
+        allowed_extensions: Set of extensions to check against.
+            If None, checks any existing file/dir with same name.
+
+    Returns:
+        Full path without extension (e.g. "/path/to/name_2").
+    """
+    sanitized = sanitize_name_for_os(base_name, is_folder=True)
+    counter = 1
+    while True:
+        suffix = f"_{counter}" if counter > 1 else ""
+        candidate = os.path.join(parent_dir, f"{sanitized}{suffix}")
+        if allowed_extensions is not None:
+            file_parts = (os.path.splitext(f) for f in os.listdir(parent_dir))
+            clash = any(
+                name == f"{sanitized}{suffix}"
+                and ext[1:].lower() in allowed_extensions
+                for name, ext in file_parts
+            )
+        else:
+            clash = os.path.exists(candidate)
+        if not clash:
+            return candidate
+        counter += 1

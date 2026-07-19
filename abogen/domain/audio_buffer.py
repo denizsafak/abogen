@@ -170,3 +170,70 @@ def samples_for_duration(duration_seconds: float, sample_rate: int = SAMPLE_RATE
     if duration_seconds <= 0:
         return 0
     return int(round(duration_seconds * sample_rate))
+
+
+def fit_audio_to_duration(
+    audio: np.ndarray,
+    target_duration: float,
+    sample_rate: int = SAMPLE_RATE,
+) -> np.ndarray:
+    """Pad or trim audio to match target duration.
+
+    Args:
+        audio: Input audio buffer.
+        target_duration: Desired duration in seconds.
+        sample_rate: Sample rate in Hz.
+
+    Returns:
+        Audio buffer of exact length target_duration * sample_rate.
+    """
+    target_samples = int(target_duration * sample_rate)
+    if len(audio) < target_samples:
+        padding = np.zeros(target_samples - len(audio), dtype="float32")
+        return np.concatenate([audio, padding])
+    return audio[:target_samples]
+
+
+def ffmpeg_time_stretch(
+    audio: np.ndarray,
+    speed_factor: float,
+    sample_rate: int = SAMPLE_RATE,
+) -> np.ndarray:
+    """Time-stretch audio using FFmpeg's atempo filter.
+
+    Args:
+        audio: Input audio buffer (float32).
+        speed_factor: Speed multiplier (>1.0 = faster).
+        sample_rate: Sample rate in Hz.
+
+    Returns:
+        Time-stretched audio buffer.
+    """
+    import math
+    import subprocess
+
+    import static_ffmpeg
+
+    if speed_factor <= 1.0 or audio.size == 0:
+        return audio
+
+    static_ffmpeg.add_paths()
+    num_stages = max(1, int(math.ceil(math.log(speed_factor) / math.log(2.0))))
+    tempo = speed_factor ** (1.0 / num_stages)
+    filter_str = ",".join([f"atempo={tempo:.6f}"] * num_stages)
+
+    proc = subprocess.Popen(
+        [
+            "ffmpeg", "-y",
+            "-f", "f32le", "-ar", str(sample_rate), "-ac", "1",
+            "-i", "pipe:0",
+            "-filter:a", filter_str,
+            "-f", "f32le", "-ar", str(sample_rate), "-ac", "1",
+            "pipe:1",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    out, _ = proc.communicate(input=audio.tobytes())
+    return np.frombuffer(out, dtype="float32")
