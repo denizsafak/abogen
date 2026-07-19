@@ -29,6 +29,12 @@ from abogen.utils import (
     get_resource_path,
 )
 from abogen.book_parser import get_book_parser
+from abogen.domain.metadata_extraction import (
+    extract_book_metadata_epub,
+    extract_book_metadata_pdf,
+    extract_book_metadata_markdown,
+    format_metadata_tags,
+)
 
 from abogen.subtitle_utils import (
     clean_text,
@@ -948,169 +954,14 @@ class HandlerDialog(QDialog):
         self.previewEdit.setHtml(html_content)
 
     def _extract_book_metadata(self):
-        metadata = {
-            "title": None,
-            "authors": [],
-            "description": None,
-            "cover_image": None,
-            "publisher": None,
-            "publication_year": None,
-        }
-
         if self.parser.file_type == "epub":
-            try:
-                title_items = self.book.get_metadata("DC", "title")
-                if title_items and len(title_items) > 0:
-                    metadata["title"] = title_items[0][0]
-            except Exception as e:
-                logging.warning(f"Error extracting title metadata: {e}")
-
-            try:
-                author_items = self.book.get_metadata("DC", "creator")
-                if author_items:
-                    metadata["authors"] = [
-                        author[0] for author in author_items if len(author) > 0
-                    ]
-            except Exception as e:
-                logging.warning(f"Error extracting author metadata: {e}")
-
-            try:
-                desc_items = self.book.get_metadata("DC", "description")
-                if desc_items and len(desc_items) > 0:
-                    metadata["description"] = desc_items[0][0]
-            except Exception as e:
-                logging.warning(f"Error extracting description metadata: {e}")
-
-            try:
-                publisher_items = self.book.get_metadata("DC", "publisher")
-                if publisher_items and len(publisher_items) > 0:
-                    metadata["publisher"] = publisher_items[0][0]
-            except Exception as e:
-                logging.warning(f"Error extracting publisher metadata: {e}")
-
-            # Try to extract publication year
-            try:
-                date_items = self.book.get_metadata("DC", "date")
-                if date_items and len(date_items) > 0:
-                    date_str = date_items[0][0]
-                    # Try to extract just the year from the date string
-                    year_match = re.search(r"\b(19|20)\d{2}\b", date_str)
-                    if year_match:
-                        metadata["publication_year"] = year_match.group(0)
-                    else:
-                        metadata["publication_year"] = date_str
-            except Exception as e:
-                logging.warning(f"Error extracting publication date metadata: {e}")
-
-            for item in self.book.get_items_of_type(ebooklib.ITEM_COVER):
-                metadata["cover_image"] = item.get_content()
-                break
-
-            if not metadata["cover_image"]:
-                for item in self.book.get_items_of_type(ebooklib.ITEM_IMAGE):
-                    if "cover" in item.get_name().lower():
-                        metadata["cover_image"] = item.get_content()
-                        break
+            return extract_book_metadata_epub(self.book)
         elif self.parser.file_type == "markdown":
-            # Extract metadata from markdown frontmatter or first heading
-            if self.markdown_text:
-                # Try to extract YAML frontmatter
-                frontmatter_match = re.match(
-                    r"^---\s*\n(.*?)\n---\s*\n", self.markdown_text, re.DOTALL
-                )
-                if frontmatter_match:
-                    try:
-                        frontmatter = frontmatter_match.group(1)
-                        # Simple YAML-like parsing for common fields
-                        title_match = re.search(
-                            r"^title:\s*(.+)$",
-                            frontmatter,
-                            re.MULTILINE | re.IGNORECASE,
-                        )
-                        if title_match:
-                            metadata["title"] = (
-                                title_match.group(1).strip().strip("\"'")
-                            )
-
-                        author_match = re.search(
-                            r"^author:\s*(.+)$",
-                            frontmatter,
-                            re.MULTILINE | re.IGNORECASE,
-                        )
-                        if author_match:
-                            metadata["authors"] = [
-                                author_match.group(1).strip().strip("\"'")
-                            ]
-
-                        desc_match = re.search(
-                            r"^description:\s*(.+)$",
-                            frontmatter,
-                            re.MULTILINE | re.IGNORECASE,
-                        )
-                        if desc_match:
-                            metadata["description"] = (
-                                desc_match.group(1).strip().strip("\"'")
-                            )
-
-                        date_match = re.search(
-                            r"^date:\s*(.+)$", frontmatter, re.MULTILINE | re.IGNORECASE
-                        )
-                        if date_match:
-                            date_str = date_match.group(1).strip().strip("\"'")
-                            year_match = re.search(r"\b(19|20)\d{2}\b", date_str)
-                            if year_match:
-                                metadata["publication_year"] = year_match.group(0)
-                    except Exception as e:
-                        logging.warning(f"Error parsing markdown frontmatter: {e}")
-
-                # Fallback: use first H1 header as title if no frontmatter title
-                if not metadata["title"] and self.markdown_toc:
-                    # Find the first level 1 header
-                    first_h1 = next(
-                        (h for h in self.markdown_toc if h["level"] == 1), None
-                    )
-                    if first_h1:
-                        metadata["title"] = first_h1["name"]
+            return extract_book_metadata_markdown(
+                self.markdown_text, self.markdown_toc
+            )
         else:
-            pdf_info = self.pdf_doc.metadata
-            if pdf_info:
-                metadata["title"] = pdf_info.get("title", None)
-
-                author = pdf_info.get("author", None)
-                if author:
-                    metadata["authors"] = [author]
-
-                metadata["description"] = pdf_info.get("subject", None)
-
-                keywords = pdf_info.get("keywords", None)
-                if keywords:
-                    if metadata["description"]:
-                        metadata["description"] += f"\n\nKeywords: {keywords}"
-                    else:
-                        metadata["description"] = f"Keywords: {keywords}"
-
-                metadata["publisher"] = pdf_info.get("creator", None)
-
-                # Try to extract publication date from PDF metadata
-                if "creationDate" in pdf_info:
-                    date_str = pdf_info["creationDate"]
-                    year_match = re.search(r"D:(\d{4})", date_str)
-                    if year_match:
-                        metadata["publication_year"] = year_match.group(1)
-                elif "modDate" in pdf_info:
-                    date_str = pdf_info["modDate"]
-                    year_match = re.search(r"D:(\d{4})", date_str)
-                    if year_match:
-                        metadata["publication_year"] = year_match.group(1)
-
-            if len(self.pdf_doc) > 0:
-                try:
-                    pix = self.pdf_doc[0].get_pixmap(matrix=fitz.Matrix(2, 2))
-                    metadata["cover_image"] = pix.tobytes("png")
-                except Exception:
-                    pass
-
-        return metadata
+            return extract_book_metadata_pdf(self.pdf_doc)
 
     def get_selected_text(self):
         # If a background loader thread is running, wait for it to finish to
@@ -1136,58 +987,20 @@ class HandlerDialog(QDialog):
 
     def _format_metadata_tags(self):
         """Format metadata tags for insertion at the beginning of the text"""
-        import datetime
         from abogen.utils import get_user_cache_path
 
-        metadata = self.book_metadata
         filename = os.path.splitext(os.path.basename(self.book_path))[0]
-        current_year = str(datetime.datetime.now().year)
+        chapter_count = len(self.checked_chapters)
+        cache_dir = get_user_cache_path()
 
-        # Get values with fallbacks
-        title = metadata.get("title") or filename
-        authors = metadata.get("authors") or ["Unknown"]
-        authors_text = ", ".join(authors)
-        album_artist = authors_text or "Unknown"
-        year = (
-            metadata.get("publication_year") or current_year
-        )  # Use publication year if available
-
-        # Count chapters/pages
-        total_chapters = len(self.checked_chapters)
-        chapter_text = (
-            f"{total_chapters} {'Chapters' if self.parser.file_type == 'epub' else 'Pages'}"
+        return format_metadata_tags(
+            self.book_metadata,
+            filename,
+            chapter_count,
+            self.parser.file_type,
+            cover_bytes=self.book_metadata.get("cover_image"),
+            cache_dir=cache_dir,
         )
-
-        # Handle cover image
-        cover_tag = ""
-        if metadata.get("cover_image"):
-            try:
-                import uuid
-
-                cache_dir = get_user_cache_path()
-                cover_path = os.path.join(cache_dir, f"cover_{uuid.uuid4()}.jpg")
-                cover_path = os.path.normpath(cover_path)
-                with open(cover_path, "wb") as f:
-                    f.write(metadata["cover_image"])
-                cover_tag = f"<<METADATA_COVER_PATH:{cover_path}>>"
-            except Exception as e:
-                logging.warning(f"Failed to save cover image: {e}")
-
-        # Format metadata tags
-        metadata_tags = [
-            f"<<METADATA_TITLE:{title}>>",
-            f"<<METADATA_ARTIST:{authors_text}>>",
-            f"<<METADATA_ALBUM:{title} ({chapter_text})>>",
-            f"<<METADATA_YEAR:{year}>>",
-            f"<<METADATA_ALBUM_ARTIST:{album_artist}>>",
-            f"<<METADATA_COMPOSER:Narrator>>",
-            f"<<METADATA_GENRE:Audiobook>>",
-        ]
-
-        if cover_tag:
-            metadata_tags.append(cover_tag)
-
-        return "\n".join(metadata_tags)
 
     def _get_markdown_selected_text(self):
         """Get selected text from markdown chapters"""
