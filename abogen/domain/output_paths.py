@@ -6,6 +6,7 @@ and computing project folder layouts.
 
 from __future__ import annotations
 
+import platform
 import re
 from datetime import datetime
 from pathlib import Path
@@ -16,12 +17,61 @@ from abogen.text_extractor import ExtractedChapter
 
 _OUTPUT_SANITIZE_RE = re.compile(r"[^\w\-_.]+")
 
+# OS-specific illegal characters for filenames
+_WINDOWS_ILLEGAL_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_UNIX_CONTROL_CHARS_RE = re.compile(r'[\x00-\x1f]')
+_RESERVED_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{i}" for i in range(1, 10)}
+    | {f"LPT{i}" for i in range(1, 10)}
+)
+
 
 def slugify(title: str, index: int) -> str:
     sanitized = re.sub(r"[^\w\-]+", "_", title.lower()).strip("_")
     if not sanitized:
         sanitized = f"chapter_{index:02d}"
     return sanitized[:80]
+
+
+def sanitize_filename_for_chapter(title: str, index: int, max_len: int = 80) -> str:
+    """Sanitize a chapter name for use as a filename component.
+
+    Combines character sanitization, OS safety, and smart truncation
+    at word boundaries. Prepends zero-padded index prefix.
+
+    Args:
+        title: Raw chapter title.
+        index: 1-based chapter number for prefix.
+        max_len: Maximum length of the sanitized portion (excluding prefix).
+
+    Returns:
+        Sanitized string like "01_the_beginning".
+    """
+    # Remove non-word/non-space/non-hyphen chars, then collapse spaces/hyphens
+    sanitized = re.sub(r"[^\w\s\-]", "", title)
+    sanitized = re.sub(r"[\s\-]+", "_", sanitized).strip("_")
+
+    if not sanitized:
+        sanitized = f"chapter_{index:02d}"
+
+    # OS-specific sanitization
+    system = platform.system()
+    if system == "Windows":
+        sanitized = _WINDOWS_ILLEGAL_CHARS_RE.sub("_", sanitized)
+        sanitized = sanitized.rstrip(". ")
+        base = sanitized.split(".")[0].upper()
+        if base in _RESERVED_NAMES:
+            sanitized = f"_{sanitized}"
+    # Linux: only NUL is truly illegal, but control chars are problematic
+    sanitized = _UNIX_CONTROL_CHARS_RE.sub("_", sanitized)
+
+    # Smart truncation at word boundary
+    if len(sanitized) > max_len:
+        pos = sanitized[:max_len].rfind("_")
+        sanitized = sanitized[: pos if pos > 0 else max_len].rstrip("_")
+
+    return f"{index:02d}_{sanitized}"
 
 
 def sanitize_output_stem(name: str) -> str:

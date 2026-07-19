@@ -5,7 +5,7 @@ import hashlib  # For generating unique cache filenames
 from platformdirs import user_desktop_dir
 from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer
 from PyQt6.QtWidgets import QCheckBox, QVBoxLayout, QDialog, QLabel, QDialogButtonBox
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 import numpy as np
 import soundfile as sf
 from abogen.utils import (
@@ -21,12 +21,13 @@ from abogen.constants import (
     SUPPORTED_SOUND_FORMATS,
     SUPPORTED_SUBTITLE_FORMATS,
 )
-from abogen.infrastructure.subtitle_writer import _format_timestamp
+from abogen.infrastructure.subtitle_writer import create_subtitle_writer
 from abogen.domain.split_pattern import get_split_pattern
 from abogen.domain.output_paths import (
     resolve_output_directory,
     build_output_path,
     sanitize_output_stem,
+    sanitize_filename_for_chapter,
 )
 from abogen.domain.audio_helpers import build_ffmpeg_command, to_float32
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
@@ -48,12 +49,28 @@ from abogen.domain.pronunciation import (
 )
 from abogen.domain.metadata_extraction import (
     extract_metadata_and_build_args,
+    extract_metadata_from_text,
     read_text_for_metadata,
 )
+from abogen.domain.text_chapters import parse_chapters_from_text
+from abogen.infrastructure.exporters import ExportService
 import abogen.hf_tracker as hf_tracker
 import static_ffmpeg
 import threading  # for efficient waiting
 import subprocess
+
+
+def _subtitle_alignment_from_format(subtitle_format: str) -> str:
+    """Map PyQt subtitle format string to SubtitleAlignment value."""
+    if subtitle_format in ("ass_centered_wide", "ass_centered_narrow"):
+        if subtitle_format == "ass_centered_narrow":
+            return "center_narrow"
+        return "center"
+    if subtitle_format in ("ass_narrow",):
+        return "narrow"
+    return "left"
+
+
 
 # Configuration constants
 _USER_RESPONSE_TIMEOUT = (
@@ -69,7 +86,6 @@ from abogen.subtitle_utils import (
     parse_ass_file,
     get_sample_voice_text,
     sanitize_name_for_os,
-    _CHAPTER_MARKER_SEARCH_PATTERN,
     split_text_by_voice_markers
 )
 
@@ -552,28 +568,7 @@ class ConversionThread(QThread):
             self._usage_counter = {}
 
             # --- Chapter splitting logic ---
-            # Use pre-compiled pattern for better performance
-            chapter_splits = list(_CHAPTER_MARKER_SEARCH_PATTERN.finditer(text))
-            chapters = []
-            if chapter_splits:
-                # prepend Introduction for content before first marker
-                first_start = chapter_splits[0].start()
-                if first_start > 0:
-                    intro_text = text[:first_start].strip()
-                    if intro_text:
-                        chapters.append(("Introduction", intro_text))
-                for idx, match in enumerate(chapter_splits):
-                    start = match.end()
-                    end = (
-                        chapter_splits[idx + 1].start()
-                        if idx + 1 < len(chapter_splits)
-                        else len(text)
-                    )
-                    chapter_name = match.group(1).strip()
-                    chapter_text = text[start:end].strip()
-                    chapters.append((chapter_name, chapter_text))
-            else:
-                chapters = [("text", text)]
+            chapters = parse_chapters_from_text(text, clean=False)
             total_chapters = len(chapters)
 
             # --- Voice marker splitting logic ---
@@ -735,8 +730,6 @@ class ConversionThread(QThread):
                     {"chapter": chapter[0], "start": 0.0, "end": 0.0}
                     for chapter in chapters
                 ]
-                # SRT numbering fix: use a global counter
-                merged_srt_index = 1  # SRT numbering for merged file
                 # Prepare output file/ffmpeg process for merged output
                 merged_sink = sink_stack.enter_context(
                     self._open_merged_sink(
@@ -745,67 +738,26 @@ class ConversionThread(QThread):
                     )
                 )
                 # Open merged subtitle file for incremental writing if needed
-                merged_subtitle_file = None
+                merged_subtitle_writer = None
+                merged_subtitle_path = None
                 if self.subtitle_mode != "Disabled":
                     subtitle_format = getattr(self, "subtitle_format", "srt")
                     file_extension = "ass" if "ass" in subtitle_format else "srt"
                     merged_subtitle_path = (
                         os.path.splitext(merged_out_path)[0] + f".{file_extension}"
                     )
-                    # Default subtitle layout flags/strings so they exist regardless
-                    # of whether ASS-specific handling runs. This prevents runtime
-                    # errors when non-ASS formats (like SRT) are selected.
-                    is_centered = False
-                    is_narrow = False
-                    merged_subtitle_margin = ""
-                    merged_subtitle_alignment_tag = ""
-                    if "ass" in subtitle_format:
-                        merged_subtitle_file = open(
-                            merged_subtitle_path,
-                            "w",
-                            encoding="utf-8",
-                            errors="replace",
-                        )
-                        # Minimal ASS header
-                        merged_subtitle_file.write("[Script Info]\n")
-                        merged_subtitle_file.write("Title: Generated by Abogen\n")
-                        merged_subtitle_file.write("ScriptType: v4.00+\n\n")
-                        # Add style definitions for karaoke highlighting
-                        if self.subtitle_mode == "Sentence + Highlighting":
-                            merged_subtitle_file.write("[V4+ Styles]\n")
-                            merged_subtitle_file.write(
-                                "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-                            )
-                            merged_subtitle_file.write(
-                                "Style: Default,Arial,24,&H00FFFFFF,&H00808080,&H00000000,&H00404040,0,0,0,0,100,100,0,0,3,2,0,5,10,10,10,1\n\n"
-                            )
-                        merged_subtitle_file.write("[Events]\n")
-                        merged_subtitle_file.write(
-                            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
-                        )
-                        # Set margin/alignment for ASS
-                        is_centered = subtitle_format in (
-                            "ass_centered_wide",
-                            "ass_centered_narrow",
-                        )
-                        is_narrow = subtitle_format in (
-                            "ass_narrow",
-                            "ass_centered_narrow",
-                        )
-                        merged_subtitle_margin = "90" if is_narrow else ""
-                        merged_subtitle_alignment_tag = (
-                            f"{{\\an5}}" if is_centered else ""
-                        )
-                    else:
-                        merged_subtitle_file = open(
-                            merged_subtitle_path,
-                            "w",
-                            encoding="utf-8",
-                            errors="replace",
-                        )
+                    alignment = _subtitle_alignment_from_format(subtitle_format)
+                    merged_subtitle_writer = create_subtitle_writer(
+                        Path(merged_subtitle_path),
+                        file_extension,
+                        self.subtitle_mode,
+                        alignment=alignment,
+                        max_words=self.max_subtitle_words,
+                    )
+                    merged_subtitle_writer.open()
                 else:
                     merged_subtitle_path = None
-                    merged_subtitle_file = None
+                    merged_subtitle_writer = None
             else:
                 # If not merging, set merged_sink and related variables to None
                 merged_sink = None
@@ -821,12 +773,11 @@ class ConversionThread(QThread):
                     {"chapter": chapter[0], "start": 0.0, "end": 0.0}
                     for chapter in chapters
                 ]
-                srt_index = 1  # SRT numbering fix for chapter-only mode
             # Instead of processing the whole text, process by chapter
             for chapter_idx, (chapter_name, voice_segments) in enumerate(chapters, 1):
                 chapter_out_path = None
                 chapter_sink = None
-                chapter_subtitle_file = None
+                chapter_subtitle_writer = None
                 chapter_subtitle_path = None
                 if total_chapters > 1:
                     self.log_updated.emit(
@@ -844,18 +795,7 @@ class ConversionThread(QThread):
 
                 # Prepare per-chapter output file if needed
                 if save_chapters_separately and total_chapters > 1:
-                    # First pass: keep alphanumeric, spaces, hyphens, and underscores
-                    sanitized = re.sub(r"[^\w\s\-]", "", chapter_name)
-                    # Replace multiple spaces/hyphens with single underscore
-                    sanitized = re.sub(r"[\s\-]+", "_", sanitized).strip("_")
-                    # Apply OS-specific sanitization
-                    sanitized = sanitize_name_for_os(sanitized, is_folder=False)
-                    # Limit length (leaving room for the chapter number prefix)
-                    MAX_LEN = 80
-                    if len(sanitized) > MAX_LEN:
-                        pos = sanitized[:MAX_LEN].rfind("_")
-                        sanitized = sanitized[: pos if pos > 0 else MAX_LEN].rstrip("_")
-                    chapter_filename = f"{chapter_idx:02d}_{sanitized}"
+                    chapter_filename = sanitize_filename_for_chapter(chapter_name, chapter_idx)
                     chapter_out_path = os.path.join(
                         chapters_out_dir,
                         f"{chapter_filename}.{separate_chapters_format}",
@@ -874,67 +814,26 @@ class ConversionThread(QThread):
                             )
                         )
                         continue
-                    # Open chapter subtitle file for incremental writing if needed
-                    chapter_subtitle_file = None
-                    chapter_srt_index = (
-                        1  # Initialize SRT numbering for this chapter file
-                    )
                     if self.subtitle_mode != "Disabled":
                         subtitle_format = getattr(self, "subtitle_format", "srt")
                         file_extension = "ass" if "ass" in subtitle_format else "srt"
                         chapter_subtitle_path = os.path.join(
                             chapters_out_dir, f"{chapter_filename}.{file_extension}"
                         )
-                        # Ensure these variables exist even when not using ASS so
-                        # later code can safely reference them.
-                        is_centered = False
-                        is_narrow = False
-                        chapter_subtitle_margin = ""
-                        chapter_subtitle_alignment_tag = ""
-                        # Open the chapter subtitle file for writing for both SRT and ASS
-                        chapter_subtitle_file = open(
-                            chapter_subtitle_path,
-                            "w",
-                            encoding="utf-8",
-                            errors="replace",
+                        alignment = _subtitle_alignment_from_format(subtitle_format)
+                        chapter_subtitle_writer = create_subtitle_writer(
+                            Path(chapter_subtitle_path),
+                            file_extension,
+                            self.subtitle_mode,
+                            alignment=alignment,
+                            max_words=self.max_subtitle_words,
                         )
-                        if "ass" in subtitle_format:
-                            # Minimal ASS header
-                            chapter_subtitle_file.write("[Script Info]\n")
-                            chapter_subtitle_file.write("Title: Generated by Abogen\n")
-                            chapter_subtitle_file.write("ScriptType: v4.00+\n\n")
-
-                            # Add style definitions for karaoke highlighting
-                            if self.subtitle_mode == "Sentence + Highlighting":
-                                chapter_subtitle_file.write("[V4+ Styles]\n")
-                                chapter_subtitle_file.write(
-                                    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-                                )
-                                chapter_subtitle_file.write(
-                                    "Style: Default,Arial,24,&H00FFFFFF,&H00808080,&H00000000,&H00404040,0,0,0,0,100,100,0,0,3,2,0,5,10,10,10,1\n\n"
-                                )
-
-                            chapter_subtitle_file.write("[Events]\n")
-                            chapter_subtitle_file.write(
-                                "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
-                            )
-                            is_centered = subtitle_format in (
-                                "ass_centered_wide",
-                                "ass_centered_narrow",
-                            )
-                            is_narrow = subtitle_format in (
-                                "ass_narrow",
-                                "ass_centered_narrow",
-                            )
-                            chapter_subtitle_margin = "90" if is_narrow else ""
-                            chapter_subtitle_alignment_tag = (
-                                f"{{\\an5}}" if is_centered else ""
-                            )
+                        chapter_subtitle_writer.open()
                     else:
-                        chapter_subtitle_file = None
+                        chapter_subtitle_writer = None
                 else:
                     chapter_subtitle_path = None
-                    chapter_subtitle_file = None
+                    chapter_subtitle_writer = None
 
 
                 # Process each voice segment within the chapter
@@ -1125,31 +1024,9 @@ class ConversionThread(QThread):
                                         self.max_subtitle_words,
                                         fallback_end_time=chunk_start + chunk_dur,
                                     )
-                                    if merged_subtitle_file:
-                                        subtitle_format = getattr(
-                                            self, "subtitle_format", "srt"
-                                        )
-                                        if "ass" in subtitle_format:
-                                            for start, end, text in new_entries:
-                                                start_time = _format_timestamp(start, ass=True)
-                                                end_time = _format_timestamp(end, ass=True)
-                                                # Use karaoke effect for highlighting mode
-                                                effect = (
-                                                    "karaoke"
-                                                    if self.subtitle_mode
-                                                    == "Sentence + Highlighting"
-                                                    else ""
-                                                )
-                                                merged_subtitle_file.write(
-                                                    f"Dialogue: 0,{start_time},{end_time},Default,,{merged_subtitle_margin},{merged_subtitle_margin},0,{effect},{merged_subtitle_alignment_tag}{text}\n"
-                                                )
-                                        else:
-                                            for entry in new_entries:
-                                                start, end, text = entry
-                                                merged_subtitle_file.write(
-                                                    f"{merged_srt_index}\n{_format_timestamp(start)} --> {_format_timestamp(end)}\n{text}\n\n"
-                                                )
-                                                merged_srt_index += 1
+                                    if merged_subtitle_writer:
+                                        for start, end, text in new_entries:
+                                            merged_subtitle_writer.write_entry(start, end, text)
                                 # Per-chapter subtitle processing for both file and sink
                                 if chapter_sink:
                                     new_chapter_entries = []
@@ -1159,31 +1036,9 @@ class ConversionThread(QThread):
                                         self.max_subtitle_words,
                                         fallback_end_time=chapter_current_time + chunk_dur,
                                     )
-                                    if chapter_subtitle_file:
-                                        subtitle_format = getattr(
-                                            self, "subtitle_format", "srt"
-                                        )
-                                        if "ass" in subtitle_format:
-                                            for start, end, text in new_chapter_entries:
-                                                start_time = _format_timestamp(start, ass=True)
-                                                end_time = _format_timestamp(end, ass=True)
-                                                # Use karaoke effect for highlighting mode
-                                                effect = (
-                                                    "karaoke"
-                                                    if self.subtitle_mode
-                                                    == "Sentence + Highlighting"
-                                                    else ""
-                                                )
-                                                chapter_subtitle_file.write(
-                                                    f"Dialogue: 0,{start_time},{end_time},Default,,{chapter_subtitle_margin},{chapter_subtitle_margin},0,{effect},{chapter_subtitle_alignment_tag}{text}\n"
-                                                )
-                                        else:
-                                            for entry in new_chapter_entries:
-                                                start, end, text = entry
-                                                chapter_subtitle_file.write(
-                                                    f"{chapter_srt_index}\n{_format_timestamp(start)} --> {_format_timestamp(end)}\n{text}\n\n"
-                                                )
-                                                chapter_srt_index += 1
+                                    if chapter_subtitle_writer:
+                                        for start, end, text in new_chapter_entries:
+                                            chapter_subtitle_writer.write_entry(start, end, text)
                             if merge_chapters_at_end:
                                 current_time += chunk_dur
                                 if chapter_sink:
@@ -1228,9 +1083,9 @@ class ConversionThread(QThread):
                 # Finalize chapter file for ffmpeg formats
                 if chapter_sink:
                     self.log_updated.emit(("\nProcessing chapter audio...", "grey"))
-                # Close chapter subtitle file if open
-                if chapter_subtitle_file:
-                    chapter_subtitle_file.close()
+                # Close chapter subtitle writer if open
+                if chapter_subtitle_writer:
+                    chapter_subtitle_writer.close()
                 if (
                     save_chapters_separately
                     and total_chapters > 1
@@ -1255,74 +1110,36 @@ class ConversionThread(QThread):
                 self.log_updated.emit(("\nFinalizing audio. Please wait...", "grey"))
                 merged_sink.close()
                 if self.output_format == "m4b":
-                    # Add chapters via fast post-processing
+                    # Add chapters via ExportService (unified with WebUI)
                     if total_chapters > 1:
-                        chapters_info_path = f"{base_filepath_no_ext}_chapters.txt"
-                        with open(chapters_info_path, "w", encoding="utf-8") as f:
-                            f.write(";FFMETADATA1\n")
-                            for chapter in chapters_time:
-                                chapter_title = chapter["chapter"].replace("=", "\\=")
-                                f.write(f"[CHAPTER]\n")
-                                f.write(f"TIMEBASE=1/1000\n")
-                                f.write(f"START={int(chapter['start']*1000)}\n")
-                                f.write(f"END={int(chapter['end']*1000)}\n")
-                                f.write(f"title={chapter_title}\n\n")
-                        # Fast mux chapters into m4b (write to temp file, then replace original)
-                        static_ffmpeg.add_paths()
-                        orig_path = merged_out_path
-                        root, ext = os.path.splitext(orig_path)
-                        tmp_path = root + ".tmp" + ext
-                        metadata_options, cover_path = (
-                            self._extract_and_add_metadata_tags_to_ffmpeg_cmd()
+                        export_svc = ExportService()
+                        metadata_text = read_text_for_metadata(
+                            file_path=self.file_name,
+                            is_direct_text=self.is_direct_text,
+                            direct_text=self.file_name if self.is_direct_text else None,
                         )
-                        cmd = [
-                            "ffmpeg",
-                            "-y",
-                            "-i",
-                            orig_path,
-                            "-i",
-                            chapters_info_path,
+                        metadata = extract_metadata_from_text(metadata_text) if metadata_text else {}
+                        # Convert cover_path from metadata to Path if present
+                        cover_path_raw = metadata.pop("cover_path", None)
+                        cover_path = Path(cover_path_raw) if cover_path_raw and os.path.exists(cover_path_raw) else None
+                        # Build chapters list for ExportService
+                        chapters_for_export = [
+                            {"title": ch["chapter"], "start": ch["start"], "end": ch["end"]}
+                            for ch in chapters_time
                         ]
-                        if cover_path and os.path.exists(cover_path):
-                            cmd.extend(
-                                [
-                                    "-i",
-                                    cover_path,
-                                    "-map",
-                                    "0:a",
-                                    "-map",
-                                    "2",
-                                    "-c:v",
-                                    "copy",
-                                    "-disposition:v",
-                                    "attached_pic",
-                                ]
-                            )
-                        else:
-                            cmd.extend(["-map", "0:a"])
-
-                        cmd.extend(
-                            [
-                                "-map_metadata",
-                                "1",
-                                "-map_chapters",
-                                "1",
-                                "-c:a",
-                                "copy",
-                            ]
+                        export_svc.embed_m4b_metadata(
+                            audio_path=Path(merged_out_path),
+                            metadata=metadata,
+                            chapters=chapters_for_export,
+                            cover_path=cover_path,
+                            log_callback=lambda msg, level="info": self.log_updated.emit((msg, "grey" if level == "info" else "orange")),
                         )
-                        cmd += metadata_options
-                        cmd.append(tmp_path)
-                        proc = create_process(cmd)
-                        proc.wait()
-                        os.replace(tmp_path, orig_path)
-                        os.remove(chapters_info_path)
                 elif self.output_format in ["opus"]:
                     merged_sink.close()
                 self.progress_updated.emit(100, "00:00:00")
-                # Close merged subtitle file if open
-                if merged_subtitle_file:
-                    merged_subtitle_file.close()
+                # Close merged subtitle writer if open
+                if merged_subtitle_writer:
+                    merged_subtitle_writer.close()
             # Subtitle and final message logic
             if merge_chapters_at_end:
                 if self.subtitle_mode != "Disabled":
@@ -1430,35 +1247,20 @@ class ConversionThread(QThread):
             ).__enter__()
 
             # Always generate subtitles for subtitle input files
-            subtitle_file, subtitle_path = None, None
+            subtitle_writer = None
+            subtitle_path = None
             subtitle_format = getattr(self, "subtitle_format", "srt")
             file_extension = "ass" if "ass" in subtitle_format else "srt"
             subtitle_path = f"{base_filepath_no_ext}.{file_extension}"
-            subtitle_file = open(subtitle_path, "w", encoding="utf-8", errors="replace")
-
-            if "ass" in subtitle_format:
-                # Write ASS header
-                subtitle_file.write(
-                    "[Script Info]\nTitle: Generated by Abogen\nScriptType: v4.00+\n\n"
-                )
-                if self.subtitle_mode == "Sentence + Highlighting":
-                    subtitle_file.write(
-                        "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-                    )
-                    subtitle_file.write(
-                        "Style: Default,Arial,24,&H00FFFFFF,&H00808080,&H00000000,&H00404040,0,0,0,0,100,100,0,0,3,2,0,5,10,10,10,1\n\n"
-                    )
-                subtitle_file.write(
-                    "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
-                )
-
-                is_narrow = subtitle_format in ("ass_narrow", "ass_centered_narrow")
-                is_centered = subtitle_format in (
-                    "ass_centered_wide",
-                    "ass_centered_narrow",
-                )
-                margin = "90" if is_narrow else ""
-                alignment = "{\\an5}" if is_centered else ""
+            alignment_str = _subtitle_alignment_from_format(subtitle_format)
+            subtitle_writer = create_subtitle_writer(
+                Path(subtitle_path),
+                file_extension,
+                self.subtitle_mode,
+                alignment=alignment_str,
+                max_words=self.max_subtitle_words,
+            )
+            subtitle_writer.open()
 
             # Load voice
             loaded_voice = resolve_voice(self.voice, tts, self.use_gpu)
@@ -1472,12 +1274,11 @@ class ConversionThread(QThread):
 
             # Process each subtitle and mix into buffer
             self.etr_start_time = time.time()
-            srt_index = 1
 
             for idx, (start_time, end_time, text) in enumerate(subtitles, 1):
                 if self.cancel_requested:
-                    if subtitle_file:
-                        subtitle_file.close()
+                    if subtitle_writer:
+                        subtitle_writer.close()
                     self.conversion_finished.emit("Cancelled", None)
                     return
 
@@ -1541,8 +1342,8 @@ class ConversionThread(QThread):
                 audio_chunks = [r.audio for r in tts_results]
 
                 if self.cancel_requested:
-                    if subtitle_file:
-                        subtitle_file.close()
+                    if subtitle_writer:
+                        subtitle_writer.close()
                     self.conversion_finished.emit("Cancelled", None)
                     return
 
@@ -1676,26 +1477,13 @@ class ConversionThread(QThread):
                 audio_buffer = mix_audio(audio_buffer, full_audio, start_sample)
 
                 # Write subtitle
-                if subtitle_file:
-                    if "ass" in subtitle_format:
-                        effect = (
-                            "karaoke"
-                            if self.subtitle_mode == "Sentence + Highlighting"
-                            else ""
-                        )
-                        ass_text = (
-                            processed_text
-                            if replace_nl
-                            else processed_text.replace("\n", "\\N")
-                        )
-                        subtitle_file.write(
-                            f"Dialogue: 0,{_format_timestamp(start_time, ass=True)},{_format_timestamp(end_time, ass=True)},Default,,{margin},{margin},0,{effect},{alignment}{ass_text}\n"
-                        )
-                    else:
-                        subtitle_file.write(
-                            f"{srt_index}\n{_format_timestamp(start_time)} --> {_format_timestamp(end_time)}\n{processed_text}\n\n"
-                        )
-                        srt_index += 1
+                if subtitle_writer:
+                    display_text = (
+                        processed_text
+                        if "ass" in subtitle_format or replace_nl
+                        else processed_text.replace("\n", "\\N")
+                    )
+                    subtitle_writer.write_entry(start_time, end_time, display_text)
 
                 # Update progress
                 percent = min(int(idx / len(subtitles) * 100), 99)
@@ -1719,8 +1507,8 @@ class ConversionThread(QThread):
                 merged_sink.write(to_float32(audio_buffer))
                 merged_sink.close()
 
-            if subtitle_file:
-                subtitle_file.close()
+            if subtitle_writer:
+                subtitle_writer.close()
 
             self.progress_updated.emit(100, "00:00:00")
             result_msg = f"\nAudio saved to: {merged_out_path}" + (
@@ -1732,8 +1520,8 @@ class ConversionThread(QThread):
             try:
                 if "merged_sink" in locals() and merged_sink:
                     merged_sink.close()
-                if "subtitle_file" in locals() and subtitle_file:
-                    subtitle_file.close()
+                if "subtitle_writer" in locals() and subtitle_writer:
+                    subtitle_writer.close()
             except:
                 pass
             self.log_updated.emit((f"Error processing subtitle file: {str(e)}", "red"))

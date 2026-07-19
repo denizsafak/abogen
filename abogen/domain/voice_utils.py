@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional, Tuple, Set
+from typing import Any, Dict, Mapping, Optional, Tuple, Set
 
 from abogen.voice_formulas import extract_voice_ids, get_new_voice
 from abogen.tts_plugin.utils import get_voices
@@ -95,3 +95,36 @@ def coerce_truthy(value: Any, default: bool = True) -> bool:
     if value is None:
         return default
     return bool(value)
+
+
+def resolve_voice_target(
+    raw_spec: str,
+    normalized_profiles: Dict[str, Dict[str, Any]],
+    *,
+    job_voice: str = "M1",
+    job_tts_provider: str = "kokoro",
+    job_supertonic_total_steps: int = 5,
+    job_speed: float = 1.0,
+) -> Tuple[str, str, Optional[float], Optional[int]]:
+    """Resolve a raw voice spec into (provider, voice_spec, speed_override, steps_override).
+
+    Pure function — all dependencies are passed as parameters.
+    """
+    spec = str(raw_spec or "").strip()
+    speaker_name, _ = split_speaker_reference(spec)
+    if speaker_name and speaker_name in normalized_profiles:
+        entry = normalized_profiles[speaker_name]
+        provider = str(entry.get("provider") or "kokoro").strip().lower() or "kokoro"
+        if provider == "supertonic":
+            voice = str(entry.get("voice") or job_voice or "M1").strip() or "M1"
+            steps = int(entry.get("total_steps") or job_supertonic_total_steps or 5)
+            speed = float(entry.get("speed") or job_speed or 1.0)
+            return "supertonic", supertonic_voice_from_spec(voice, job_voice), speed, steps
+        formula = formula_from_kokoro_entry(entry)
+        return "kokoro", formula or spec, None, None
+
+    fallback_provider = str(job_tts_provider or "kokoro").strip().lower() or "kokoro"
+    inferred = infer_provider_from_spec(spec, fallback=fallback_provider)
+    if inferred == "supertonic":
+        return "supertonic", supertonic_voice_from_spec(spec, job_voice), None, None
+    return "kokoro", spec, None, None
