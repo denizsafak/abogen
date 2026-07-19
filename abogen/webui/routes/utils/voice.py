@@ -548,19 +548,12 @@ def prepare_speaker_metadata(
 
 
 def formula_from_profile(entry: Dict[str, Any]) -> Optional[str]:
+    from abogen.voice_formulas import pairs_to_formula
+
     voices = entry.get("voices") or []
     if not voices:
         return None
-    total = sum(weight for _, weight in voices)
-    if total <= 0:
-        return None
-
-    def _format_weight(value: float) -> str:
-        normalized = value / total if total else 0.0
-        return (f"{normalized:.4f}").rstrip("0").rstrip(".") or "0"
-
-    parts = [f"{name}*{_format_weight(weight)}" for name, weight in voices if weight > 0]
-    return "+".join(parts) if parts else None
+    return pairs_to_formula(voices)
 
 
 def template_options() -> Dict[str, Any]:
@@ -710,19 +703,8 @@ def sanitize_voice_entries(entries: Iterable[Any]) -> List[Dict[str, Any]]:
 
 
 def pairs_to_formula(pairs: Iterable[Tuple[str, float]]) -> Optional[str]:
-    voices = [(voice, float(weight)) for voice, weight in pairs if float(weight) > 0]
-    if not voices:
-        return None
-    total = sum(weight for _, weight in voices)
-    if total <= 0:
-        return None
-
-    def _format_value(value: float) -> str:
-        normalized = value / total if total else 0.0
-        return (f"{normalized:.4f}").rstrip("0").rstrip(".") or "0"
-
-    parts = [f"{voice}*{_format_value(weight)}" for voice, weight in voices]
-    return "+".join(parts)
+    from abogen.voice_formulas import pairs_to_formula as _pairs_to_formula
+    return _pairs_to_formula(pairs)
 
 
 def profiles_payload() -> Dict[str, Any]:

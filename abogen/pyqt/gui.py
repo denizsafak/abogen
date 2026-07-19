@@ -2235,11 +2235,10 @@ class abogen(QWidget):
             self.current_queue_index = 0  # Reset for next time
 
     def get_voice_formula(self) -> str:
+        from abogen.voice_formulas import pairs_to_formula
+
         if self.mixed_voice_state:
-            formula_components = [
-                f"{name}*{weight}" for name, weight in self.mixed_voice_state
-            ]
-            return " + ".join(filter(None, formula_components))
+            return pairs_to_formula(self.mixed_voice_state) or ""
         else:
             return self.selected_voice
 
