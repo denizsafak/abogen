@@ -91,6 +91,10 @@ from abogen.tts_plugin.utils import get_voices
 import threading
 from abogen.pyqt.voice_formula_gui import VoiceFormulaDialog
 from abogen.voice_profiles import load_profiles
+from abogen.domain.settings_core import all_settings_defaults
+
+# Module-level default cache for use outside __init__
+_DEFAULTS = all_settings_defaults()
 
 # Import ctypes for Windows-specific taskbar icon
 if platform.system() == "Windows":
@@ -912,9 +916,10 @@ class abogen(QWidget):
     def __init__(self):
         super().__init__()
         self.config = load_config()
-        self.apply_theme(self.config.get("theme", "system"))
+        _d = all_settings_defaults()
+        self.apply_theme(self.config.get("theme", _d["theme"]))
         migrate_subtitle_format(self.config)
-        self.check_updates = self.config.get("check_updates", True)
+        self.check_updates = self.config.get("check_updates", _d["check_updates"])
         self.save_option = self.config.get("save_option", "Save next to input file")
         self.selected_output_folder = self.config.get("selected_output_folder", None)
         self.selected_file = self.selected_file_type = self.selected_book_path = None
@@ -922,7 +927,7 @@ class abogen(QWidget):
             None  # Add new variable to track the displayed file path
         )
         # Max log lines
-        self.log_window_max_lines = self.config.get("log_window_max_lines", 2000)
+        self.log_window_max_lines = self.config.get("log_window_max_lines", _d["log_window_max_lines"])
         self.selected_chapters = set()
         self.last_opened_book_path = None  # Track the last opened book path
         self.last_output_path = None
@@ -937,40 +942,26 @@ class abogen(QWidget):
             self.selected_voice = None
             self.selected_lang = None
         else:
-            self.selected_voice = self.config.get("selected_voice", "af_heart")
+            self.selected_voice = self.config.get("selected_voice", _d["selected_voice"])
             self.selected_lang = self.selected_voice[0] if self.selected_voice else None
         self.is_converting = False
-        self.subtitle_mode = self.config.get("subtitle_mode", "Sentence")
-        self.max_subtitle_words = self.config.get(
-            "max_subtitle_words", 50
-        )  # Default max words per subtitle
-        self.silence_duration = self.config.get(
-            "silence_duration", 2.0
-        )  # Default silence duration
-        self.selected_format = self.config.get("selected_format", "wav")
-        self.separate_chapters_format = self.config.get(
-            "separate_chapters_format", "wav"
-        )  # Format for individual chapter files
-        self.use_gpu = self.config.get(
-            "use_gpu", True  # Load GPU setting with default True
-        )
-        self.replace_single_newlines = self.config.get("replace_single_newlines", True)
-        self.use_silent_gaps = self.config.get("use_silent_gaps", True)
-        self.subtitle_speed_method = self.config.get("subtitle_speed_method", "tts")
-        self.use_spacy_segmentation = self.config.get("use_spacy_segmentation", True)
+        self.subtitle_mode = self.config.get("subtitle_mode", _d["subtitle_mode"])
+        self.max_subtitle_words = self.config.get("max_subtitle_words", _d["max_subtitle_words"])
+        self.silence_duration = self.config.get("silence_duration", _d.get("silence_between_chapters", 2.0))
+        self.selected_format = self.config.get("selected_format", _d["selected_format"])
+        self.separate_chapters_format = self.config.get("separate_chapters_format", _d["separate_chapters_format"])
+        self.use_gpu = self.config.get("use_gpu", _d["use_gpu"])
+        self.replace_single_newlines = self.config.get("replace_single_newlines", _d.get("replace_single_newlines", True))
+        self.use_silent_gaps = self.config.get("use_silent_gaps", _d["use_silent_gaps"])
+        self.subtitle_speed_method = self.config.get("subtitle_speed_method", _d["subtitle_speed_method"])
+        self.use_spacy_segmentation = self.config.get("use_spacy_segmentation", _d["use_spacy_segmentation"])
         # Word substitution settings
-        self.word_substitutions_enabled = self.config.get(
-            "word_substitutions_enabled", False
-        )
-        self.word_substitutions_list = self.config.get("word_substitutions_list", "")
-        self.case_sensitive_substitutions = self.config.get(
-            "case_sensitive_substitutions", False
-        )
-        self.replace_all_caps = self.config.get("replace_all_caps", False)
-        self.replace_numerals = self.config.get("replace_numerals", False)
-        self.fix_nonstandard_punctuation = self.config.get(
-            "fix_nonstandard_punctuation", False
-        )
+        self.word_substitutions_enabled = self.config.get("word_substitutions_enabled", _d["word_substitutions_enabled"])
+        self.word_substitutions_list = self.config.get("word_substitutions_list", _d["word_substitutions_list"])
+        self.case_sensitive_substitutions = self.config.get("case_sensitive_substitutions", _d["case_sensitive_substitutions"])
+        self.replace_all_caps = self.config.get("replace_all_caps", _d["replace_all_caps"])
+        self.replace_numerals = self.config.get("replace_numerals", _d["replace_numerals"])
+        self.fix_nonstandard_punctuation = self.config.get("fix_nonstandard_punctuation", _d["fix_nonstandard_punctuation"])
         self._pending_close_event = None
         self.gpu_ok = False  # Initialize GPU availability status
 
@@ -998,7 +989,7 @@ class abogen(QWidget):
         self.current_queue_index = 0
 
         self.initUI()
-        self.speed_slider.setValue(int(self.config.get("speed", 1.00) * 100))
+        self.speed_slider.setValue(int(self.config.get("speed", _d["speed"]) * 100))
         self.update_speed_label()
         # Set initial selection: prefer profile, else voice
         idx = -1
@@ -2161,7 +2152,7 @@ class abogen(QWidget):
             )
 
             # CHECK GLOBAL OVERRIDE SETTING
-            if not self.config.get("queue_override_settings", False):
+            if not self.config.get("queue_override_settings", _DEFAULTS["queue_override_settings"]):
                 self.selected_lang = queued_item.lang_code
                 self.speed_slider.setValue(int(queued_item.speed * 100))
                 
@@ -2440,7 +2431,7 @@ class abogen(QWidget):
             return
 
         # Check if override was active (this determines which settings were ACTUALLY used)
-        override_active = self.config.get("queue_override_settings", False)
+        override_active = self.config.get("queue_override_settings", _DEFAULTS["queue_override_settings"])
 
         # If override is ON, capture the global settings that were used for processing
         if override_active:
@@ -3416,7 +3407,7 @@ class abogen(QWidget):
         app.installEventFilter(app._dark_titlebar_event_filter)
 
         # Save config if changed
-        if self.config.get("theme", "system") != theme:
+        if self.config.get("theme", _DEFAULTS["theme"]) != theme:
             self.config["theme"] = theme
             save_config(self.config)
 
@@ -3438,7 +3429,7 @@ class abogen(QWidget):
         ]
 
         # Get current theme from config, default to "system"
-        current_theme = self.config.get("theme", "system")
+        current_theme = self.config.get("theme", _DEFAULTS["theme"])
         for value, text in theme_options:
             theme_action = QAction(text, self)
             theme_action.setCheckable(True)
@@ -3580,7 +3571,7 @@ class abogen(QWidget):
         disable_kokoro_action = QAction("Disable Kokoro's internet access", self)
         disable_kokoro_action.setCheckable(True)
         disable_kokoro_action.setChecked(
-            self.config.get("disable_kokoro_internet", False)
+            self.config.get("disable_kokoro_internet", _DEFAULTS["disable_kokoro_internet"])
         )
         disable_kokoro_action.triggered.connect(
             lambda checked: self.toggle_kokoro_internet_access(checked)
@@ -3590,7 +3581,7 @@ class abogen(QWidget):
         # Add check for updates option
         check_updates_action = QAction("Check for updates at startup", self)
         check_updates_action.setCheckable(True)
-        check_updates_action.setChecked(self.config.get("check_updates", True))
+        check_updates_action.setChecked(self.config.get("check_updates", _DEFAULTS["check_updates"]))
         check_updates_action.triggered.connect(self.toggle_check_updates)
         menu.addAction(check_updates_action)
 
@@ -4216,7 +4207,7 @@ Categories=AudioVideo;Audio;Utility;
         """Open a dialog to set the maximum words per subtitle"""
         from PyQt6.QtWidgets import QInputDialog
 
-        current_value = self.config.get("max_subtitle_words", 50)
+        current_value = self.config.get("max_subtitle_words", _DEFAULTS["max_subtitle_words"])
 
         value, ok = QInputDialog.getInt(
             self,
@@ -4244,7 +4235,7 @@ Categories=AudioVideo;Audio;Utility;
     def set_silence_between_chapters(self):
         """Open a dialog to set the silence duration between chapters"""
 
-        current_value = self.config.get("silence_duration", 2.0)
+        current_value = self.config.get("silence_duration", _DEFAULTS.get("silence_between_chapters", 2.0))
 
         dlg = QInputDialog(self)
         dlg.setWindowTitle("Silence Duration (seconds)")
