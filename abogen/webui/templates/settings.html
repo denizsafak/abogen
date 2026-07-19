@@ -277,6 +277,16 @@
           <fieldset class="settings__section">
             <legend>Endpoint</legend>
             <div class="field">
+              <label for="llm_provider">Provider</label>
+              <select id="llm_provider" name="llm_provider" data-presets='{{ llm_provider_presets | tojson }}'>
+                <option value="">Custom endpoint</option>
+                {% for preset in llm_provider_presets %}
+                <option value="{{ preset.id }}" {% if settings.llm_provider == preset.id %}selected{% endif %}>{{ preset.name }}</option>
+                {% endfor %}
+              </select>
+              <p class="hint">Pick a cloud provider to auto-fill the endpoint, or choose <em>Custom endpoint</em> to enter any OpenAI-compatible URL.</p>
+            </div>
+            <div class="field">
               <label for="llm_base_url">Base URL</label>
               <input type="url" id="llm_base_url" name="llm_base_url" value="{{ settings.llm_base_url }}" placeholder="https://localhost:11434/v1">
               <p class="hint">Point to an OpenAI-compatible endpoint such as Ollama or a proxy.</p>
@@ -284,7 +294,7 @@
             <div class="field">
               <label for="llm_api_key">API Key</label>
               <input type="text" id="llm_api_key" name="llm_api_key" value="{{ settings.llm_api_key }}" autocomplete="off" placeholder="ollama">
-              <p class="hint">Leave blank or use <code>ollama</code> for local servers that do not require keys.</p>
+              <p class="hint" id="llm_api_key_hint">Leave blank or use <code>ollama</code> for local servers that do not require keys.</p>
             </div>
             <div class="field field--inline">
               <div class="field__group">

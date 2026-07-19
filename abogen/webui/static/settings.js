@@ -367,6 +367,7 @@ function collectLLMFields() {
   const prompt = form.querySelector('#llm_prompt');
   const timeout = form.querySelector('#llm_timeout');
   const context = form.querySelector('input[name="llm_context_mode"]:checked');
+  const provider = form.querySelector('#llm_provider');
   return {
     base_url: baseUrl ? baseUrl.value.trim() : '',
     api_key: apiKey ? apiKey.value.trim() : '',
@@ -374,7 +375,57 @@ function collectLLMFields() {
     prompt: prompt ? prompt.value : '',
     context_mode: context ? context.value : 'sentence',
     timeout: timeout ? parseNumber(timeout.value, 30) : 30,
+    provider: provider ? provider.value : '',
   };
+}
+
+function getProviderPresets() {
+  const select = form.querySelector('#llm_provider');
+  if (!select || !select.dataset.presets) {
+    return [];
+  }
+  try {
+    return JSON.parse(select.dataset.presets);
+  } catch (_) {
+    return [];
+  }
+}
+
+function applyProviderPreset(providerId) {
+  const presets = getProviderPresets();
+  const preset = presets.find((p) => p.id === providerId);
+  const baseUrlInput = form.querySelector('#llm_base_url');
+  const apiKeyInput = form.querySelector('#llm_api_key');
+  const apiKeyHint = document.querySelector('#llm_api_key_hint');
+
+  if (!preset) {
+    if (apiKeyHint) {
+      apiKeyHint.innerHTML = 'Leave blank or use <code>ollama</code> for local servers that do not require keys.';
+    }
+    return;
+  }
+
+  if (baseUrlInput) {
+    baseUrlInput.value = preset.base_url;
+  }
+  if (apiKeyHint && preset.api_key_hint) {
+    apiKeyHint.textContent = preset.api_key_hint;
+  }
+  if (preset.models && preset.models.length) {
+    const models = preset.models.map((id) => ({ id, label: id }));
+    updateModelOptions(models);
+  }
+  updateLLMNavState();
+}
+
+function initProviderDropdown() {
+  const providerSelect = form.querySelector('#llm_provider');
+  if (!providerSelect) {
+    return;
+  }
+  providerSelect.addEventListener('change', () => {
+    applyProviderPreset(providerSelect.value);
+  });
 }
 
 function updateModelOptions(models) {
@@ -879,4 +930,5 @@ if (form) {
   initFolderPicker();
   initContractionModal();
   initLLMStateWatchers();
+  initProviderDropdown();
 }
