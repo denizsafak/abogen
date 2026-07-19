@@ -30,6 +30,75 @@ class SegmentResult:
     tokens: List[Dict[str, Any]] = field(default_factory=list)
 
 
+def tts_segments(
+    text: str,
+    *,
+    backend: Any,
+    voice: Any,
+    speed: float,
+    split_pattern: str,
+    current_time: float = 0.0,
+) -> Iterator[SegmentResult]:
+    """Invoke TTS backend on (already normalized) text and yield SegmentResults.
+
+    Use this when you've already normalized the text yourself (e.g. after
+    spaCy sentence segmentation). For raw text, use emit_text_segments() instead.
+
+    Args:
+        text: Already-normalized text to synthesize.
+        backend: TTS pipeline callable.
+        voice: Resolved voice.
+        speed: TTS speed multiplier.
+        split_pattern: Regex pattern for sentence splitting.
+        current_time: Current position in the audio timeline (seconds).
+
+    Yields:
+        SegmentResult for each non-empty TTS segment.
+    """
+    segment_iter = backend(
+        text,
+        voice=voice,
+        speed=speed,
+        split_pattern=split_pattern,
+    )
+
+    chunk_start = current_time
+
+    for segment in segment_iter:
+        graphemes_raw = getattr(segment, "graphemes", "") or ""
+        graphemes = graphemes_raw.strip()
+
+        audio = to_float32(getattr(segment, "audio", None))
+        if audio.size == 0:
+            continue
+
+        duration = len(audio) / SAMPLE_RATE
+
+        tokens_list = getattr(segment, "tokens", [])
+        if not tokens_list and graphemes:
+            tokens_list = [FakeToken(graphemes, 0, duration)]
+
+        tokens = [
+            {
+                "start": chunk_start + (tok.start_ts or 0),
+                "end": chunk_start + (tok.end_ts or 0),
+                "text": tok.text,
+                "whitespace": tok.whitespace,
+            }
+            for tok in tokens_list
+        ]
+
+        yield SegmentResult(
+            graphemes=graphemes,
+            audio=audio,
+            duration=duration,
+            chunk_start=chunk_start,
+            tokens=tokens,
+        )
+
+        chunk_start += duration
+
+
 def emit_text_segments(
     text: str,
     *,
@@ -81,49 +150,14 @@ def emit_text_segments(
         usage_counter=usage_counter,
     )
 
-    segment_iter = backend(
+    yield from tts_segments(
         normalized,
+        backend=backend,
         voice=voice,
         speed=speed,
         split_pattern=split_pattern,
+        current_time=current_time,
     )
-
-    chunk_start = current_time
-
-    for segment in segment_iter:
-        graphemes_raw = getattr(segment, "graphemes", "") or ""
-        graphemes = graphemes_raw.strip()
-
-        audio = to_float32(getattr(segment, "audio", None))
-        if audio.size == 0:
-            continue
-
-        duration = len(audio) / SAMPLE_RATE
-
-        # Extract tokens with timestamps
-        tokens_list = getattr(segment, "tokens", [])
-        if not tokens_list and graphemes:
-            tokens_list = [FakeToken(graphemes, 0, duration)]
-
-        tokens = [
-            {
-                "start": chunk_start + (tok.start_ts or 0),
-                "end": chunk_start + (tok.end_ts or 0),
-                "text": tok.text,
-                "whitespace": tok.whitespace,
-            }
-            for tok in tokens_list
-        ]
-
-        yield SegmentResult(
-            graphemes=graphemes,
-            audio=audio,
-            duration=duration,
-            chunk_start=chunk_start,
-            tokens=tokens,
-        )
-
-        chunk_start += duration
 
 
 def emit_text_to_sinks(

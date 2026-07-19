@@ -117,8 +117,8 @@ from abogen.domain.audio_buffer import (
     SAMPLE_RATE,
 )
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
-from abogen.domain.tokens import FakeToken
 from abogen.domain.pipeline_factory import PipelinePool
+from abogen.domain.conversion_pipeline import tts_segments
 from abogen.domain.voice_utils import resolve_voice_target as _resolve_voice_target
 
 
@@ -424,44 +424,29 @@ def run_conversion_job(job: Job) -> None:
             if provider == "supertonic":
                 supertonic_pipeline = pipeline_pool.get("supertonic", job.language, job.use_gpu, job=job)
                 voice_name = _supertonic_voice_from_spec(voice_choice, getattr(job, "voice", "M1"))
-                segment_iter = supertonic_pipeline(
-                    normalized,
-                    voice=voice_name,
-                    speed=float(speed_override if speed_override is not None else job.speed),
-                    split_pattern=split_pattern,
-                    total_steps=int(supertonic_steps_override if supertonic_steps_override is not None else getattr(job, "supertonic_total_steps", 5)),
-                )
+                backend = supertonic_pipeline
+                resolved_voice = voice_name
+                effective_speed = float(speed_override if speed_override is not None else job.speed)
             else:
                 kokoro_backend = pipeline_pool.get("kokoro", job.language, job.use_gpu, job=job)
-                segment_iter = kokoro_backend(
-                    normalized,
-                    voice=voice_choice,
-                    speed=float(speed_override if speed_override is not None else job.speed),
-                    split_pattern=split_pattern,
-                )
+                backend = kokoro_backend
+                resolved_voice = voice_choice
+                effective_speed = float(speed_override if speed_override is not None else job.speed)
 
             try:
-                # Accumulate tokens for subtitle processing (token-level grouping)
                 accumulated_tokens: List[dict] = []
 
-                for segment in segment_iter:
+                for seg in tts_segments(
+                    normalized,
+                    backend=backend,
+                    voice=resolved_voice,
+                    speed=effective_speed,
+                    split_pattern=split_pattern,
+                    current_time=current_time,
+                ):
                     canceller()
-                    graphemes_raw = getattr(segment, "graphemes", "") or ""
-                    graphemes = graphemes_raw.strip()
-
-                    audio = _to_float32(getattr(segment, "audio", None))
-                    if audio.size == 0:
-                        continue
-
                     local_segments += 1
-                    if chapter_sink:
-                        chapter_sink.write(audio)
-                    if audio_sink:
-                        audio_sink.write(audio)
-
-                    duration = len(audio) / SAMPLE_RATE
-                    chunk_start = current_time
-                    processed_chars += len(graphemes)
+                    processed_chars += len(seg.graphemes)
                     job.processed_characters = processed_chars
                     if job.total_characters:
                         job.progress = min(processed_chars / job.total_characters, 0.999)
@@ -473,30 +458,21 @@ def run_conversion_job(job: Job) -> None:
                     else:
                         job.progress = 0.0 if processed_chars == 0 else 0.999
 
-                    preview_text = graphemes or (graphemes_raw[:80] if graphemes_raw else "[silence]")
+                    preview_text = seg.graphemes or "[silence]"
                     prefix = f"{preview_prefix} · " if preview_prefix else ""
                     job.add_log(f"{prefix}{processed_chars:,}/{job.total_characters or '—'}: {preview_text[:80]}")
 
-                    # Accumulate tokens from this segment for subtitle processing
+                    if chapter_sink:
+                        chapter_sink.write(seg.audio)
+                    if audio_sink:
+                        audio_sink.write(seg.audio)
+
                     if subtitle_writer and audio_sink:
-                        tokens_list = getattr(segment, "tokens", [])
-
-                        # Fallback for languages without token support: create a single token
-                        if not tokens_list and graphemes:
-                            tokens_list = [FakeToken(graphemes, 0, duration)]
-
-                        for tok in tokens_list:
-                            accumulated_tokens.append({
-                                "start": chunk_start + (tok.start_ts or 0),
-                                "end": chunk_start + (tok.end_ts or 0),
-                                "text": tok.text,
-                                "whitespace": tok.whitespace,
-                            })
+                        accumulated_tokens.extend(seg.tokens)
 
                     if audio_sink:
-                        current_time += duration
+                        current_time += seg.duration
 
-                # Flush accumulated tokens through process_subtitle_tokens
                 if subtitle_writer and audio_sink and accumulated_tokens:
                     _use_spacy = job.subtitle_mode not in ("Disabled", "Line")
                     new_entries: List[tuple] = []

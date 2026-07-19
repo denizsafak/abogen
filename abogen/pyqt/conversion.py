@@ -36,7 +36,7 @@ from abogen.domain.output_paths import (
 )
 from abogen.domain.audio_helpers import build_ffmpeg_command, to_float32
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
-from abogen.domain.tokens import FakeToken
+from abogen.domain.conversion_pipeline import tts_segments
 from abogen.domain.audio_buffer import (
     create_silence,
     mix_audio,
@@ -936,8 +936,7 @@ class ConversionThread(QThread):
                         print("Using split pattern: (unprintable)")
 
                     for text_segment in text_segments:
-                        # Normalize text through the shared pipeline
-                        # (heteronym + pronunciation + apostrophe normalization)
+                        # Normalize text before TTS
                         try:
                             text_segment = prepare_text_for_tts(
                                 text_segment,
@@ -951,118 +950,81 @@ class ConversionThread(QThread):
                                 (f"Warning: Text normalization failed: {exc}", "orange")
                             )
 
-                        for result in self.backend(
+                        for seg in tts_segments(
                             text_segment,
+                            backend=self.backend,
                             voice=loaded_voice,
                             speed=self.speed,
                             split_pattern=active_split_pattern,
+                            current_time=current_time,
                         ):
-                            # Print the result for debugging
-                            # print(f"Result: {result}")
                             if self.cancel_requested:
                                 sink_stack.close()
                                 self.conversion_finished.emit("Cancelled", None)
                                 return
                             current_segment += 1
-                            grapheme_len = len(result.graphemes)
-                            self.processed_char_count += grapheme_len
-                            # Log progress with both character counts and the graphemes content
+                            self.processed_char_count += len(seg.graphemes)
                             self.log_updated.emit(
-                                f"\n{self.processed_char_count:,}/{self.total_char_count:,}: {result.graphemes}"
+                                f"\n{self.processed_char_count:,}/{self.total_char_count:,}: {seg.graphemes}"
                             )
 
-                            chunk_dur = len(result.audio) / rate
-                            chunk_start = current_time
-                            audio_np = to_float32(result.audio)
-                            # Write audio directly to merged file ONLY if merging
+                            # Write audio
                             if merge_chapters_at_end and merged_sink:
-                                merged_sink.write(audio_np)
+                                merged_sink.write(seg.audio)
                             if chapter_sink:
-                                chapter_sink.write(audio_np)
+                                chapter_sink.write(seg.audio)
+
                             # Subtitle logic
-                            if self.subtitle_mode != "Disabled":
-                                tokens_list = getattr(result, "tokens", [])
-
-                                # Fallback for languages without token support (non-English)
-                                # Create a single token representing the entire segment duration
-                                if not tokens_list and result.graphemes:
-                                    tokens_list = [
-                                        FakeToken(result.graphemes, 0, chunk_dur)
-                                    ]
-
-                                tokens_with_timestamps = []
-                                chapter_tokens_with_timestamps = []
-
-                                # Process every token, regardless of text or timestamps
-                                for tok in tokens_list:
-                                    tokens_with_timestamps.append(
-                                        {
-                                            "start": chunk_start + (tok.start_ts or 0),
-                                            "end": chunk_start + (tok.end_ts or 0),
-                                            "text": tok.text,
-                                            "whitespace": tok.whitespace,
-                                        }
-                                    )
-                                    if chapter_sink:
-                                        chapter_tokens_with_timestamps.append(
-                                            {
-                                                "start": chapter_current_time
-                                                + (tok.start_ts or 0),
-                                                "end": chapter_current_time
-                                                + (tok.end_ts or 0),
-                                                "text": tok.text,
-                                                "whitespace": tok.whitespace,
-                                            }
-                                        )
-                                # Process tokens according to subtitle mode
-                                # Global subtitle processing ONLY if merging
+                            if self.subtitle_mode != "Disabled" and seg.tokens:
+                                tokens_with_timestamps = list(seg.tokens)
+                                chapter_tokens_with_timestamps = [
+                                    {
+                                        "start": chapter_current_time + (t["start"] - seg.chunk_start),
+                                        "end": chapter_current_time + (t["end"] - seg.chunk_start),
+                                        "text": t["text"],
+                                        "whitespace": t["whitespace"],
+                                    }
+                                    for t in seg.tokens
+                                ]
                                 if merge_chapters_at_end:
-                                    # Incremental subtitle writing for merged output
                                     new_entries = []
                                     self._process_subtitle_tokens(
                                         tokens_with_timestamps,
                                         new_entries,
                                         self.max_subtitle_words,
-                                        fallback_end_time=chunk_start + chunk_dur,
+                                        fallback_end_time=seg.chunk_start + seg.duration,
                                     )
                                     if merged_subtitle_writer:
                                         for start, end, text in new_entries:
                                             merged_subtitle_writer.write_entry(start, end, text)
-                                # Per-chapter subtitle processing for both file and sink
                                 if chapter_sink:
                                     new_chapter_entries = []
                                     self._process_subtitle_tokens(
                                         chapter_tokens_with_timestamps,
                                         new_chapter_entries,
                                         self.max_subtitle_words,
-                                        fallback_end_time=chapter_current_time + chunk_dur,
+                                        fallback_end_time=chapter_current_time + seg.duration,
                                     )
                                     if chapter_subtitle_writer:
                                         for start, end, text in new_chapter_entries:
                                             chapter_subtitle_writer.write_entry(start, end, text)
+
+                            # Update timing
                             if merge_chapters_at_end:
-                                current_time += chunk_dur
-                                if chapter_sink:
-                                    chapter_current_time += chunk_dur
-                            else:
-                                if chapter_sink:
-                                    chapter_current_time += chunk_dur
-                            # Calculate percentage based on characters processed
+                                current_time += seg.duration
+                            if chapter_sink:
+                                chapter_current_time += seg.duration
+
+                            # Progress
                             percent = min(
-                                int(
-                                    self.processed_char_count / self.total_char_count * 100
-                                ),
+                                int(self.processed_char_count / self.total_char_count * 100),
                                 99,
                             )
-
-                            # Calculate ETR based on characters processed
                             etr_str = calc_etr_str(
                                 time.time() - self.etr_start_time,
                                 self.processed_char_count,
                                 self.total_char_count,
                             )
-
-                            # Update progress more frequently (after each result)
                             self.progress_updated.emit(percent, etr_str)
 
                 # Add silence between chapters for merged output (except after the last chapter)
