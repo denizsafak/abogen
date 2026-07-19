@@ -344,7 +344,6 @@ class ExportService:
     ) -> None:
         """Upload to Audiobookshelf."""
         if config is None:
-            # Load from job or global config
             cfg = getattr(job, "_abs_config", None)
             if cfg is None:
                 from abogen.utils import load_config
@@ -367,7 +366,7 @@ class ExportService:
                     if log_callback:
                         log_callback("Audiobookshelf upload skipped: not configured", "warning")
                     return
-        
+
         if not config.base_url or not config.api_token or not config.library_id:
             if log_callback:
                 log_callback("Audiobookshelf upload skipped: configure base URL, API token, and library ID first", "warning")
@@ -376,7 +375,7 @@ class ExportService:
             if log_callback:
                 log_callback("Audiobookshelf upload skipped: enter folder name or ID in settings", "warning")
             return
-        
+
         if not audio_path.exists():
             if log_callback:
                 log_callback("Audiobookshelf upload skipped: audio output not found", "warning")

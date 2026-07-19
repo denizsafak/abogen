@@ -8,8 +8,8 @@ from flask.typing import ResponseReturnValue
 
 from abogen.webui.service import (
     JobStatus,
-    load_audiobookshelf_chapters,
     build_audiobookshelf_metadata,
+    load_audiobookshelf_chapters,
 )
 from abogen.webui.routes.utils.service import get_service
 from abogen.webui.routes.utils.form import render_jobs_panel
@@ -22,14 +22,21 @@ from abogen.webui.routes.utils.epub import (
 from abogen.webui.routes.utils.settings import (
     stored_integration_config,
     build_audiobookshelf_config,
-    coerce_bool,
 )
 from abogen.webui.routes.utils.common import existing_paths
-from abogen.integrations.audiobookshelf import AudiobookshelfClient, AudiobookshelfUploadError
+from abogen.infrastructure.exporters import ExportService
 
 logger = logging.getLogger(__name__)
 
 jobs_bp = Blueprint("jobs", __name__)
+
+
+def _resolve_cover(job: Any, config: Any) -> Optional[Path]:
+    """Resolve cover image path if enabled."""
+    if not config.send_cover or not job.cover_image_path:
+        return None
+    cover = job.cover_image_path if isinstance(job.cover_image_path, Path) else Path(str(job.cover_image_path))
+    return cover if cover.exists() else None
 
 @jobs_bp.get("/<job_id>")
 def job_detail(job_id: str) -> ResponseReturnValue:
@@ -98,24 +105,18 @@ def send_job_to_audiobookshelf(job_id: str) -> ResponseReturnValue:
         return _panel_response()
 
     settings = stored_integration_config("audiobookshelf")
-    if not settings or not coerce_bool(settings.get("enabled"), False):
+    if not settings or not settings.get("enabled"):
         job.add_log("Audiobookshelf upload skipped: integration is disabled.", level="warning")
         service._persist_state()
         return _panel_response()
 
     config = build_audiobookshelf_config(settings)
     if config is None:
-        job.add_log(
-            "Audiobookshelf upload skipped: configure base URL, API token, and library ID first.",
-            level="warning",
-        )
+        job.add_log("Audiobookshelf upload skipped: configure base URL, API token, and library ID first.", level="warning")
         service._persist_state()
         return _panel_response()
     if not config.folder_id:
-        job.add_log(
-            "Audiobookshelf upload skipped: enter the folder name or ID in the Audiobookshelf settings.",
-            level="warning",
-        )
+        job.add_log("Audiobookshelf upload skipped: enter the folder name or ID in the Audiobookshelf settings.", level="warning")
         service._persist_state()
         return _panel_response()
 
@@ -125,83 +126,49 @@ def send_job_to_audiobookshelf(job_id: str) -> ResponseReturnValue:
         service._persist_state()
         return _panel_response()
 
-    cover_path = None
-    if config.send_cover and job.cover_image_path:
-        cover_candidate = job.cover_image_path
-        if not isinstance(cover_candidate, Path):
-            cover_candidate = Path(str(cover_candidate))
-        if cover_candidate.exists():
-            cover_path = cover_candidate
-
-    subtitles = existing_paths(job.result.subtitle_paths) if config.send_subtitles else None
-    chapters = load_audiobookshelf_chapters(job) if config.send_chapters else None
-    metadata = build_audiobookshelf_metadata(job)
-    display_title = metadata.get("title") or audio_path.stem
     overwrite_requested = request.form.get("overwrite") == "true" or request.args.get("overwrite") == "true"
 
-    try:
-        client = AudiobookshelfClient(config)
-    except ValueError as exc:
-        job.add_log(f"Audiobookshelf configuration error: {exc}", level="error")
-        service._persist_state()
-        return _panel_response()
-
-    try:
-        existing_items = client.find_existing_items(display_title, folder_id=config.folder_id)
-    except AudiobookshelfUploadError as exc:
-        job.add_log(f"Audiobookshelf lookup failed: {exc}", level="error")
-        service._persist_state()
-        return _panel_response()
-
-    if existing_items and not overwrite_requested:
-        job.add_log(
-            f"Audiobookshelf already contains '{display_title}'. Awaiting overwrite confirmation.",
-            level="warning",
-        )
-        service._persist_state()
-        if request.headers.get("HX-Request"):
-            detail = {
-                "jobId": job.id,
-                "title": display_title,
-                "url": url_for("jobs.send_job_to_audiobookshelf", job_id=job.id),
-                "target": request.headers.get("HX-Target") or "#jobs-panel",
-                "message": f'Audiobookshelf already contains "{display_title}". Overwrite?',
-            }
-            headers = {"HX-Trigger": json.dumps({"audiobookshelf-overwrite-prompt": detail})}
-            return Response("", status=204, headers=headers)
-        return _panel_response()
-
-    if existing_items and overwrite_requested:
+    if not overwrite_requested:
+        from abogen.integrations.audiobookshelf import AudiobookshelfClient, AudiobookshelfUploadError
+        metadata = build_audiobookshelf_metadata(job)
+        display_title = metadata.get("title") or audio_path.stem
         try:
-            client.delete_items(existing_items)
+            existing_items = AudiobookshelfClient(config).find_existing_items(display_title, folder_id=config.folder_id)
         except AudiobookshelfUploadError as exc:
-            job.add_log(f"Audiobookshelf overwrite aborted: {exc}", level="error")
+            job.add_log(f"Audiobookshelf lookup failed: {exc}", level="error")
             service._persist_state()
             return _panel_response()
-        else:
-            job.add_log(
-                f"Removed {len(existing_items)} existing Audiobookshelf item(s) prior to overwrite.",
-                level="info",
-            )
+        if existing_items:
+            job.add_log(f"Audiobookshelf already contains '{display_title}'. Awaiting overwrite confirmation.", level="warning")
+            service._persist_state()
+            if request.headers.get("HX-Request"):
+                detail = {
+                    "jobId": job.id,
+                    "title": display_title,
+                    "url": url_for("jobs.send_job_to_audiobookshelf", job_id=job.id),
+                    "target": request.headers.get("HX-Target") or "#jobs-panel",
+                    "message": f'Audiobookshelf already contains "{display_title}". Overwrite?',
+                }
+                headers = {"HX-Trigger": json.dumps({"audiobookshelf-overwrite-prompt": detail})}
+                return Response("", status=204, headers=headers)
+            return _panel_response()
 
     job.add_log("Audiobookshelf upload triggered manually.", level="info")
+    export_svc = ExportService()
     try:
-        client.upload_audiobook(
+        export_svc.upload_audiobookshelf(
+            job,
             audio_path,
-            metadata=metadata,
-            cover_path=cover_path,
-            chapters=chapters,
-            subtitles=subtitles,
+            existing_paths(job.result.subtitle_paths),
+            load_audiobookshelf_chapters(job) if config.send_chapters else None,
+            build_audiobookshelf_metadata(job),
+            cover_path=_resolve_cover(job, config),
+            config=config,
+            log_callback=lambda msg, lvl="info": job.add_log(msg, level=lvl),
         )
-    except AudiobookshelfUploadError as exc:
-        job.add_log(f"Audiobookshelf upload failed: {exc}", level="error")
     except Exception as exc:
         job.add_log(f"Audiobookshelf integration error: {exc}", level="error")
-    else:
-        job.add_log("Audiobookshelf upload queued.", level="success")
-    finally:
-        service._persist_state()
-
+    service._persist_state()
     return _panel_response()
 
 @jobs_bp.post("/clear-finished")
