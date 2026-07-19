@@ -7,7 +7,7 @@ import base64
 import re
 from abogen.pyqt.queue_manager_gui import QueueManager
 from abogen.pyqt.queued_item import QueuedItem
-from abogen.domain.device import select_device as _select_device
+
 import abogen.hf_tracker as hf_tracker
 import hashlib  # Added for cache path generation
 from PyQt6.QtWidgets import (
@@ -2427,15 +2427,9 @@ class abogen(QWidget):
             self.update_log((gpu_msg, gpu_ok))
             self.update_log("Loading modules...")
 
-            # Determine device based on GPU availability
-            if gpu_ok:
-                device = _select_device()
-            else:
-                device = "cpu"
-
             lang_code = self.selected_lang or "a"
             load_thread = LoadPipelineThread(
-                pipeline_loaded_callback, lang_code=lang_code, device=device
+                pipeline_loaded_callback, lang_code=lang_code, use_gpu=gpu_ok
             )
             load_thread.start()
 
@@ -2873,15 +2867,9 @@ class abogen(QWidget):
             )
             self.loading_movie.start()
 
-        # Determine device based on GPU availability
-        if self.gpu_ok:
-            device = _select_device()
-        else:
-            device = "cpu"
-
         lang = self.selected_lang or "a"
         load_thread = LoadPipelineThread(
-            self._on_pipeline_loaded_for_preview, lang_code=lang, device=device
+            self._on_pipeline_loaded_for_preview, lang_code=lang, use_gpu=self.gpu_ok
         )
         load_thread.start()
 

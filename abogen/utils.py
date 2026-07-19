@@ -530,18 +530,18 @@ def prevent_sleep_end():
 
 
 class LoadPipelineThread(Thread):
-    def __init__(self, callback, lang_code="a", device="cpu"):
+    def __init__(self, callback, lang_code="a", use_gpu=True):
         super().__init__()
         self.callback = callback
         self.lang_code = lang_code
-        self.device = device
+        self.use_gpu = use_gpu
 
     def run(self):
         try:
-            from abogen.tts_plugin.utils import create_pipeline
+            from abogen.domain.pipeline_factory import create_pipeline_for_job
 
-            backend = create_pipeline(
-                "kokoro", lang_code=self.lang_code, device=self.device
+            backend = create_pipeline_for_job(
+                "kokoro", language=self.lang_code, use_gpu=self.use_gpu
             )
             self.callback(backend, None)
         except Exception as e:
