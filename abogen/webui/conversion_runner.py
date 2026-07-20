@@ -539,21 +539,9 @@ def run_conversion_job(job: Job) -> None:
             if not chapter_voice_spec:
                 chapter_voice_spec = base_voice_spec
 
-            chapter_provider, chapter_voice_resolved, chapter_speed, chapter_steps = _resolve_voice_target(
-                chapter_voice_spec, normalized_profiles,
-                job_voice=getattr(job, "voice", "M1"),
-                job_tts_provider=getattr(job, "tts_provider", "kokoro"),
-                job_supertonic_total_steps=getattr(job, "supertonic_total_steps", 5),
-                job_speed=getattr(job, "speed", 1.0),
+            chapter_provider, chapter_voice_resolved, voice_choice, chapter_speed, chapter_steps = resolve_voice_choice(
+                chapter_voice_spec
             )
-            chapter_cache_key = f"{chapter_provider}:{chapter_voice_resolved}" if chapter_voice_resolved else chapter_provider
-            if chapter_provider == "kokoro":
-                voice_choice = voice_cache.get(chapter_cache_key)
-                if voice_choice is None:
-                    kokoro_backend = pipeline_pool.get("kokoro", job.language, job.use_gpu, job=job)
-                    voice_choice = resolve_voice(chapter_voice_resolved, kokoro_backend, job.use_gpu, cache=voice_cache)
-            else:
-                voice_choice = chapter_voice_resolved
 
             chapter_audio_path: Optional[Path] = None
             segments_emitted = 0
@@ -682,26 +670,9 @@ def run_conversion_job(job: Job) -> None:
                         chunk_steps_use = chapter_steps
                         chunk_voice_choice = voice_choice
                     else:
-                        chunk_provider, chunk_voice_resolved, chunk_speed_use, chunk_steps_use = _resolve_voice_target(
-                            chunk_voice_spec, normalized_profiles,
-                            job_voice=getattr(job, "voice", "M1"),
-                            job_tts_provider=getattr(job, "tts_provider", "kokoro"),
-                            job_supertonic_total_steps=getattr(job, "supertonic_total_steps", 5),
-                            job_speed=getattr(job, "speed", 1.0),
+                        chunk_provider, chunk_voice_resolved, chunk_voice_choice, chunk_speed_use, chunk_steps_use = resolve_voice_choice(
+                            chunk_voice_spec
                         )
-                        chunk_cache_key = f"{chunk_provider}:{chunk_voice_resolved}" if chunk_voice_resolved else chunk_provider
-                        if chunk_provider == "kokoro":
-                            chunk_voice_choice = voice_cache.get(chunk_cache_key)
-                            if chunk_voice_choice is None:
-                                kokoro_backend = pipeline_pool.get("kokoro", job.language, job.use_gpu, job=job)
-                                chunk_voice_choice = resolve_voice(
-                                    chunk_voice_resolved,
-                                    kokoro_backend,
-                                    job.use_gpu,
-                                    cache=voice_cache,
-                                )
-                        else:
-                            chunk_voice_choice = chunk_voice_resolved
 
                     chunk_start = current_time
                     emitted = emit_text(
