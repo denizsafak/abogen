@@ -32,7 +32,6 @@ from abogen.utils import (
     get_user_output_path,
 )
 from abogen.voice_profiles import load_profiles, normalize_profile_entry
-from abogen.llm_client import LLMClientError
 from abogen.infrastructure.subtitle_writer import make_subtitle_writer
 from abogen.domain.chapter_titles import (
     simplify_heading_text as _simplify_heading_text,
@@ -118,7 +117,7 @@ from abogen.domain.audio_buffer import (
 )
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
 from abogen.domain.pipeline_factory import PipelinePool
-from abogen.domain.conversion_engine import run_tts_segment_loop, process_and_write_subtitles, SegmentStats
+from abogen.domain.conversion_engine import synthesize_text, process_and_write_subtitles, SegmentStats
 from abogen.domain.voice_loader import VoiceCache, resolve_voice
 from abogen.domain.voice_utils import resolve_voice_target as _resolve_voice_target
 
@@ -422,15 +421,7 @@ def run_conversion_job(job: Job) -> None:
             supertonic_steps_override: Optional[int] = None,
         ) -> int:
             nonlocal processed_chars, current_time
-            if split_pattern is None:
-                split_pattern = tts_context.split_pattern
             source_text = str(text or "")
-            try:
-                normalized = tts_context.normalize(source_text)
-            except LLMClientError as exc:
-                job.add_log(f"LLM normalization failed: {exc}", level="error")
-                raise
-            local_segments = 0
 
             provider = str(tts_provider or getattr(job, "tts_provider", "kokoro") or "kokoro").strip().lower() or "kokoro"
             if provider == "supertonic":
@@ -467,12 +458,12 @@ def run_conversion_job(job: Job) -> None:
                 def _preview(text: str) -> None:
                     job.add_log(f"{prefix}{stats.processed_chars:,}/{job.total_characters or '—'}: {text[:80]}")
 
-                local_segments, accumulated_tokens = run_tts_segment_loop(
-                    text=normalized,
+                local_segments, accumulated_tokens = synthesize_text(
+                    text=source_text,
+                    tts_context=tts_context,
                     backend=backend,
                     voice=resolved_voice,
                     speed=effective_speed,
-                    split_pattern=split_pattern,
                     stats=stats,
                     check_cancel=canceller,
                     on_progress=_on_progress,
