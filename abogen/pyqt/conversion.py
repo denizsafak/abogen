@@ -36,7 +36,7 @@ from abogen.domain.output_paths import (
 )
 from abogen.domain.audio_helpers import build_ffmpeg_command, to_float32
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
-from abogen.domain.conversion_pipeline import tts_segments
+from abogen.domain.conversion_engine import run_tts_segment_loop, SegmentStats, SegmentInfo
 from abogen.domain.audio_buffer import (
     create_silence,
     mix_audio,
@@ -950,41 +950,32 @@ class ConversionThread(QThread):
                                 (f"Warning: Text normalization failed: {exc}", "orange")
                             )
 
-                        for seg in tts_segments(
-                            text_segment,
-                            backend=self.backend,
-                            voice=loaded_voice,
-                            speed=self.speed,
-                            split_pattern=active_split_pattern,
-                            current_time=current_time,
-                        ):
+                        def _qt_check_cancel() -> bool:
                             if self.cancel_requested:
                                 sink_stack.close()
                                 self.conversion_finished.emit("Cancelled", None)
-                                return
-                            current_segment += 1
-                            self.processed_char_count += len(seg.graphemes)
+                                return True
+                            return False
+
+                        def _qt_on_progress(pct: int, etr: str) -> None:
+                            self.processed_char_count = stats.processed_chars
+                            self.progress_updated.emit(pct, etr)
+
+                        def _qt_on_segment(info: SegmentInfo) -> None:
+                            nonlocal chapter_current_time
                             self.log_updated.emit(
-                                f"\n{self.processed_char_count:,}/{self.total_char_count:,}: {seg.graphemes}"
+                                f"\n{stats.processed_chars:,}/{self.total_char_count:,}: {info.graphemes}"
                             )
-
-                            # Write audio
-                            if merge_chapters_at_end and merged_sink:
-                                merged_sink.write(seg.audio)
-                            if chapter_sink:
-                                chapter_sink.write(seg.audio)
-
-                            # Subtitle logic
-                            if self.subtitle_mode != "Disabled" and seg.tokens:
-                                tokens_with_timestamps = list(seg.tokens)
+                            if self.subtitle_mode != "Disabled" and info.tokens:
+                                tokens_with_timestamps = list(info.tokens)
                                 chapter_tokens_with_timestamps = [
                                     {
-                                        "start": chapter_current_time + (t["start"] - seg.chunk_start),
-                                        "end": chapter_current_time + (t["end"] - seg.chunk_start),
+                                        "start": chapter_current_time + (t["start"] - info.chunk_start),
+                                        "end": chapter_current_time + (t["end"] - info.chunk_start),
                                         "text": t["text"],
                                         "whitespace": t["whitespace"],
                                     }
-                                    for t in seg.tokens
+                                    for t in info.tokens
                                 ]
                                 if merge_chapters_at_end:
                                     new_entries = []
@@ -992,7 +983,7 @@ class ConversionThread(QThread):
                                         tokens_with_timestamps,
                                         new_entries,
                                         self.max_subtitle_words,
-                                        fallback_end_time=seg.chunk_start + seg.duration,
+                                        fallback_end_time=info.chunk_start + info.duration,
                                     )
                                     if merged_subtitle_writer:
                                         for start, end, text in new_entries:
@@ -1003,29 +994,37 @@ class ConversionThread(QThread):
                                         chapter_tokens_with_timestamps,
                                         new_chapter_entries,
                                         self.max_subtitle_words,
-                                        fallback_end_time=chapter_current_time + seg.duration,
+                                        fallback_end_time=chapter_current_time + info.duration,
                                     )
                                     if chapter_subtitle_writer:
                                         for start, end, text in new_chapter_entries:
                                             chapter_subtitle_writer.write_entry(start, end, text)
-
-                            # Update timing
-                            if merge_chapters_at_end:
-                                current_time += seg.duration
                             if chapter_sink:
-                                chapter_current_time += seg.duration
+                                chapter_current_time += info.duration
 
-                            # Progress
-                            percent = min(
-                                int(self.processed_char_count / self.total_char_count * 100),
-                                99,
-                            )
-                            etr_str = calc_etr_str(
-                                time.time() - self.etr_start_time,
-                                self.processed_char_count,
-                                self.total_char_count,
-                            )
-                            self.progress_updated.emit(percent, etr_str)
+                        stats = SegmentStats(
+                            processed_chars=self.processed_char_count,
+                            current_time=current_time,
+                            etr_start_time=self.etr_start_time,
+                            total_characters=self.total_char_count,
+                        )
+
+                        run_tts_segment_loop(
+                            text=text_segment,
+                            backend=self.backend,
+                            voice=loaded_voice,
+                            speed=self.speed,
+                            split_pattern=active_split_pattern,
+                            stats=stats,
+                            check_cancel=_qt_check_cancel,
+                            on_progress=_qt_on_progress,
+                            chapter_sink=chapter_sink,
+                            audio_sink=merged_sink if merge_chapters_at_end else None,
+                            on_segment=_qt_on_segment,
+                        )
+
+                        self.processed_char_count = stats.processed_chars
+                        current_time = stats.current_time
 
                 # Add silence between chapters for merged output (except after the last chapter)
                 if merge_chapters_at_end and chapter_idx < total_chapters:

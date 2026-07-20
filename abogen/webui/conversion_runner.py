@@ -106,7 +106,7 @@ from abogen.domain.output_paths import (
 from abogen.domain.device import select_device as _select_device
 from abogen.domain.split_pattern import get_split_pattern
 from abogen.domain.progress import ProgressTracker, calc_etr_str
-from abogen.domain.subtitle_generation import process_subtitle_tokens
+
 from abogen.domain.audio_helpers import (
     build_ffmpeg_command as _build_ffmpeg_command,
     to_float32 as _to_float32,
@@ -118,7 +118,7 @@ from abogen.domain.audio_buffer import (
 )
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
 from abogen.domain.pipeline_factory import PipelinePool
-from abogen.domain.conversion_pipeline import tts_segments
+from abogen.domain.conversion_engine import run_tts_segment_loop, process_and_write_subtitles, SegmentStats
 from abogen.domain.voice_utils import resolve_voice_target as _resolve_voice_target
 
 
@@ -434,59 +434,56 @@ def run_conversion_job(job: Job) -> None:
                 effective_speed = float(speed_override if speed_override is not None else job.speed)
 
             try:
-                accumulated_tokens: List[dict] = []
+                stats = SegmentStats(
+                    processed_chars=processed_chars,
+                    current_time=current_time,
+                    etr_start_time=etr_start_time,
+                    total_characters=job.total_characters or 0,
+                )
+                prefix = f"{preview_prefix} · " if preview_prefix else ""
 
-                for seg in tts_segments(
-                    normalized,
+                def _on_progress(pct: int, etr: str) -> None:
+                    nonlocal processed_chars
+                    processed_chars = stats.processed_chars
+                    job.processed_characters = processed_chars
+                    if stats.total_characters:
+                        job.progress = min(processed_chars / stats.total_characters, 0.999)
+                    else:
+                        job.progress = 0.0 if processed_chars == 0 else 0.999
+                    job.etr_str = etr
+
+                def _preview(text: str) -> None:
+                    job.add_log(f"{prefix}{stats.processed_chars:,}/{job.total_characters or '—'}: {text[:80]}")
+
+                local_segments, accumulated_tokens = run_tts_segment_loop(
+                    text=normalized,
                     backend=backend,
                     voice=resolved_voice,
                     speed=effective_speed,
                     split_pattern=split_pattern,
-                    current_time=current_time,
-                ):
-                    canceller()
-                    local_segments += 1
-                    processed_chars += len(seg.graphemes)
-                    job.processed_characters = processed_chars
-                    if job.total_characters:
-                        job.progress = min(processed_chars / job.total_characters, 0.999)
-                        job.etr_str = calc_etr_str(
-                            time.time() - etr_start_time,
-                            processed_chars,
-                            job.total_characters,
-                        )
-                    else:
-                        job.progress = 0.0 if processed_chars == 0 else 0.999
-
-                    preview_text = seg.graphemes or "[silence]"
-                    prefix = f"{preview_prefix} · " if preview_prefix else ""
-                    job.add_log(f"{prefix}{processed_chars:,}/{job.total_characters or '—'}: {preview_text[:80]}")
-
-                    if chapter_sink:
-                        chapter_sink.write(seg.audio)
-                    if audio_sink:
-                        audio_sink.write(seg.audio)
-
-                    if subtitle_writer and audio_sink:
-                        accumulated_tokens.extend(seg.tokens)
-
-                    if audio_sink:
-                        current_time += seg.duration
+                    stats=stats,
+                    check_cancel=canceller,
+                    on_progress=_on_progress,
+                    chapter_sink=chapter_sink,
+                    audio_sink=audio_sink,
+                    preview_callback=_preview,
+                    subtitle_mode=job.subtitle_mode if (subtitle_writer and audio_sink) else "Disabled",
+                    max_subtitle_words=job.max_subtitle_words,
+                    lang_code=job.language,
+                    use_spacy_segmentation=job.subtitle_mode not in ("Disabled", "Line"),
+                )
+                current_time = stats.current_time
 
                 if subtitle_writer and audio_sink and accumulated_tokens:
-                    _use_spacy = job.subtitle_mode not in ("Disabled", "Line")
-                    new_entries: List[tuple] = []
-                    process_subtitle_tokens(
+                    process_and_write_subtitles(
                         accumulated_tokens,
-                        new_entries,
-                        job.max_subtitle_words,
-                        job.subtitle_mode,
-                        job.language,
-                        use_spacy_segmentation=_use_spacy,
+                        subtitle_writer,
+                        subtitle_mode=job.subtitle_mode,
+                        max_subtitle_words=job.max_subtitle_words,
+                        lang_code=job.language,
+                        use_spacy_segmentation=job.subtitle_mode not in ("Disabled", "Line"),
                         fallback_end_time=current_time,
                     )
-                    for start, end, text in new_entries:
-                        subtitle_writer.write_entry(start=start, end=end, text=text)
 
             except OverflowError as exc:
                 job.add_log(
