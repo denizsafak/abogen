@@ -420,6 +420,18 @@ def all_settings_defaults() -> Dict[str, Any]:
     return result
 
 
+def load_settings() -> Dict[str, Any]:
+    """Load and normalize settings from config file."""
+    from abogen.utils import load_config
+    defaults = settings_defaults()
+    cfg = load_config() or {}
+    settings: Dict[str, Any] = {}
+    for key, default in defaults.items():
+        raw_value = cfg.get(key, default)
+        settings[key] = normalize_setting_value(key, raw_value, defaults)
+    return settings
+
+
 # ── Normalization (delegates to Setting.coerce) ──────────────────────
 
 def normalize_setting_value(key: str, value: Any, defaults: Dict[str, Any]) -> Any:

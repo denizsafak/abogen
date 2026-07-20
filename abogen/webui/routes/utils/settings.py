@@ -5,27 +5,11 @@ from abogen.integrations.calibre_opds import CalibreOPDSClient
 from abogen.integrations.audiobookshelf import AudiobookshelfConfig
 from abogen.utils import load_config, save_config
 from abogen.domain.settings_core import (
-    SAVE_MODE_LABELS,
-    LEGACY_SAVE_MODE_MAP,
     CHUNK_LEVEL_OPTIONS,
     CHUNK_LEVEL_VALUES,
     DEFAULT_ANALYSIS_THRESHOLD,
-    BOOLEAN_SETTINGS,
-    FLOAT_SETTINGS,
-    INT_SETTINGS,
-    _NORMALIZATION_BOOLEAN_KEYS,
-    _NORMALIZATION_STRING_KEYS,
     coerce_bool,
-    coerce_float,
-    coerce_int,
-    split_profile_spec,
-    normalize_save_mode,
-    normalize_setting_value,
-    has_output_override,
-    settings_defaults,
     integration_defaults,
-    llm_ready,
-    render_prompt_template,
 )
 
 _NORMALIZATION_GROUPS = [
@@ -70,16 +54,6 @@ _APOSTROPHE_MODE_OPTIONS = [
 _DEFAULT_ANALYSIS_THRESHOLD = DEFAULT_ANALYSIS_THRESHOLD
 _CHUNK_LEVEL_OPTIONS = CHUNK_LEVEL_OPTIONS
 _CHUNK_LEVEL_VALUES = CHUNK_LEVEL_VALUES
-
-
-def load_settings() -> Dict[str, Any]:
-    defaults = settings_defaults()
-    cfg = load_config() or {}
-    settings: Dict[str, Any] = {}
-    for key, default in defaults.items():
-        raw_value = cfg.get(key, default)
-        settings[key] = normalize_setting_value(key, raw_value, defaults)
-    return settings
 
 
 def load_integration_settings() -> Dict[str, Dict[str, Any]]:
