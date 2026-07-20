@@ -21,7 +21,7 @@ from abogen.constants import (
     SUPPORTED_SOUND_FORMATS,
     SUPPORTED_SUBTITLE_FORMATS,
 )
-from abogen.infrastructure.subtitle_writer import create_subtitle_writer
+from abogen.infrastructure.subtitle_writer import make_subtitle_writer, resolve_subtitle_format
 from abogen.domain.split_pattern import get_split_pattern
 from abogen.domain.subtitle_processor import (
     parse_subtitle_file,
@@ -63,17 +63,6 @@ import abogen.hf_tracker as hf_tracker
 import static_ffmpeg
 import threading  # for efficient waiting
 import subprocess
-
-
-def _subtitle_alignment_from_format(subtitle_format: str) -> str:
-    """Map PyQt subtitle format string to SubtitleAlignment value."""
-    if subtitle_format in ("ass_centered_wide", "ass_centered_narrow"):
-        if subtitle_format == "ass_centered_narrow":
-            return "center_narrow"
-        return "center"
-    if subtitle_format in ("ass_narrow",):
-        return "narrow"
-    return "left"
 
 
 
@@ -743,19 +732,18 @@ class ConversionThread(QThread):
                 merged_subtitle_path = None
                 if self.subtitle_mode != "Disabled":
                     subtitle_format = getattr(self, "subtitle_format", "srt")
-                    file_extension = "ass" if "ass" in subtitle_format else "srt"
+                    extension, _ = resolve_subtitle_format(subtitle_format, self.subtitle_mode)
                     merged_subtitle_path = (
-                        os.path.splitext(merged_out_path)[0] + f".{file_extension}"
+                        os.path.splitext(merged_out_path)[0] + f".{extension}"
                     )
-                    alignment = _subtitle_alignment_from_format(subtitle_format)
-                    merged_subtitle_writer = create_subtitle_writer(
+                    merged_subtitle_writer = make_subtitle_writer(
                         Path(merged_subtitle_path),
-                        file_extension,
+                        subtitle_format,
                         self.subtitle_mode,
-                        alignment=alignment,
                         max_words=self.max_subtitle_words,
                     )
-                    merged_subtitle_writer.open()
+                    if merged_subtitle_writer:
+                        merged_subtitle_writer.open()
                 else:
                     merged_subtitle_path = None
                     merged_subtitle_writer = None
@@ -817,19 +805,18 @@ class ConversionThread(QThread):
                         continue
                     if self.subtitle_mode != "Disabled":
                         subtitle_format = getattr(self, "subtitle_format", "srt")
-                        file_extension = "ass" if "ass" in subtitle_format else "srt"
+                        extension, _ = resolve_subtitle_format(subtitle_format, self.subtitle_mode)
                         chapter_subtitle_path = os.path.join(
-                            chapters_out_dir, f"{chapter_filename}.{file_extension}"
+                            chapters_out_dir, f"{chapter_filename}.{extension}"
                         )
-                        alignment = _subtitle_alignment_from_format(subtitle_format)
-                        chapter_subtitle_writer = create_subtitle_writer(
+                        chapter_subtitle_writer = make_subtitle_writer(
                             Path(chapter_subtitle_path),
-                            file_extension,
+                            subtitle_format,
                             self.subtitle_mode,
-                            alignment=alignment,
                             max_words=self.max_subtitle_words,
                         )
-                        chapter_subtitle_writer.open()
+                        if chapter_subtitle_writer:
+                            chapter_subtitle_writer.open()
                     else:
                         chapter_subtitle_writer = None
                 else:
@@ -1189,17 +1176,16 @@ class ConversionThread(QThread):
             subtitle_writer = None
             subtitle_path = None
             subtitle_format = getattr(self, "subtitle_format", "srt")
-            file_extension = "ass" if "ass" in subtitle_format else "srt"
-            subtitle_path = f"{base_filepath_no_ext}.{file_extension}"
-            alignment_str = _subtitle_alignment_from_format(subtitle_format)
-            subtitle_writer = create_subtitle_writer(
+            extension, _ = resolve_subtitle_format(subtitle_format, self.subtitle_mode)
+            subtitle_path = f"{base_filepath_no_ext}.{extension}"
+            subtitle_writer = make_subtitle_writer(
                 Path(subtitle_path),
-                file_extension,
+                subtitle_format,
                 self.subtitle_mode,
-                alignment=alignment_str,
                 max_words=self.max_subtitle_words,
             )
-            subtitle_writer.open()
+            if subtitle_writer:
+                subtitle_writer.open()
 
             # Load voice
             loaded_voice = resolve_voice(self.voice, tts, self.use_gpu)

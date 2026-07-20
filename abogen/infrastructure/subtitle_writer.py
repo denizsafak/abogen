@@ -272,14 +272,14 @@ def create_subtitle_writer(
     fmt = SubtitleFormat(format.lower())
     mode = SubtitleMode(mode)
     align = SubtitleAlignment(alignment.lower())
-    
+
     config = SubtitleConfig(
         format=fmt,
         mode=mode,
         alignment=align,
         max_words=max_words,
     )
-    
+
     if fmt == SubtitleFormat.SRT:
         return SrtWriter(path, config)
     elif fmt == SubtitleFormat.VTT:
@@ -288,6 +288,71 @@ def create_subtitle_writer(
         return AssWriter(path, config)
     else:
         raise ValueError(f"Unsupported subtitle format: {format}")
+
+
+def resolve_subtitle_format(
+    subtitle_format: str | None,
+    subtitle_mode: str,
+) -> tuple[str, str]:
+    """Resolve a subtitle_format setting string to (file_extension, alignment).
+
+    Handles the PyQt convention where format strings encode alignment
+    (e.g. ``"ass_centered_narrow"`` → extension ``"ass"``, alignment
+    ``"center_narrow"``).
+
+    Also enforces that ``"Sentence + Highlighting"`` mode requires ASS.
+
+    Returns:
+        Tuple of (file_extension, alignment) suitable for
+        :func:`create_subtitle_writer`.
+    """
+    fmt = (subtitle_format or "srt").lower()
+
+    if subtitle_mode == "Sentence + Highlighting" and fmt == "srt":
+        fmt = "ass"
+
+    if "ass" in fmt:
+        extension = "ass"
+        if "centered_narrow" in fmt:
+            alignment = "center_narrow"
+        elif "centered" in fmt:
+            alignment = "center"
+        elif "narrow" in fmt:
+            alignment = "narrow"
+        else:
+            alignment = "left"
+    else:
+        extension = fmt if fmt in ("srt", "vtt") else "srt"
+        alignment = "left"
+
+    return extension, alignment
+
+
+def make_subtitle_writer(
+    audio_path: Path,
+    subtitle_format: str | None,
+    subtitle_mode: str,
+    max_words: int = 50,
+) -> SubtitleWriter | None:
+    """Convenience: resolve format and create a writer, or return None if disabled.
+
+    Returns ``None`` when ``subtitle_mode`` is ``"Disabled"`` or the
+    format is unsupported.
+    """
+    if subtitle_mode == "Disabled":
+        return None
+
+    extension, alignment = resolve_subtitle_format(subtitle_format, subtitle_mode)
+    try:
+        return create_subtitle_writer(
+            audio_path.with_suffix(f".{extension}"),
+            extension,
+            subtitle_mode,
+            alignment=alignment,
+            max_words=max_words,
+        )
+    except (ValueError, KeyError):
+        return None
 
 
 __all__ = [
@@ -300,4 +365,6 @@ __all__ = [
     "VttWriter",
     "AssWriter",
     "create_subtitle_writer",
+    "resolve_subtitle_format",
+    "make_subtitle_writer",
 ]

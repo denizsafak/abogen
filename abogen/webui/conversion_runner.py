@@ -33,7 +33,7 @@ from abogen.utils import (
 )
 from abogen.voice_profiles import load_profiles, normalize_profile_entry
 from abogen.llm_client import LLMClientError
-from abogen.infrastructure.subtitle_writer import create_subtitle_writer
+from abogen.infrastructure.subtitle_writer import make_subtitle_writer
 from abogen.domain.chapter_titles import (
     simplify_heading_text as _simplify_heading_text,
     headings_equivalent as _headings_equivalent,
@@ -338,7 +338,18 @@ def run_conversion_job(job: Job) -> None:
                     cancel_check=lambda: job.cancel_requested,
                 )
             )
-            subtitle_writer = _create_subtitle_writer(job, audio_path)
+            subtitle_writer = make_subtitle_writer(
+                audio_path,
+                job.subtitle_format,
+                job.subtitle_mode or "Line",
+                max_words=job.max_subtitle_words,
+            )
+            if subtitle_writer is None and job.subtitle_mode != "Disabled":
+                fmt = (job.subtitle_format or "srt").lower()
+                if job.subtitle_mode == "Sentence + Highlighting" and fmt == "srt":
+                    job.add_log("Highlighting requires ASS subtitles. Switching format.", level="warning")
+                else:
+                    job.add_log(f"Unsupported subtitle format '{job.subtitle_format}'. Skipping.", level="warning")
             job.result.audio_path = audio_path
             if subtitle_writer:
                 job.result.subtitle_paths.append(subtitle_writer.path)
@@ -1062,25 +1073,6 @@ def _resolve_voice(pipeline, voice_spec: str, use_gpu: bool):
         return get_new_voice(pipeline, voice_spec, use_gpu)
     return voice_spec
 
-
-def _create_subtitle_writer(job: Job, audio_path: Path):
-    if job.subtitle_mode == "Disabled":
-        return None
-
-    fmt = (job.subtitle_format or "srt").lower()
-    if job.subtitle_mode == "Sentence + Highlighting" and fmt == "srt":
-        job.add_log("Highlighting requires ASS subtitles. Switching format.", level="warning")
-        fmt = "ass"
-
-    try:
-        return create_subtitle_writer(
-            audio_path.with_suffix(f".{fmt}"),
-            fmt,
-            job.subtitle_mode or "Line",
-        )
-    except (ValueError, KeyError):
-        job.add_log(f"Unsupported subtitle format '{job.subtitle_format}'. Skipping.", level="warning")
-        return None
 
 
 def _make_canceller(job: Job) -> Callable[[], None]:
