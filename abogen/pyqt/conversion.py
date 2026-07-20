@@ -47,7 +47,7 @@ from abogen.domain.audio_buffer import (
 from abogen.domain.subtitle_generation import process_subtitle_tokens
 from abogen.domain.voice_loader import VoiceCache, load_voice_cached, resolve_voice
 from abogen.domain.progress import calc_etr_str
-from abogen.domain.normalization import prepare_text_for_tts
+from abogen.domain.normalization import TTSContext
 from abogen.domain.pronunciation import (
     compile_pronunciation_rules,
     compile_heteronym_sentence_rules,
@@ -566,15 +566,19 @@ class ConversionThread(QThread):
                 )
 
             # --- Compile normalization rules (heteronym + pronunciation) ---
+            from abogen.domain.normalization import TTSContext
             pronunciation_overrides = merge_pronunciation_overrides(
                 getattr(self, "pronunciation_overrides", None),
                 getattr(self, "manual_overrides", None),
             )
-            self._pronunciation_rules = compile_pronunciation_rules(pronunciation_overrides)
-            self._heteronym_rules = compile_heteronym_sentence_rules(
-                getattr(self, "heteronym_overrides", None)
+            self._tts_context = TTSContext(
+                split_pattern=self.split_pattern,
+                pronunciation_rules=compile_pronunciation_rules(pronunciation_overrides),
+                heteronym_rules=compile_heteronym_sentence_rules(
+                    getattr(self, "heteronym_overrides", None)
+                ),
+                normalization_overrides=getattr(self, "normalization_overrides", None),
             )
-            self._usage_counter = {}
 
             # --- Chapter splitting logic ---
             chapters = parse_chapters_from_text(text, clean=False)
@@ -980,13 +984,7 @@ class ConversionThread(QThread):
                     for text_segment in text_segments:
                         # Normalize text before TTS
                         try:
-                            text_segment = prepare_text_for_tts(
-                                text_segment,
-                                heteronym_rules=getattr(self, "_heteronym_rules", None),
-                                pronunciation_rules=getattr(self, "_pronunciation_rules", None),
-                                normalization_overrides=getattr(self, "normalization_overrides", None),
-                                usage_counter=getattr(self, "_usage_counter", None),
-                            )
+                            text_segment = self._tts_context.normalize(text_segment)
                         except Exception as exc:
                             self.log_updated.emit(
                                 (f"Warning: Text normalization failed: {exc}", "orange")

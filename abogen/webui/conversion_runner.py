@@ -70,7 +70,7 @@ from abogen.domain.pronunciation import (
     apply_pronunciation_rules as _apply_pronunciation_rules,
     merge_pronunciation_overrides as _merge_pronunciation_overrides,
 )
-from abogen.domain.normalization import prepare_text_for_tts
+from abogen.domain.normalization import TTSContext
 from abogen.domain.voice_resolution import (
     spec_to_voice_ids as _spec_to_voice_ids,
     job_voice_fallback as _job_voice_fallback,
@@ -242,6 +242,14 @@ def run_conversion_job(job: Job) -> None:
                 f"Applying {count} pronunciation override{'s' if count != 1 else ''} during conversion.",
                 level="debug",
             )
+
+        tts_context = TTSContext(
+            split_pattern=job_split_pattern,
+            pronunciation_rules=pronunciation_rules,
+            heteronym_rules=heteronym_sentence_rules,
+            normalization_overrides=getattr(job, "normalization_overrides", None),
+            usage_counter=usage_counter,
+        )
         for override_entry in pronunciation_overrides or []:
             if not isinstance(override_entry, Mapping):
                 continue
@@ -415,16 +423,10 @@ def run_conversion_job(job: Job) -> None:
         ) -> int:
             nonlocal processed_chars, current_time
             if split_pattern is None:
-                split_pattern = job_split_pattern
+                split_pattern = tts_context.split_pattern
             source_text = str(text or "")
             try:
-                normalized = prepare_text_for_tts(
-                    source_text,
-                    heteronym_rules=heteronym_sentence_rules,
-                    pronunciation_rules=pronunciation_rules,
-                    normalization_overrides=getattr(job, "normalization_overrides", None),
-                    usage_counter=usage_counter,
-                )
+                normalized = tts_context.normalize(source_text)
             except LLMClientError as exc:
                 job.add_log(f"LLM normalization failed: {exc}", level="error")
                 raise
@@ -890,8 +892,8 @@ def run_conversion_job(job: Job) -> None:
             "generate_epub3": job.generate_epub3,
         }
 
-        if usage_counter:
-            _record_override_usage(job, usage_counter, override_token_map)
+        if tts_context.usage_counter:
+            _record_override_usage(job, tts_context.usage_counter, override_token_map)
 
         if metadata_dir:
             metadata_dir.mkdir(parents=True, exist_ok=True)

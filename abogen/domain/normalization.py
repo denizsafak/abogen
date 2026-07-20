@@ -5,10 +5,14 @@ and the comprehensive ``prepare_text_for_tts`` that chains all three normalizati
 stages used during conversion: heteronym rules → pronunciation rules → pipeline
 normalization.  The latter is the single entry point that both the Web UI and
 PyQt Desktop GUI should use.
+
+Also provides ``TTSContext`` — a dataclass bundling all pre-compiled normalization
+resources so they can be created once and passed as a single object.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional
 
 from abogen.kokoro_text_normalization import (
@@ -22,6 +26,31 @@ from abogen.normalization_settings import (
 )
 
 _BASE_APOSTROPHE_CONFIG = ApostropheConfig()
+
+
+@dataclass
+class TTSContext:
+    """Bundles pre-compiled normalization resources for TTS processing.
+
+    Created once per conversion job and passed to ``prepare_text_for_tts``
+    instead of threading 5 separate parameters.
+    """
+
+    split_pattern: str = r"(?<=[.!?\-])\s+"
+    pronunciation_rules: Optional[List[Dict[str, Any]]] = None
+    heteronym_rules: Optional[List[Dict[str, Any]]] = None
+    normalization_overrides: Optional[Mapping[str, Any]] = None
+    usage_counter: Dict[str, int] = field(default_factory=dict)
+
+    def normalize(self, text: str) -> str:
+        """Shorthand: normalize text using this context's compiled rules."""
+        return prepare_text_for_tts(
+            text,
+            heteronym_rules=self.heteronym_rules,
+            pronunciation_rules=self.pronunciation_rules,
+            normalization_overrides=self.normalization_overrides,
+            usage_counter=self.usage_counter,
+        )
 
 
 def normalize_text_for_pipeline(
