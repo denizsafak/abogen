@@ -55,8 +55,7 @@ from abogen.domain.pronunciation import (
 )
 from abogen.domain.metadata_extraction import (
     extract_metadata_and_build_args,
-    extract_metadata_from_text,
-    read_text_for_metadata,
+    extract_metadata_for_file,
 )
 from abogen.domain.text_chapters import parse_chapters_from_text
 from abogen.infrastructure.exporters import ExportService
@@ -65,22 +64,6 @@ import static_ffmpeg
 import threading  # for efficient waiting
 import subprocess
 
-
-
-def _extract_metadata_dict(file_name: str, is_direct_text: bool) -> dict:
-    """Extract metadata dict from file for intro/outro text building."""
-    try:
-        from abogen.domain.metadata_extraction import read_text_for_metadata, extract_metadata_from_text
-        text = read_text_for_metadata(
-            file_path=file_name,
-            is_direct_text=is_direct_text,
-            direct_text=file_name if is_direct_text else None,
-        )
-        if text:
-            return extract_metadata_from_text(text) or {}
-    except Exception:
-        pass
-    return {}
 
 
 # Configuration constants
@@ -776,7 +759,7 @@ class ConversionThread(QThread):
             intro_emitted = False
             if merge_chapters_at_end:
                 intro_spec = resolve_intro(
-                    _extract_metadata_dict(self.file_name, self.is_direct_text),
+                    extract_metadata_for_file(self.file_name, self.is_direct_text),
                     os.path.basename(self.file_name) if self.file_name else "",
                     getattr(self, "read_title_intro", False),
                     self.voice, self.voice, list(self.voice_cache._cache.keys()),
@@ -1101,7 +1084,7 @@ class ConversionThread(QThread):
             # --- Outro synthesis ---
             if merge_chapters_at_end:
                 outro_spec = resolve_outro(
-                    _extract_metadata_dict(self.file_name, self.is_direct_text),
+                    extract_metadata_for_file(self.file_name, self.is_direct_text),
                     os.path.basename(self.file_name) if self.file_name else "",
                     getattr(self, "read_closing_outro", True),
                     self.voice, self.voice, list(self.voice_cache._cache.keys()),

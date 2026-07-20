@@ -195,6 +195,28 @@ def read_text_for_metadata(
         return ""
 
 
+def extract_metadata_for_file(
+    file_path: str,
+    is_direct_text: bool = False,
+) -> Dict[str, Optional[str]]:
+    """Extract metadata dict from a file or direct text.
+
+    Convenience function combining read_text_for_metadata + extract_metadata_from_text.
+    Returns empty dict on any error.
+    """
+    try:
+        text = read_text_for_metadata(
+            file_path=file_path,
+            is_direct_text=is_direct_text,
+            direct_text=file_path if is_direct_text else None,
+        )
+        if text:
+            return extract_metadata_from_text(text) or {}
+    except Exception:
+        pass
+    return {}
+
+
 def format_metadata_tags(
     metadata: Dict[str, Any],
     filename: str,
