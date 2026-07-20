@@ -1011,10 +1011,13 @@ class ConversionThread(QThread):
                                 ]
                                 if merge_chapters_at_end:
                                     new_entries = []
-                                    self._process_subtitle_tokens(
+                                    process_subtitle_tokens(
                                         tokens_with_timestamps,
                                         new_entries,
                                         self.max_subtitle_words,
+                                        self.subtitle_mode,
+                                        self.lang_code,
+                                        use_spacy_segmentation=getattr(self, "use_spacy_segmentation", False),
                                         fallback_end_time=info.chunk_start + info.duration,
                                     )
                                     if merged_subtitle_writer:
@@ -1022,10 +1025,13 @@ class ConversionThread(QThread):
                                             merged_subtitle_writer.write_entry(start, end, text)
                                 if chapter_sink:
                                     new_chapter_entries = []
-                                    self._process_subtitle_tokens(
+                                    process_subtitle_tokens(
                                         chapter_tokens_with_timestamps,
                                         new_chapter_entries,
                                         self.max_subtitle_words,
+                                        self.subtitle_mode,
+                                        self.lang_code,
+                                        use_spacy_segmentation=getattr(self, "use_spacy_segmentation", False),
                                         fallback_end_time=chapter_current_time + info.duration,
                                     )
                                     if chapter_subtitle_writer:
@@ -1423,25 +1429,6 @@ class ConversionThread(QThread):
                 (f"Warning: Metadata extraction error: {e}", "orange")
             )
             return [], None
-
-    def _process_subtitle_tokens(
-        self,
-        tokens_with_timestamps,
-        subtitle_entries,
-        max_subtitle_words,
-        fallback_end_time=None,
-    ):
-        """Helper function to process subtitle tokens according to the subtitle mode"""
-        process_subtitle_tokens(
-            tokens_with_timestamps=tokens_with_timestamps,
-            subtitle_entries=subtitle_entries,
-            max_subtitle_words=max_subtitle_words,
-            subtitle_mode=self.subtitle_mode,
-            lang_code=self.lang_code,
-            use_spacy_segmentation=getattr(self, "use_spacy_segmentation", False),
-            fallback_end_time=fallback_end_time,
-        )
-        return
 
     def cancel(self):
         self.cancel_requested = True
