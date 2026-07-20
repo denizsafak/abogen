@@ -695,26 +695,12 @@ class ConversionThread(QThread):
                     )
                 )
             # Find a unique suffix for both folder and merged file, always
-            counter = 1
             allowed_exts = set(SUPPORTED_SOUND_FORMATS + SUPPORTED_SUBTITLE_FORMATS)
-            while True:
-                suffix = f"_{counter}" if counter > 1 else ""
-                chapters_out_dir_candidate = os.path.join(
-                    parent_dir, f"{sanitized_base_name}{suffix}_chapters"
-                )
-                # Only check for files with allowed extensions (extension without dot, case-insensitive)
-                # Use generator expression to avoid processing all files upfront
-                file_parts = (
-                    os.path.splitext(fname) for fname in os.listdir(parent_dir)
-                )
-                clash = any(
-                    name == f"{sanitized_base_name}{suffix}"
-                    and ext[1:].lower() in allowed_exts
-                    for name, ext in file_parts
-                )
-                if not os.path.exists(chapters_out_dir_candidate) and not clash:
-                    break
-                counter += 1
+            unique_base = resolve_unique_path(
+                parent_dir, sanitized_base_name, "", allowed_extensions=allowed_exts,
+            )
+            suffix = os.path.basename(unique_base)[len(sanitized_base_name):]
+            chapters_out_dir_candidate = f"{unique_base}_chapters"
             if save_chapters_separately and total_chapters > 1:
                 separate_chapters_format = getattr(
                     self, "separate_chapters_format", "wav"
