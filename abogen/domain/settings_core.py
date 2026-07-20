@@ -39,6 +39,7 @@ class Setting:
         valid_values: Allowed values for str types (None = any).
         gui_only: True if only used by PyQt Desktop GUI.
         web_only: True if only used by Web UI.
+        normalizer: Optional callable(value, default) -> normalized_value.
         description: Human-readable explanation.
     """
     key: str
@@ -49,6 +50,7 @@ class Setting:
     valid_values: tuple[Any, ...] | None = None
     gui_only: bool = False
     web_only: bool = False
+    normalizer: Callable | None = None
     description: str = ""
 
     def coerce(self, value: Any, fallback: Any | None = None) -> Any:
@@ -96,6 +98,59 @@ class Setting:
         return value
 
 
+# ── Normalizers (used by Setting.normalizer) ─────────────────────────
+
+def _norm_save_mode(value: Any, default: str) -> str:
+    if isinstance(value, str):
+        if value in SAVE_MODE_LABELS:
+            return value
+        if value in LEGACY_SAVE_MODE_MAP:
+            return LEGACY_SAVE_MODE_MAP[value]
+    return default
+
+
+def _norm_voice_spec(value: Any, default: str) -> str:
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return default
+        spec, profile_name = split_profile_spec(text)
+        if profile_name:
+            return f"speaker:{profile_name}"
+        return spec
+    return default
+
+
+def _norm_speaker_spec(value: Any, default: str) -> str:
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return ""
+        spec, profile_name = split_profile_spec(text)
+        if profile_name:
+            return f"speaker:{profile_name}"
+        return spec
+    return ""
+
+
+def _norm_language_list(value: Any, default: list) -> list:
+    if isinstance(value, (list, tuple, set)):
+        return [code for code in value if isinstance(code, str) and code in LANGUAGE_DESCRIPTIONS]
+    if isinstance(value, str):
+        parts = [item.strip().lower() for item in value.split(",") if item.strip()]
+        return [code for code in parts if code in LANGUAGE_DESCRIPTIONS]
+    return default
+
+
+def _norm_stripped_str(value: Any, default: str) -> str:
+    return str(value or "").strip()
+
+
+def _norm_prompt(value: Any, default: str) -> str:
+    candidate = str(value or "").strip()
+    return candidate if candidate else default
+
+
 # ── Registry ─────────────────────────────────────────────────────────
 
 def _default_output_format() -> str:
@@ -119,6 +174,7 @@ SETTINGS_REGISTRY: list[Setting] = [
             valid_values=tuple(item[0] for item in SUBTITLE_FORMATS),
             description="Subtitle file format"),
     Setting("save_mode", str, _default_save_mode,
+            normalizer=_norm_save_mode,
             description="Where to save output files"),
     Setting("separate_chapters_format", str, "wav",
             valid_values=("wav", "flac", "mp3", "opus"),
@@ -129,8 +185,10 @@ SETTINGS_REGISTRY: list[Setting] = [
 
     # ── Voice ────────────────────────────────────────────────────
     Setting("default_speaker", str, "",
+            normalizer=_norm_speaker_spec,
             description="Default speaker name"),
     Setting("default_voice", str, lambda: get_default_voice("kokoro"),
+            normalizer=_norm_voice_spec,
             description="Default TTS voice"),
     Setting("speed", float, 1.0, min_value=0.5, max_value=3.0,
             gui_only=True,
@@ -180,19 +238,24 @@ SETTINGS_REGISTRY: list[Setting] = [
     Setting("speaker_pronunciation_sentence", str, "This is {{name}} speaking.",
             description="Template for pronunciation samples"),
     Setting("speaker_random_languages", list, [],
+            normalizer=_norm_language_list,
             description="Languages for random speaker assignment"),
 
     # ── LLM ──────────────────────────────────────────────────────
     Setting("llm_base_url", str, lambda: _default_llm("llm_base_url"),
+            normalizer=_norm_stripped_str,
             description="LLM API base URL"),
     Setting("llm_api_key", str, lambda: _default_llm("llm_api_key"),
+            normalizer=_norm_stripped_str,
             description="LLM API key"),
     Setting("llm_model", str, lambda: _default_llm("llm_model"),
+            normalizer=_norm_stripped_str,
             description="LLM model name"),
     Setting("llm_timeout", float, lambda: _default_llm("llm_timeout") or 30.0,
             min_value=1.0,
             description="LLM request timeout"),
     Setting("llm_prompt", str, lambda: _default_llm("llm_prompt") or DEFAULT_LLM_PROMPT,
+            normalizer=_norm_prompt,
             description="LLM normalization prompt"),
     Setting("llm_context_mode", str, lambda: _default_llm("llm_context_mode") or "sentence",
             valid_values=("sentence",),
@@ -365,64 +428,12 @@ def normalize_setting_value(key: str, value: Any, defaults: Dict[str, Any]) -> A
     if setting is None:
         return value if value is not None else defaults.get(key)
 
-    # Special handling for keys with complex normalization
-    if key == "save_mode":
-        return _normalize_save_mode(value, defaults[key])
-    if key == "default_voice":
-        return _normalize_default_voice(value, defaults[key])
-    if key == "default_speaker":
-        return _normalize_default_speaker(value)
-    if key == "speaker_random_languages":
-        return _normalize_language_list(value, defaults.get(key, []))
-    if key in {"llm_base_url", "llm_api_key", "llm_model"}:
-        return str(value or "").strip()
-    if key == "llm_prompt":
-        candidate = str(value or "").strip()
-        return candidate if candidate else defaults[key]
+    fallback = defaults.get(key, setting.default() if callable(setting.default) else setting.default)
 
-    return setting.coerce(value, defaults.get(key))
+    if setting.normalizer is not None:
+        return setting.normalizer(value, fallback)
 
-
-def _normalize_save_mode(value: Any, default: str) -> str:
-    if isinstance(value, str):
-        if value in SAVE_MODE_LABELS:
-            return value
-        if value in LEGACY_SAVE_MODE_MAP:
-            return LEGACY_SAVE_MODE_MAP[value]
-    return default
-
-
-def _normalize_default_voice(value: Any, default: str) -> str:
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return default
-        spec, profile_name = split_profile_spec(text)
-        if profile_name:
-            return f"speaker:{profile_name}"
-        return spec
-    return default
-
-
-def _normalize_default_speaker(value: Any) -> str:
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return ""
-        spec, profile_name = split_profile_spec(text)
-        if profile_name:
-            return f"speaker:{profile_name}"
-        return spec
-    return ""
-
-
-def _normalize_language_list(value: Any, default: list) -> list:
-    if isinstance(value, (list, tuple, set)):
-        return [code for code in value if isinstance(code, str) and code in LANGUAGE_DESCRIPTIONS]
-    if isinstance(value, str):
-        parts = [item.strip().lower() for item in value.split(",") if item.strip()]
-        return [code for code in parts if code in LANGUAGE_DESCRIPTIONS]
-    return default
+    return setting.coerce(value, fallback)
 
 
 def validate_setting(key: str, value: Any) -> tuple[bool, str]:
@@ -504,7 +515,7 @@ def split_profile_spec(value: Any) -> tuple[str, str | None]:
 
 
 def normalize_save_mode(value: Any, default: str) -> str:
-    return _normalize_save_mode(value, default)
+    return _norm_save_mode(value, default)
 
 
 # ── LLM helpers ──────────────────────────────────────────────────────
