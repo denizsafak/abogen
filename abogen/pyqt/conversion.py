@@ -37,6 +37,7 @@ from abogen.domain.output_paths import (
 from abogen.domain.audio_helpers import build_ffmpeg_command, to_float32
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
 from abogen.domain.conversion_engine import run_tts_segment_loop, SegmentStats, SegmentInfo
+from abogen.domain.intro_outro import resolve_intro, resolve_outro
 from abogen.domain.audio_buffer import (
     create_silence,
     mix_audio,
@@ -64,6 +65,22 @@ import static_ffmpeg
 import threading  # for efficient waiting
 import subprocess
 
+
+
+def _extract_metadata_dict(file_name: str, is_direct_text: bool) -> dict:
+    """Extract metadata dict from file for intro/outro text building."""
+    try:
+        from abogen.domain.metadata_extraction import read_text_for_metadata, extract_metadata_from_text
+        text = read_text_for_metadata(
+            file_path=file_name,
+            is_direct_text=is_direct_text,
+            direct_text=file_name if is_direct_text else None,
+        )
+        if text:
+            return extract_metadata_from_text(text) or {}
+    except Exception:
+        pass
+    return {}
 
 
 # Configuration constants
@@ -293,6 +310,8 @@ class ConversionThread(QThread):
         self.max_subtitle_words = 50  # Default value, will be overridden from GUI
         self.silence_duration = 2.0  # Default value, will be overridden from GUI
         self.use_spacy_segmentation = True  # Default, will be overridden from GUI
+        self.read_title_intro = False  # Will be overridden from GUI
+        self.read_closing_outro = True  # Will be overridden from GUI
         # Set split pattern based on language and subtitle mode
         self.split_pattern = get_split_pattern(lang_code, subtitle_mode)
         self.voice_cache = VoiceCache()  # Cache for loaded voices
@@ -762,6 +781,42 @@ class ConversionThread(QThread):
                     {"chapter": chapter[0], "start": 0.0, "end": 0.0}
                     for chapter in chapters
                 ]
+
+            # --- Intro synthesis ---
+            intro_emitted = False
+            if merge_chapters_at_end:
+                intro_spec = resolve_intro(
+                    _extract_metadata_dict(self.file_name, self.is_direct_text),
+                    os.path.basename(self.file_name) if self.file_name else "",
+                    getattr(self, "read_title_intro", False),
+                    self.voice, self.voice, list(self.voice_cache._cache.keys()),
+                )
+                if intro_spec.enabled:
+                    self.log_updated.emit((f"Title intro: {intro_spec.text[:80]}", "grey"))
+                    loaded_intro_voice = self.load_voice_cached(intro_spec.voice_spec, self.backend)
+                    intro_stats = SegmentStats(
+                        processed_chars=self.processed_char_count,
+                        current_time=current_time,
+                        etr_start_time=self.etr_start_time,
+                        total_characters=self.total_char_count,
+                    )
+                    run_tts_segment_loop(
+                        text=intro_spec.text,
+                        backend=self.backend,
+                        voice=loaded_intro_voice,
+                        speed=self.speed,
+                        split_pattern=self.split_pattern,
+                        stats=intro_stats,
+                        check_cancel=lambda: self.cancel_requested,
+                        on_progress=lambda pct, etr: self.progress_updated.emit(pct, etr),
+                        chapter_sink=None,
+                        audio_sink=merged_sink,
+                    )
+                    self.processed_char_count = intro_stats.processed_chars
+                    current_time = intro_stats.current_time
+                    intro_emitted = True
+                    self.log_updated.emit(("Intro synthesized.", "grey"))
+
             # Instead of processing the whole text, process by chapter
             for chapter_idx, (chapter_name, voice_segments) in enumerate(chapters, 1):
                 chapter_out_path = None
@@ -1054,6 +1109,40 @@ class ConversionThread(QThread):
                             "green",
                         )
                     )
+
+            # --- Outro synthesis ---
+            if merge_chapters_at_end:
+                outro_spec = resolve_outro(
+                    _extract_metadata_dict(self.file_name, self.is_direct_text),
+                    os.path.basename(self.file_name) if self.file_name else "",
+                    getattr(self, "read_closing_outro", True),
+                    self.voice, self.voice, list(self.voice_cache._cache.keys()),
+                )
+                if outro_spec.enabled:
+                    self.log_updated.emit((f"Closing outro: {outro_spec.text[:80]}", "grey"))
+                    loaded_outro_voice = self.load_voice_cached(outro_spec.voice_spec, self.backend)
+                    outro_stats = SegmentStats(
+                        processed_chars=self.processed_char_count,
+                        current_time=current_time,
+                        etr_start_time=self.etr_start_time,
+                        total_characters=self.total_char_count,
+                    )
+                    run_tts_segment_loop(
+                        text=outro_spec.text,
+                        backend=self.backend,
+                        voice=loaded_outro_voice,
+                        speed=self.speed,
+                        split_pattern=self.split_pattern,
+                        stats=outro_stats,
+                        check_cancel=lambda: self.cancel_requested,
+                        on_progress=lambda pct, etr: self.progress_updated.emit(pct, etr),
+                        chapter_sink=None,
+                        audio_sink=merged_sink,
+                    )
+                    self.processed_char_count = outro_stats.processed_chars
+                    current_time = outro_stats.current_time
+                    self.log_updated.emit(("Outro synthesized.", "grey"))
+
             # Finalize merged output file ONLY if merging
             if merge_chapters_at_end:
                 self.log_updated.emit(("\nFinalizing audio. Please wait...", "grey"))

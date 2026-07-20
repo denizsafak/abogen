@@ -52,6 +52,7 @@ from abogen.domain.metadata_helpers import (
     extract_series_metadata as _extract_series_metadata,
     format_series_sentence as _format_series_sentence,
 )
+from abogen.domain.intro_outro import resolve_intro, resolve_outro
 from abogen.domain.title_builder import (
     build_title_intro_text as _build_title_intro_text,
     build_outro_text as _build_outro_text,
@@ -77,7 +78,6 @@ from abogen.domain.voice_resolution import (
     initialize_voice_cache as _initialize_voice_cache,
     chapter_voice_spec as _chapter_voice_spec,
     chunk_voice_spec as _chunk_voice_spec,
-    resolve_fallback_voice_spec as _resolve_fallback_voice_spec,
 )
 from abogen.domain.chapter_overrides import apply_chapter_overrides as _apply_chapter_overrides
 from abogen.domain.metadata_merge import merge_metadata as _merge_metadata
@@ -386,22 +386,20 @@ def run_conversion_job(job: Job) -> None:
         intro_voice_choice: Any = None
         intro_speed: Optional[float] = None
         intro_steps: Optional[int] = None
-        if read_title_intro:
-            book_intro_text = _build_title_intro_text(job.metadata_tags, job.original_filename)
-            if book_intro_text:
-                preview = book_intro_text if len(book_intro_text) <= 120 else f"{book_intro_text[:117]}…"
-                job.add_log(f"Title intro enabled: {preview}", level="debug")
+        intro_spec = resolve_intro(
+            job.metadata_tags, job.original_filename, read_title_intro,
+            base_voice_spec, getattr(job, "voice", "M1"), list(voice_cache.keys()),
+        )
+        if intro_spec.enabled:
+            book_intro_text = intro_spec.text
+            preview = book_intro_text if len(book_intro_text) <= 120 else f"{book_intro_text[:117]}…"
+            job.add_log(f"Title intro enabled: {preview}", level="debug")
 
-                intro_voice_spec = _resolve_fallback_voice_spec(
-                    base_voice_spec, job.voice, list(voice_cache.keys())
-                )
-
-                if intro_voice_spec:
-                    intro_provider, _, intro_voice_choice, intro_speed, intro_steps = resolve_voice_choice(
-                        intro_voice_spec
-                    )
-            else:
-                job.add_log("Title intro enabled but no usable metadata was found.", level="debug")
+            intro_provider, _, intro_voice_choice, intro_speed, intro_steps = resolve_voice_choice(
+                intro_spec.voice_spec
+            )
+        elif read_title_intro:
+            job.add_log("Title intro enabled but no usable metadata was found.", level="debug")
         intro_emitted = False
 
         def emit_text(
@@ -823,17 +821,17 @@ def run_conversion_job(job: Job) -> None:
             chapter_markers.append(marker)
 
         if getattr(job, "read_closing_outro", True):
-            outro_text = _build_outro_text(job.metadata_tags, job.original_filename)
-            outro_voice_spec = _resolve_fallback_voice_spec(
-                base_voice_spec, job.voice, list(voice_cache.keys())
+            outro_spec = resolve_outro(
+                job.metadata_tags, job.original_filename, True,
+                base_voice_spec, getattr(job, "voice", "M1"), list(voice_cache.keys()),
             )
 
-            if outro_text and outro_voice_spec:
+            if outro_spec.enabled:
                 outro_start_time = current_time
                 outro_audio_path: Optional[Path] = None
                 outro_segments = 0
                 outro_index = total_chapters + 1
-                outro_provider, _, outro_voice_choice, outro_speed, outro_steps = resolve_voice_choice(outro_voice_spec)
+                outro_provider, _, outro_voice_choice, outro_speed, outro_steps = resolve_voice_choice(outro_spec.voice_spec)
 
                 with ExitStack() as outro_sink_stack:
                     chapter_sink: Optional[AudioSink] = None
@@ -852,7 +850,7 @@ def run_conversion_job(job: Job) -> None:
                         )
 
                     outro_segments = emit_text(
-                        outro_text,
+                        outro_spec.text,
                         voice_choice=outro_voice_choice,
                         chapter_sink=chapter_sink,
                         preview_prefix="Outro",
@@ -863,7 +861,7 @@ def run_conversion_job(job: Job) -> None:
                     outro_end_time = current_time
 
                 if outro_segments > 0:
-                    job.add_log(f"Appended outro sequence: {outro_text}")
+                    job.add_log(f"Appended outro sequence: {outro_spec.text}")
                     if outro_audio_path is not None:
                         job.result.artifacts[f"chapter_{outro_index:02d}"] = outro_audio_path
                         chapter_paths.append(outro_audio_path)
@@ -873,7 +871,7 @@ def run_conversion_job(job: Job) -> None:
                             "title": "Outro",
                             "start": outro_start_time,
                             "end": outro_end_time,
-                            "voice": outro_voice_spec,
+                            "voice": outro_spec.voice_spec,
                         }
                     )
                 else:

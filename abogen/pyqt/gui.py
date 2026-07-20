@@ -955,6 +955,8 @@ class abogen(QWidget):
         self.use_silent_gaps = self.config.get("use_silent_gaps", _d["use_silent_gaps"])
         self.subtitle_speed_method = self.config.get("subtitle_speed_method", _d["subtitle_speed_method"])
         self.use_spacy_segmentation = self.config.get("use_spacy_segmentation", _d["use_spacy_segmentation"])
+        self.read_title_intro = self.config.get("read_title_intro", _d.get("read_title_intro", False))
+        self.read_closing_outro = self.config.get("read_closing_outro", _d.get("read_closing_outro", True))
         # Word substitution settings
         self.word_substitutions_enabled = self.config.get("word_substitutions_enabled", _d["word_substitutions_enabled"])
         self.word_substitutions_list = self.config.get("word_substitutions_list", _d["word_substitutions_list"])
@@ -2393,6 +2395,9 @@ class abogen(QWidget):
                 self.conversion_thread.merge_chapters_at_end = getattr(
                     self, "merge_chapters_at_end", True
                 )
+            # Pass intro/outro settings
+            self.conversion_thread.read_title_intro = self.read_title_intro
+            self.conversion_thread.read_closing_outro = self.read_closing_outro
             self.conversion_thread.progress_updated.connect(self.update_progress)
             self.conversion_thread.log_updated.connect(self.update_log)
             self.conversion_thread.conversion_finished.connect(
@@ -3560,6 +3565,27 @@ class abogen(QWidget):
         # Add separator
         menu.addSeparator()
 
+        # Add title intro option
+        self.title_intro_action = QAction("Read title intro before first chapter", self)
+        self.title_intro_action.setCheckable(True)
+        self.title_intro_action.setChecked(self.read_title_intro)
+        self.title_intro_action.triggered.connect(
+            lambda checked: self.toggle_read_title_intro(checked)
+        )
+        menu.addAction(self.title_intro_action)
+
+        # Add closing outro option
+        self.closing_outro_action = QAction("Read closing outro after last chapter", self)
+        self.closing_outro_action.setCheckable(True)
+        self.closing_outro_action.setChecked(self.read_closing_outro)
+        self.closing_outro_action.triggered.connect(
+            lambda checked: self.toggle_read_closing_outro(checked)
+        )
+        menu.addAction(self.closing_outro_action)
+
+        # Add separator
+        menu.addSeparator()
+
         # Add "Pre-download models and voices for offline use" option
         predownload_action = QAction(
             "Pre-download models and voices for offline use", self
@@ -3634,6 +3660,16 @@ class abogen(QWidget):
     def toggle_spacy_segmentation(self, enabled):
         self.use_spacy_segmentation = enabled
         self.config["use_spacy_segmentation"] = enabled
+        save_config(self.config)
+
+    def toggle_read_title_intro(self, enabled):
+        self.read_title_intro = enabled
+        self.config["read_title_intro"] = enabled
+        save_config(self.config)
+
+    def toggle_read_closing_outro(self, enabled):
+        self.read_closing_outro = enabled
+        self.config["read_closing_outro"] = enabled
         save_config(self.config)
 
     def restart_app(self):
