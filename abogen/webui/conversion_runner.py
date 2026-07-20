@@ -323,7 +323,11 @@ def run_conversion_job(job: Job) -> None:
         _apply_newline_policy(extraction.chapters, job.replace_single_newlines)
 
         base_output_dir = _prepare_output_dir(job)
-        project_root, audio_dir, subtitle_dir, metadata_dir = _prepare_project_layout(job, base_output_dir)
+        project_root, audio_dir, subtitle_dir, metadata_dir = _resolve_project_layout(
+            original_filename=job.original_filename,
+            save_as_project=job.save_as_project,
+            base_dir=base_output_dir,
+        )
 
         if job.output_format.lower() == "m4b" and not job.merge_chapters_at_end:
             job.add_log(
@@ -1016,16 +1020,6 @@ def _prepare_output_dir(job: Job) -> Path:
     )
     directory.mkdir(parents=True, exist_ok=True)
     return directory
-
-
-def _prepare_project_layout(job: Job, base_dir: Path) -> tuple[Path, Path, Path, Optional[Path]]:
-    base_dir.mkdir(parents=True, exist_ok=True)
-    return _resolve_project_layout(
-        original_filename=job.original_filename,
-        save_as_project=job.save_as_project,
-        base_dir=base_dir,
-    )
-
 
 
 
