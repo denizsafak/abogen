@@ -14,7 +14,8 @@ from abogen.kokoro_text_normalization import normalize_for_pipeline
 from abogen.normalization_settings import build_apostrophe_config
 from abogen.text_extractor import extract_from_path
 from abogen.voice_cache import ensure_voice_assets
-from abogen.webui.conversion_runner import SAMPLE_RATE, _select_device, _to_float32, _resolve_voice, _spec_to_voice_ids
+from abogen.webui.conversion_runner import SAMPLE_RATE, _select_device, _to_float32, _spec_to_voice_ids
+from abogen.domain.voice_loader import resolve_voice
 from abogen.domain.split_pattern import get_split_pattern
 from abogen.tts_plugin.utils import create_pipeline
 
@@ -176,7 +177,7 @@ def run_debug_tts_wavs(
             pass
 
     pipeline = _load_pipeline(language, use_gpu)
-    voice_choice = _resolve_voice(pipeline, voice_spec, use_gpu)
+    voice_choice = resolve_voice(voice_spec, pipeline, use_gpu)
 
     apostrophe_config = build_apostrophe_config(settings=settings)
     normalization_settings = dict(settings)

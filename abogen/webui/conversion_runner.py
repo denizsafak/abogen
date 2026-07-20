@@ -119,6 +119,7 @@ from abogen.domain.audio_buffer import (
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
 from abogen.domain.pipeline_factory import PipelinePool
 from abogen.domain.conversion_engine import run_tts_segment_loop, process_and_write_subtitles, SegmentStats
+from abogen.domain.voice_loader import VoiceCache, resolve_voice
 from abogen.domain.voice_utils import resolve_voice_target as _resolve_voice_target
 
 
@@ -216,11 +217,11 @@ def run_conversion_job(job: Job) -> None:
 
             if provider == "kokoro":
                 kokoro_backend = pipeline_pool.get("kokoro", job.language, job.use_gpu, job=job)
-                choice = _resolve_voice(kokoro_backend, resolved, job.use_gpu)
+                choice = resolve_voice(resolved, kokoro_backend, job.use_gpu, cache=voice_cache)
             else:
                 choice = resolved
 
-            voice_cache[cache_key] = choice
+            voice_cache.set(cache_key, choice)
             return provider, resolved, choice, speed, steps
 
         extraction = extract_from_path(job.stored_path)
@@ -360,7 +361,7 @@ def run_conversion_job(job: Job) -> None:
             chapter_dir.mkdir(parents=True, exist_ok=True)
 
         base_voice_spec = _job_voice_fallback(job)
-        voice_cache: Dict[str, Any] = {}
+        voice_cache = VoiceCache()
         base_provider, base_voice_resolved, _, _ = _resolve_voice_target(
             base_voice_spec, normalized_profiles,
             job_voice=getattr(job, "voice", "M1"),
@@ -368,7 +369,7 @@ def run_conversion_job(job: Job) -> None:
         )
         if base_provider == "kokoro" and base_voice_resolved and "*" not in base_voice_resolved:
             kokoro_backend = pipeline_pool.get("kokoro", job.language, job.use_gpu, job=job)
-            voice_cache[f"kokoro:{base_voice_resolved}"] = _resolve_voice(kokoro_backend, base_voice_resolved, job.use_gpu)
+            voice_cache.set(f"kokoro:{base_voice_resolved}", resolve_voice(base_voice_resolved, kokoro_backend, job.use_gpu))
         processed_chars = 0
         current_time = 0.0
         etr_start_time = time.time()
@@ -550,8 +551,7 @@ def run_conversion_job(job: Job) -> None:
                 voice_choice = voice_cache.get(chapter_cache_key)
                 if voice_choice is None:
                     kokoro_backend = pipeline_pool.get("kokoro", job.language, job.use_gpu, job=job)
-                    voice_choice = _resolve_voice(kokoro_backend, chapter_voice_resolved, job.use_gpu)
-                    voice_cache[chapter_cache_key] = voice_choice
+                    voice_choice = resolve_voice(chapter_voice_resolved, kokoro_backend, job.use_gpu, cache=voice_cache)
             else:
                 voice_choice = chapter_voice_resolved
 
@@ -694,12 +694,12 @@ def run_conversion_job(job: Job) -> None:
                             chunk_voice_choice = voice_cache.get(chunk_cache_key)
                             if chunk_voice_choice is None:
                                 kokoro_backend = pipeline_pool.get("kokoro", job.language, job.use_gpu, job=job)
-                                chunk_voice_choice = _resolve_voice(
-                                    kokoro_backend,
+                                chunk_voice_choice = resolve_voice(
                                     chunk_voice_resolved,
+                                    kokoro_backend,
                                     job.use_gpu,
+                                    cache=voice_cache,
                                 )
-                                voice_cache[chunk_cache_key] = chunk_voice_choice
                         else:
                             chunk_voice_choice = chunk_voice_resolved
 
@@ -1064,14 +1064,6 @@ def _prepare_project_layout(job: Job, base_dir: Path) -> tuple[Path, Path, Path,
         base_dir=base_dir,
     )
 
-
-
-def _resolve_voice(pipeline, voice_spec: str, use_gpu: bool):
-    if "*" in voice_spec:
-        if pipeline is None or not hasattr(pipeline, "load_single_voice"):
-            return voice_spec
-        return get_new_voice(pipeline, voice_spec, use_gpu)
-    return voice_spec
 
 
 

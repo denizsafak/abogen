@@ -62,10 +62,10 @@ def resolve_voice(
     # Check cache first
     if cache and cache.contains(voice_spec):
         return cache.get(voice_spec)
-    
+
     # Load voice
     if "*" in voice_spec:
-        if pipeline is None:
+        if pipeline is None or not hasattr(pipeline, "load_single_voice"):
             return voice_spec
         loaded_voice = get_new_voice(pipeline, voice_spec, use_gpu)
     else:
@@ -82,35 +82,43 @@ def load_voice_cached(
     voice_name: str,
     pipeline: Any,
     use_gpu: bool,
-    cache: Optional[Dict[str, Any]] = None,
+    cache: Any = None,
 ) -> Any:
     """Load voice with caching (compatibility wrapper for PyQt).
-    
+
     This function maintains backward compatibility with the PyQt interface
     while using the unified voice loading logic.
-    
+
     Args:
         voice_name: Voice name or formula string.
         pipeline: TTS pipeline instance.
         use_gpu: Whether to use GPU.
-        cache: Optional dict to use as cache (instead of VoiceCache).
-        
+        cache: Optional VoiceCache or dict to use as cache.
+
     Returns:
         Loaded voice tensor or voice name string.
     """
-    # Use dict cache if provided (for backward compatibility)
+    # Check cache (supports both VoiceCache and plain dict)
     if cache is not None:
-        if voice_name in cache:
+        if isinstance(cache, VoiceCache):
+            if cache.contains(voice_name):
+                return cache.get(voice_name)
+        elif voice_name in cache:
             return cache[voice_name]
-    
+
     # Load voice
     if "*" in voice_name:
+        if pipeline is None or not hasattr(pipeline, "load_single_voice"):
+            return voice_name
         loaded_voice = get_new_voice(pipeline, voice_name, use_gpu)
     else:
         loaded_voice = voice_name
-    
+
     # Cache it
     if cache is not None:
-        cache[voice_name] = loaded_voice
-    
+        if isinstance(cache, VoiceCache):
+            cache.set(voice_name, loaded_voice)
+        else:
+            cache[voice_name] = loaded_voice
+
     return loaded_voice

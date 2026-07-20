@@ -44,7 +44,7 @@ from abogen.domain.audio_buffer import (
     SAMPLE_RATE,
 )
 from abogen.domain.subtitle_generation import process_subtitle_tokens
-from abogen.domain.voice_loader import load_voice_cached, resolve_voice
+from abogen.domain.voice_loader import VoiceCache, load_voice_cached, resolve_voice
 from abogen.domain.progress import calc_etr_str
 from abogen.domain.normalization import prepare_text_for_tts
 from abogen.domain.pronunciation import (
@@ -295,7 +295,7 @@ class ConversionThread(QThread):
         self.use_spacy_segmentation = True  # Default, will be overridden from GUI
         # Set split pattern based on language and subtitle mode
         self.split_pattern = get_split_pattern(lang_code, subtitle_mode)
-        self.voice_cache = {}  # Cache for loaded voices
+        self.voice_cache = VoiceCache()  # Cache for loaded voices
 
     def load_voice_cached(self, voice_name, tts):
         """Load voice with caching to avoid reloading same voice.
