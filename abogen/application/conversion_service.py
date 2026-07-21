@@ -105,23 +105,18 @@ def _prepare_tts_context(
         TTSContext ready for text normalization
     """
     from abogen.domain.normalization import (
-        apply_normalization_overrides,
         build_apostrophe_config,
+        get_runtime_settings,
+    )
+    from abogen.domain.pronunciation import (
         compile_heteronym_sentence_rules,
         compile_pronunciation_rules,
-        get_runtime_settings,
         merge_pronunciation_overrides,
     )
+    from abogen.domain.split_pattern import get_split_pattern
 
     # Get runtime normalization settings
     normalization_settings = get_runtime_settings()
-
-    # Apply job-level overrides
-    job_overrides = request.normalization_overrides
-    if job_overrides:
-        normalization_settings = apply_normalization_overrides(
-            normalization_settings, job_overrides
-        )
 
     # Build apostrophe config
     apostrophe_config = build_apostrophe_config(
@@ -145,14 +140,18 @@ def _prepare_tts_context(
         str(request.subtitle_mode or "Disabled"),
     )
 
-    # Merge pronunciation overrides
-    pronunciation_overrides = merge_pronunciation_overrides(
-        request.pronunciation_overrides,
-        request.manual_overrides,
-    )
+    # Merge pronunciation overrides (manual + pronunciation)
+    # Create a mock job-like object for merge_pronunciation_overrides
+    class _MockJob:
+        def __init__(self, req):
+            self.pronunciation_overrides = req.pronunciation_overrides
+            self.manual_overrides = req.manual_overrides
+            self.heteronym_overrides = req.heteronym_overrides
+
+    merged_overrides = merge_pronunciation_overrides(_MockJob(request))
 
     # Compile rules
-    pronunciation_rules = compile_pronunciation_rules(pronunciation_overrides)
+    pronunciation_rules = compile_pronunciation_rules(merged_overrides)
     heteronym_rules = compile_heteronym_sentence_rules(request.heteronym_overrides)
 
     if heteronym_rules:
@@ -170,5 +169,5 @@ def _prepare_tts_context(
         split_pattern=split_pattern,
         pronunciation_rules=pronunciation_rules,
         heteronym_rules=heteronym_rules,
-        normalization_overrides=job_overrides,
+        normalization_overrides=request.normalization_overrides,
     )
