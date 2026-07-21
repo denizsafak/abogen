@@ -9,6 +9,7 @@ implementations (PyQt signals, Flask Job, etc.).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, List, Optional, Protocol, runtime_checkable
 
 
@@ -54,7 +55,7 @@ class PipelineProvider(Protocol):
         ...
 
 
-@runtime_checkable
+@dataclass
 class ResolvedVoice:
     """A resolved voice ready for TTS synthesis."""
 
