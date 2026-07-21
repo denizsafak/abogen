@@ -40,7 +40,7 @@ class ConversionRequest:
     output_format: str = "wav"
     subtitle_mode: str = "Disabled"
     subtitle_format: str = "srt"
-    max_subtitle_words: int = 5
+    max_subtitle_words: int = 50
 
     # --- Save Options ---
     save_mode: str = "save_next_to_input"

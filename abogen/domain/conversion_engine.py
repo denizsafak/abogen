@@ -67,7 +67,7 @@ def run_tts_segment_loop(
     preview_callback: Optional[Callable[[str], None]] = None,
     on_segment: Optional[Callable[[SegmentInfo], None]] = None,
     subtitle_mode: str = "Disabled",
-    max_subtitle_words: int = 5,
+    max_subtitle_words: int = 50,
     lang_code: str = "a",
     use_spacy_segmentation: bool = False,
 ) -> tuple[int, list]:
@@ -206,7 +206,7 @@ def synthesize_text(
     preview_callback: Optional[Callable[[str], None]] = None,
     on_segment: Optional[Callable[[SegmentInfo], None]] = None,
     subtitle_mode: str = "Disabled",
-    max_subtitle_words: int = 5,
+    max_subtitle_words: int = 50,
     lang_code: str = "a",
     use_spacy_segmentation: bool = False,
     split_pattern_override: Optional[str] = None,
