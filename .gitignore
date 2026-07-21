@@ -39,3 +39,4 @@ dist/
 test_assets/
 dev_notes/
 .claude/
+.coverage
