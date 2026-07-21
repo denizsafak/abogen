@@ -80,11 +80,11 @@ def build_conversion_plan(request: ConversionRequest) -> ConversionPlan:
 
 def _extract_source_text(request: ConversionRequest) -> Optional[str]:
     """Extract text from request source."""
-    if request.direct_text:
-        return request.direct_text
-    if request.source_path and request.source_path.exists():
-        from abogen.subtitle_utils import clean_text
+    from abogen.subtitle_utils import clean_text
 
+    if request.direct_text:
+        return clean_text(request.direct_text)
+    if request.source_path and request.source_path.exists():
         encoding = "utf-8"
         try:
             with open(request.source_path, "r", encoding=encoding, errors="replace") as f:
@@ -123,11 +123,8 @@ def _parse_chapters(
     """
     from abogen.domain.text_chapters import parse_chapters_from_text
 
-    # For direct text, use the text as-is
-    if request.direct_text:
-        chapters = parse_chapters_from_text(source_text, default_title="text", clean=False)
-    else:
-        chapters = parse_chapters_from_text(source_text, default_title="text", clean=False)
+    # Text is already cleaned in _extract_source_text, so clean=False here
+    chapters = parse_chapters_from_text(source_text, default_title="text", clean=False)
 
     # Default voice from request
     default_voice = request.voice or "M1"
