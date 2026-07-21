@@ -76,7 +76,7 @@ def sanitize_filename_for_chapter(title: str, index: int, max_len: int = 80) -> 
     return f"{index:02d}_{sanitized}"
 
 
-def sanitize_output_stem(name: str) -> str:
+def sanitize_output_stem(name: str, index: int = 0) -> str:
     base = Path(name or "").stem
     sanitized = _OUTPUT_SANITIZE_RE.sub("_", base).strip("_")
     return sanitized or "output"

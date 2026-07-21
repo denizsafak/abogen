@@ -54,7 +54,7 @@ def _ensure_ffmpeg() -> None:
 
 
 def _get_ffmpeg_cache_root() -> str:
-    from abogen.infrastructure.cache import get_internal_cache_path
+    from abogen.utils import get_internal_cache_path
 
     return get_internal_cache_path("ffmpeg")
 
