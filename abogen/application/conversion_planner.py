@@ -20,17 +20,12 @@ from abogen.application.conversion_models import (
     SegmentPlan,
 )
 from abogen.application.conversion_request import ConversionRequest
+from abogen.application.output_layout_service import resolve_output_layout
 from abogen.domain.chapter_overrides import apply_chapter_overrides
 from abogen.domain.file_type import auto_select_relevant_chapters
 from abogen.domain.intro_outro import resolve_intro, resolve_outro
 from abogen.domain.metadata_extraction import extract_metadata_for_file
 from abogen.domain.metadata_merge import merge_metadata
-from abogen.domain.output_paths import (
-    resolve_output_directory,
-    resolve_project_layout,
-    resolve_unique_path,
-    sanitize_output_stem,
-)
 from abogen.subtitle_utils import split_text_by_voice_markers
 
 
@@ -71,7 +66,7 @@ def build_conversion_plan(request: ConversionRequest) -> ConversionPlan:
     intro, outro = _build_intro_outro(metadata, request)
 
     # 7. Resolve output layout
-    output_layout = _resolve_output_layout(request)
+    output_layout = resolve_output_layout(request)
 
     return ConversionPlan(
         request=request,
@@ -354,47 +349,4 @@ def _build_intro_outro(
     return intro_spec, outro_spec
 
 
-def _resolve_output_layout(request: ConversionRequest) -> OutputLayout:
-    """Resolve output paths for the conversion."""
-    # Determine base output directory
-    if request.save_mode == "custom_folder" and request.output_folder:
-        parent_dir = Path(request.output_folder)
-    elif request.source_path:
-        parent_dir = request.source_path.parent
-    else:
-        parent_dir = Path.cwd()
-
-    # Determine base name
-    if request.original_filename:
-        base_name = sanitize_output_stem(request.original_filename)
-    elif request.source_path:
-        base_name = sanitize_output_stem(request.source_path.stem)
-    else:
-        base_name = "output"
-
-    # Find unique output path
-    allowed_exts = {request.output_format, "srt", "ass", "vtt", "mp4", "m4b"}
-    unique_base = resolve_unique_path(
-        parent_dir, base_name, "", allowed_extensions=allowed_exts
-    )
-
-    # Resolve project layout
-    project_root = None
-    audio_dir = parent_dir
-    subtitle_dir = None
-    metadata_dir = None
-
-    if request.save_as_project:
-        project_root, audio_dir, subtitle_dir, metadata_dir = resolve_project_layout(
-            original_filename=request.original_filename,
-            save_as_project=True,
-            base_dir=parent_dir,
-        )
-
-    return OutputLayout(
-        parent_dir=parent_dir,
-        project_root=project_root,
-        audio_dir=audio_dir,
-        subtitle_dir=subtitle_dir,
-        metadata_dir=metadata_dir,
-    )
+# Output layout resolution is now in application/output_layout_service.py
