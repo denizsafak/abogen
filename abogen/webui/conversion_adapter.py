@@ -14,8 +14,7 @@ never accesses Job directly.
 
 from __future__ import annotations
 
-import threading
-import time
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from abogen.application.conversion_request import ConversionRequest
@@ -36,7 +35,7 @@ def build_conversion_request_from_job(job: Any) -> ConversionRequest:
     """
     return ConversionRequest(
         # Source
-        source_path=job.stored_path,
+        source_path=Path(job.stored_path) if job.stored_path else None,
         original_filename=job.original_filename,
         # TTS Settings
         language=job.language or "a",
@@ -53,7 +52,7 @@ def build_conversion_request_from_job(job: Any) -> ConversionRequest:
         max_subtitle_words=job.max_subtitle_words or 50,
         # Save Options
         save_mode=job.save_mode or "save_next_to_input",
-        output_folder=job.output_folder,
+        output_folder=Path(job.output_folder) if job.output_folder else None,
         save_chapters_separately=job.save_chapters_separately,
         merge_chapters_at_end=job.merge_chapters_at_end,
         separate_chapters_format=job.separate_chapters_format or "wav",
@@ -81,7 +80,7 @@ def build_conversion_request_from_job(job: Any) -> ConversionRequest:
         # Metadata
         metadata_tags=job.metadata_tags or {},
         # Artifacts
-        cover_image_path=job.cover_image_path,
+        cover_image_path=Path(job.cover_image_path) if job.cover_image_path else None,
         cover_image_mime=job.cover_image_mime,
         generate_epub3=job.generate_epub3,
     )

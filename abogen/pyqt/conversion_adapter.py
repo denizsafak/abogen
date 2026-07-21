@@ -68,12 +68,12 @@ def build_conversion_request_from_thread(thread: Any) -> ConversionRequest:
         voice_profile=getattr(thread, "voice_profile", None),
         speed=thread.speed or 1.0,
         use_gpu=thread.use_gpu,
-        supertonic_total_steps=getattr(thread, "supertonic_total_steps", 5),
+        supertonic_total_steps=getattr(thread, "supertonic_total_steps", None) or 5,
         # Output Format
         output_format=thread.output_format or "wav",
         subtitle_mode=thread.subtitle_mode or "Disabled",
         subtitle_format=getattr(thread, "subtitle_format", "srt"),
-        max_subtitle_words=getattr(thread, "max_subtitle_words", 50),
+        max_subtitle_words=getattr(thread, "max_subtitle_words", None) or 50,
         # Save Options
         save_mode=thread.save_option or "save_next_to_input",
         output_folder=output_folder,
@@ -82,8 +82,8 @@ def build_conversion_request_from_thread(thread: Any) -> ConversionRequest:
         separate_chapters_format=getattr(thread, "separate_chapters_format", "wav"),
         save_as_project=getattr(thread, "save_as_project", False),
         # Timing
-        silence_between_chapters=getattr(thread, "silence_duration", 2.0),
-        chapter_intro_delay=getattr(thread, "chapter_intro_delay", 0.0),
+        silence_between_chapters=getattr(thread, "silence_duration", None) or 2.0,
+        chapter_intro_delay=getattr(thread, "chapter_intro_delay", None) or 0.0,
         # Content Processing
         replace_single_newlines=getattr(thread, "replace_single_newlines", False),
         read_title_intro=getattr(thread, "read_title_intro", False),

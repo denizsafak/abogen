@@ -134,6 +134,7 @@ def execute_conversion(
             )
             if subtitle_writer:
                 subtitle_writer.open()
+                stack.callback(subtitle_writer.close)
                 result.subtitle_paths.append(subtitle_writer.path)
 
         # Chapter directory
@@ -380,10 +381,6 @@ def execute_conversion(
                 use_spacy_segmentation=request.subtitle_mode not in ("Disabled", "Line"),
             )
             events.log("Outro synthesized.")
-
-        # Close subtitle writer
-        if subtitle_writer:
-            subtitle_writer.close()
 
     # Set result metadata
     result.total_chapters = len(plan.chapters)
