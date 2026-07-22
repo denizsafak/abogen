@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from abogen.application.conversion_request import ConversionRequest
-from abogen.application.conversion_ports import ResolvedVoice
+from abogen.application.conversion_ports import ConversionCancelled, ResolvedVoice
 
 
 def build_conversion_request_from_thread(thread: Any) -> ConversionRequest:
@@ -133,11 +133,6 @@ class PyQtEvents:
         """
         if self._thread.cancel_requested:
             raise ConversionCancelled("Conversion cancelled by user")
-
-
-class ConversionCancelled(Exception):
-    """Raised when conversion is cancelled."""
-    pass
 
 
 class PyQtPipelineProvider:

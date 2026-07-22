@@ -13,6 +13,11 @@ from dataclasses import dataclass
 from typing import Any, List, Optional, Protocol, runtime_checkable
 
 
+class ConversionCancelled(Exception):
+    """Raised when conversion is cancelled by user."""
+    pass
+
+
 class ConversionEvents(Protocol):
     """UI-specific actions the conversion service delegates back to the caller.
 

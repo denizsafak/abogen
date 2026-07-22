@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from abogen.application.conversion_request import ConversionRequest
-from abogen.application.conversion_ports import ResolvedVoice
+from abogen.application.conversion_ports import ConversionCancelled, ResolvedVoice
 
 
 def build_conversion_request_from_job(job: Any) -> ConversionRequest:
@@ -112,11 +112,6 @@ class WebJobEvents:
         """
         if self._job.cancel_requested:
             raise ConversionCancelled("Job cancelled by user")
-
-
-class ConversionCancelled(Exception):
-    """Raised when conversion is cancelled."""
-    pass
 
 
 class WebPipelineProvider:
