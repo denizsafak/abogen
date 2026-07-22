@@ -55,44 +55,29 @@ class SegmentInfo:
 def run_tts_segment_loop(
     *,
     text: str,
+    params: SynthParams,
     backend: Any,
     voice: Any,
     speed: float,
     split_pattern: str,
-    stats: SegmentStats,
-    check_cancel: CancelChecker,
-    on_progress: Callable[[int, str], None],
     chapter_sink: Optional[AudioSink] = None,
-    audio_sink: Optional[AudioSink] = None,
     preview_callback: Optional[Callable[[str], None]] = None,
     on_segment: Optional[Callable[[SegmentInfo], None]] = None,
-    subtitle_mode: str = "Disabled",
-    max_subtitle_words: int = 50,
-    lang_code: str = "a",
-    use_spacy_segmentation: bool = False,
 ) -> tuple[int, list]:
     """Run the core TTS segment iteration loop.
 
     Args:
         text: Normalized text to synthesize.
+        params: Common synthesis parameters (stats, callbacks, sinks, etc.).
         backend: TTS pipeline instance (Kokoro or Supertonic).
         voice: Voice name/id for the backend.
         speed: Speech speed multiplier.
         split_pattern: Regex pattern used by the TTS engine for sentence splitting.
-        stats: Running character/timing stats (mutated in place).
-        check_cancel: Called each segment; if it returns True, iteration stops.
-        on_progress: Called with (percent, etr_str) after each segment.
-        chapter_sink: Optional audio sink for the current chapter.
-        audio_sink: Optional audio sink for the merged output.
         preview_callback: Called with a short preview string per segment.
         on_segment: Called with a SegmentInfo for each segment *before*
             audio is written.  Useful for callers that need per-segment
             subtitle processing (e.g. PyQt dual-writer pattern).
             When provided, the default subtitle accumulation is skipped.
-        subtitle_mode: Subtitle mode string (e.g. "Disabled", "Sentence").
-        max_subtitle_words: Max words per subtitle entry.
-        lang_code: Language code for subtitle processing.
-        use_spacy_segmentation: Whether spaCy sentence boundaries are active.
 
     Returns:
         Tuple of (segment_count, accumulated_subtitle_tokens).
@@ -108,26 +93,26 @@ def run_tts_segment_loop(
         voice=voice,
         speed=speed,
         split_pattern=split_pattern,
-        current_time=stats.current_time,
+        current_time=params.stats.current_time,
     ):
-        if check_cancel():
+        if params.check_cancel():
             break
 
         local_segments += 1
-        stats.processed_chars += len(seg.graphemes)
+        params.stats.processed_chars += len(seg.graphemes)
 
         # Progress
-        if stats.total_characters:
-            percent = min(int(stats.processed_chars / stats.total_characters * 100), 99)
+        if params.stats.total_characters:
+            percent = min(int(params.stats.processed_chars / params.stats.total_characters * 100), 99)
         else:
-            percent = 0 if stats.processed_chars == 0 else 99
+            percent = 0 if params.stats.processed_chars == 0 else 99
 
         etr_str = calc_etr_str(
-            time.time() - stats.etr_start_time,
-            stats.processed_chars,
-            stats.total_characters,
+            time.time() - params.stats.etr_start_time,
+            params.stats.processed_chars,
+            params.stats.total_characters,
         )
-        on_progress(percent, etr_str)
+        params.on_progress(percent, etr_str)
 
         # Preview / log
         if preview_callback:
@@ -140,23 +125,23 @@ def run_tts_segment_loop(
                 audio=seg.audio,
                 tokens=list(seg.tokens) if seg.tokens else [],
                 duration=seg.duration,
-                chunk_start=getattr(seg, "chunk_start", stats.current_time),
+                chunk_start=getattr(seg, "chunk_start", params.stats.current_time),
             )
             on_segment(info)
 
         # Write audio
         if chapter_sink:
             chapter_sink.write(seg.audio)
-        if audio_sink:
-            audio_sink.write(seg.audio)
+        if params.audio_sink:
+            params.audio_sink.write(seg.audio)
 
         # Accumulate subtitle tokens (default path; skipped if on_segment handles it)
-        if not on_segment and subtitle_mode != "Disabled" and seg.tokens:
+        if not on_segment and params.subtitle_mode != "Disabled" and seg.tokens:
             accumulated_tokens.extend(seg.tokens)
 
         # Update timing
-        if audio_sink:
-            stats.current_time += seg.duration
+        if params.audio_sink:
+            params.stats.current_time += seg.duration
 
     return local_segments, accumulated_tokens
 
@@ -229,19 +214,12 @@ def synthesize_text(
     normalized = params.tts_context.normalize(text)
     return run_tts_segment_loop(
         text=normalized,
+        params=params,
         backend=backend,
         voice=voice,
         speed=speed,
         split_pattern=split_pattern_override or params.tts_context.split_pattern,
-        stats=params.stats,
-        check_cancel=params.check_cancel,
-        on_progress=params.on_progress,
         chapter_sink=chapter_sink,
-        audio_sink=params.audio_sink,
         preview_callback=preview_callback,
         on_segment=on_segment,
-        subtitle_mode=params.subtitle_mode,
-        max_subtitle_words=params.max_subtitle_words,
-        lang_code=params.lang_code,
-        use_spacy_segmentation=params.use_spacy_segmentation,
     )

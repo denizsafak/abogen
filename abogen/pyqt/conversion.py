@@ -773,17 +773,20 @@ class ConversionThread(QThread):
                         etr_start_time=self.etr_start_time,
                         total_characters=self.total_char_count,
                     )
+                    intro_synth = SynthParams(
+                        tts_context=self._tts_context,
+                        stats=intro_stats,
+                        check_cancel=lambda: self.cancel_requested,
+                        on_progress=lambda pct, etr: self.progress_updated.emit(pct, etr),
+                        audio_sink=merged_sink,
+                    )
                     run_tts_segment_loop(
                         text=intro_spec.text,
+                        params=intro_synth,
                         backend=self.backend,
                         voice=loaded_intro_voice,
                         speed=self.speed,
                         split_pattern=self.split_pattern,
-                        stats=intro_stats,
-                        check_cancel=lambda: self.cancel_requested,
-                        on_progress=lambda pct, etr: self.progress_updated.emit(pct, etr),
-                        chapter_sink=None,
-                        audio_sink=merged_sink,
                     )
                     self.processed_char_count = intro_stats.processed_chars
                     current_time = intro_stats.current_time
@@ -1106,17 +1109,20 @@ class ConversionThread(QThread):
                         etr_start_time=self.etr_start_time,
                         total_characters=self.total_char_count,
                     )
+                    outro_synth = SynthParams(
+                        tts_context=self._tts_context,
+                        stats=outro_stats,
+                        check_cancel=lambda: self.cancel_requested,
+                        on_progress=lambda pct, etr: self.progress_updated.emit(pct, etr),
+                        audio_sink=merged_sink,
+                    )
                     run_tts_segment_loop(
                         text=outro_spec.text,
+                        params=outro_synth,
                         backend=self.backend,
                         voice=loaded_outro_voice,
                         speed=self.speed,
                         split_pattern=self.split_pattern,
-                        stats=outro_stats,
-                        check_cancel=lambda: self.cancel_requested,
-                        on_progress=lambda pct, etr: self.progress_updated.emit(pct, etr),
-                        chapter_sink=None,
-                        audio_sink=merged_sink,
                     )
                     self.processed_char_count = outro_stats.processed_chars
                     current_time = outro_stats.current_time
