@@ -32,7 +32,11 @@ class VoiceCache:
     def clear(self) -> None:
         """Clear all cached voices."""
         self._cache.clear()
-    
+
+    def keys(self):
+        """Return cached voice specs."""
+        return self._cache.keys()
+
     def __contains__(self, voice_spec: str) -> bool:
         return self.contains(voice_spec)
 
