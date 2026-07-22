@@ -120,6 +120,8 @@ def qt_message_handler(mode, context, message):
         return  # Suppress this specific message
     if "setGrabPopup called with a parent, QtWaylandClient" in message:
         return
+    if "Failed to register with host portal" in message:
+        return
 
     if mode == QtMsgType.QtWarningMsg:
         print(f"Qt Warning: {message}")
