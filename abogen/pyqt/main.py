@@ -46,6 +46,8 @@ except ImportError:
     print("PyQt6 not installed.")
 
 
+from abogen.utils import get_resource_path
+
 # Pre-load "libxcb-cursor" on Linux (fixes #101)
 if platform.system() == "Linux":
     arch = platform.machine().lower()
