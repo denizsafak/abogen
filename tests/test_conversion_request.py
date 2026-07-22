@@ -15,6 +15,8 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from abogen.application.conversion_request import ConversionRequest, ConversionRequestError
+from abogen.domain.enums import Language, OutputFormat, SaveMode, SubtitleFormat, SubtitleMode
 from abogen.domain.normalization import TTSContext
 from abogen.domain.settings_core import settings_defaults
 from abogen.domain.split_pattern import get_split_pattern
@@ -192,3 +194,93 @@ class TestLoggingProtocol:
         progress_fn(100, 1000, "0:05:00")
         assert len(progress_calls) == 1
         assert progress_calls[0] == (100, 1000, "0:05:00")
+
+
+class TestConversionRequestValidation:
+    """Verify __post_init__ validation on ConversionRequest."""
+
+    def test_defaults_are_valid(self):
+        req = ConversionRequest()
+        assert req.max_subtitle_words == 50
+        assert req.speed == 1.0
+        assert req.supertonic_total_steps == 5
+        assert req.output_format == OutputFormat.WAV
+        assert req.subtitle_mode == SubtitleMode.DISABLED
+
+    def test_max_subtitle_words_clamped_below_min(self):
+        req = ConversionRequest(max_subtitle_words=0)
+        assert req.max_subtitle_words == 1
+
+    def test_max_subtitle_words_clamped_above_max(self):
+        req = ConversionRequest(max_subtitle_words=999)
+        assert req.max_subtitle_words == 500
+
+    def test_max_subtitle_words_valid(self):
+        req = ConversionRequest(max_subtitle_words=100)
+        assert req.max_subtitle_words == 100
+
+    def test_speed_clamped_below_min(self):
+        req = ConversionRequest(speed=0.1)
+        assert req.speed == 0.5
+
+    def test_speed_clamped_above_max(self):
+        req = ConversionRequest(speed=10.0)
+        assert req.speed == 3.0
+
+    def test_speed_valid(self):
+        req = ConversionRequest(speed=1.5)
+        assert req.speed == 1.5
+
+    def test_supertonic_steps_clamped_below_min(self):
+        req = ConversionRequest(supertonic_total_steps=0)
+        assert req.supertonic_total_steps == 2
+
+    def test_supertonic_steps_clamped_above_max(self):
+        req = ConversionRequest(supertonic_total_steps=100)
+        assert req.supertonic_total_steps == 15
+
+    def test_silence_between_chapters_clamped(self):
+        req = ConversionRequest(silence_between_chapters=-5.0)
+        assert req.silence_between_chapters == 0.0
+
+    def test_chapter_intro_delay_clamped(self):
+        req = ConversionRequest(chapter_intro_delay=-1.0)
+        assert req.chapter_intro_delay == 0.0
+
+    def test_invalid_chunk_level_raises(self):
+        with pytest.raises(ConversionRequestError, match="chunk_level"):
+            ConversionRequest(chunk_level="invalid")
+
+    def test_invalid_speaker_mode_raises(self):
+        with pytest.raises(ConversionRequestError, match="speaker_mode"):
+            ConversionRequest(speaker_mode="invalid")
+
+    def test_invalid_max_subtitle_words_type_raises(self):
+        with pytest.raises(ConversionRequestError, match="max_subtitle_words"):
+            ConversionRequest(max_subtitle_words="not_a_number")
+
+    def test_invalid_speed_type_raises(self):
+        with pytest.raises(ConversionRequestError, match="speed"):
+            ConversionRequest(speed="fast")
+
+    def test_invalid_silence_type_raises(self):
+        with pytest.raises(ConversionRequestError, match="silence_between_chapters"):
+            ConversionRequest(silence_between_chapters="loud")
+
+    def test_empty_tts_provider_defaults_to_kokoro(self):
+        req = ConversionRequest(tts_provider="")
+        assert req.tts_provider == "kokoro"
+
+    def test_enum_fields_accept_valid_values(self):
+        req = ConversionRequest(
+            language=Language.FR,
+            output_format=OutputFormat.MP3,
+            subtitle_mode=SubtitleMode.SENTENCE,
+            subtitle_format=SubtitleFormat.ASS,
+            save_mode=SaveMode.CUSTOM_FOLDER,
+        )
+        assert req.language == Language.FR
+        assert req.output_format == OutputFormat.MP3
+        assert req.subtitle_mode == SubtitleMode.SENTENCE
+        assert req.subtitle_format == SubtitleFormat.ASS
+        assert req.save_mode == SaveMode.CUSTOM_FOLDER

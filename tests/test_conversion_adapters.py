@@ -146,6 +146,7 @@ class TestWebUIAdapter:
 
     def test_none_defaults_handled(self):
         from abogen.webui.conversion_adapter import build_conversion_request_from_job
+        from abogen.domain.enums import Language, OutputFormat, SubtitleMode, SaveMode
 
         job = self._make_job(
             language=None,
@@ -161,12 +162,13 @@ class TestWebUIAdapter:
         )
         req = build_conversion_request_from_job(job)
 
-        assert req.language == "a"
-        assert req.voice == "M1"
+        # None values pass through adapter; ConversionRequest.__post_init__
+        # applies defaults and clamping for numeric fields.
+        assert req.language == Language.EN_US
         assert req.speed == 1.0
-        assert req.output_format == "wav"
-        assert req.subtitle_mode == "Disabled"
-        assert req.save_mode == "save_next_to_input"
+        assert req.output_format == OutputFormat.WAV
+        assert req.subtitle_mode == SubtitleMode.DISABLED
+        assert req.save_mode == SaveMode.SAVE_NEXT_TO_INPUT
         assert req.silence_between_chapters == 2.0
         assert req.chapter_intro_delay == 0.0
         assert req.supertonic_total_steps == 5
@@ -369,6 +371,7 @@ class TestPyQtAdapter:
 
     def test_none_defaults_handled(self):
         from abogen.pyqt.conversion_adapter import build_conversion_request_from_thread
+        from abogen.domain.enums import Language, OutputFormat, SubtitleMode, SaveMode
 
         thread = self._make_thread(
             lang_code=None,
@@ -384,12 +387,13 @@ class TestPyQtAdapter:
         )
         req = build_conversion_request_from_thread(thread)
 
-        assert req.language == "a"
-        assert req.voice == "M1"
+        # None values pass through adapter; ConversionRequest.__post_init__
+        # applies defaults and clamping for numeric fields.
+        assert req.language == Language.EN_US
         assert req.speed == 1.0
-        assert req.output_format == "wav"
-        assert req.subtitle_mode == "Disabled"
-        assert req.save_mode == "save_next_to_input"
+        assert req.output_format == OutputFormat.WAV
+        assert req.subtitle_mode == SubtitleMode.DISABLED
+        assert req.save_mode == SaveMode.SAVE_NEXT_TO_INPUT
         assert req.silence_between_chapters == 2.0
         assert req.chapter_intro_delay == 0.0
         assert req.supertonic_total_steps == 5
