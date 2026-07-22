@@ -117,7 +117,7 @@ from abogen.domain.audio_buffer import (
 )
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
 from abogen.domain.pipeline_factory import PipelinePool
-from abogen.domain.conversion_engine import synthesize_text, process_and_write_subtitles, SegmentStats
+from abogen.domain.conversion_engine import synthesize_text, SynthParams, process_and_write_subtitles, SegmentStats
 from abogen.domain.voice_loader import VoiceCache, resolve_voice
 from abogen.domain.voice_utils import resolve_voice_target as _resolve_voice_target
 
@@ -462,22 +462,26 @@ def run_conversion_job(job: Job) -> None:
                 def _preview(text: str) -> None:
                     job.add_log(f"{prefix}{stats.processed_chars:,}/{job.total_characters or '—'}: {text[:80]}")
 
-                local_segments, accumulated_tokens = synthesize_text(
-                    text=source_text,
+                synth_params = SynthParams(
                     tts_context=tts_context,
-                    backend=backend,
-                    voice=resolved_voice,
-                    speed=effective_speed,
                     stats=stats,
                     check_cancel=canceller,
                     on_progress=_on_progress,
-                    chapter_sink=chapter_sink,
                     audio_sink=audio_sink,
-                    preview_callback=_preview,
                     subtitle_mode=job.subtitle_mode if (subtitle_writer and audio_sink) else "Disabled",
                     max_subtitle_words=job.max_subtitle_words,
                     lang_code=job.language,
                     use_spacy_segmentation=job.subtitle_mode not in ("Disabled", "Line"),
+                )
+
+                local_segments, accumulated_tokens = synthesize_text(
+                    text=source_text,
+                    params=synth_params,
+                    backend=backend,
+                    voice=resolved_voice,
+                    speed=effective_speed,
+                    chapter_sink=chapter_sink,
+                    preview_callback=_preview,
                 )
                 current_time = stats.current_time
 

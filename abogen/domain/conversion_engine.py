@@ -191,24 +191,34 @@ def process_and_write_subtitles(
         subtitle_writer.write_entry(start=start, end=end, text=text)
 
 
+@dataclass(frozen=True)
+class SynthParams:
+    """Common parameters for synthesize_text calls.
+
+    Packed once by the executor to avoid repeating identical kwargs.
+    When adding new common params, change only this dataclass.
+    """
+    tts_context: TTSContext
+    stats: SegmentStats
+    check_cancel: CancelChecker
+    on_progress: Callable[[int, str], None]
+    audio_sink: Optional[AudioSink] = None
+    subtitle_mode: str = "Disabled"
+    max_subtitle_words: int = 50
+    lang_code: str = "a"
+    use_spacy_segmentation: bool = False
+
+
 def synthesize_text(
     *,
     text: str,
-    tts_context: TTSContext,
+    params: SynthParams,
     backend: Any,
     voice: Any,
     speed: float,
-    stats: SegmentStats,
-    check_cancel: CancelChecker,
-    on_progress: Callable[[int, str], None],
     chapter_sink: Optional[AudioSink] = None,
-    audio_sink: Optional[AudioSink] = None,
     preview_callback: Optional[Callable[[str], None]] = None,
     on_segment: Optional[Callable[[SegmentInfo], None]] = None,
-    subtitle_mode: str = "Disabled",
-    max_subtitle_words: int = 50,
-    lang_code: str = "a",
-    use_spacy_segmentation: bool = False,
     split_pattern_override: Optional[str] = None,
 ) -> tuple[int, list]:
     """Normalize text and run TTS — the single entry point for both UIs.
@@ -216,22 +226,22 @@ def synthesize_text(
     Combines TTSContext.normalize() + run_tts_segment_loop() into one call.
     UI-specific concerns (provider resolution, progress display) stay in the UI.
     """
-    normalized = tts_context.normalize(text)
+    normalized = params.tts_context.normalize(text)
     return run_tts_segment_loop(
         text=normalized,
         backend=backend,
         voice=voice,
         speed=speed,
-        split_pattern=split_pattern_override or tts_context.split_pattern,
-        stats=stats,
-        check_cancel=check_cancel,
-        on_progress=on_progress,
+        split_pattern=split_pattern_override or params.tts_context.split_pattern,
+        stats=params.stats,
+        check_cancel=params.check_cancel,
+        on_progress=params.on_progress,
         chapter_sink=chapter_sink,
-        audio_sink=audio_sink,
+        audio_sink=params.audio_sink,
         preview_callback=preview_callback,
         on_segment=on_segment,
-        subtitle_mode=subtitle_mode,
-        max_subtitle_words=max_subtitle_words,
-        lang_code=lang_code,
-        use_spacy_segmentation=use_spacy_segmentation,
+        subtitle_mode=params.subtitle_mode,
+        max_subtitle_words=params.max_subtitle_words,
+        lang_code=params.lang_code,
+        use_spacy_segmentation=params.use_spacy_segmentation,
     )

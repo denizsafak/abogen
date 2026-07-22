@@ -29,6 +29,7 @@ from abogen.application.conversion_result import ConversionResult
 from abogen.domain.audio_sink import open_audio_sink
 from abogen.domain.conversion_engine import (
     SegmentStats,
+    SynthParams,
     process_and_write_subtitles,
     synthesize_text,
 )
@@ -138,6 +139,18 @@ def execute_conversion(
 
         effective_subtitle_mode = request.subtitle_mode if subtitle_writer else "Disabled"
 
+        synth = SynthParams(
+            tts_context=tts_context,
+            stats=stats,
+            check_cancel=check_cancelled,
+            on_progress=lambda pct, etr: events.progress(pct, etr),
+            audio_sink=audio_sink,
+            subtitle_mode=effective_subtitle_mode,
+            max_subtitle_words=request.max_subtitle_words,
+            lang_code=request.language,
+            use_spacy_segmentation=use_spacy,
+        )
+
         # Chapter directory
         chapter_dir = None
         if request.save_chapters_separately and len(plan.chapters) > 1:
@@ -154,20 +167,12 @@ def execute_conversion(
             intro_backend = pipeline_provider.get(intro_provider, request.language, request.use_gpu)
             synthesize_text(
                 text=plan.intro.text,
-                tts_context=tts_context,
+                params=synth,
                 backend=intro_backend,
                 voice=intro_voice,
                 speed=intro_speed or request.speed,
-                stats=stats,
-                check_cancel=check_cancelled,
-                on_progress=lambda pct, etr: events.progress(pct, etr),
                 chapter_sink=None,
-                audio_sink=audio_sink,
                 preview_callback=lambda text: events.log(f"  {text[:80]}"),
-                subtitle_mode=effective_subtitle_mode,
-                max_subtitle_words=request.max_subtitle_words,
-                lang_code=request.language,
-                use_spacy_segmentation=use_spacy,
             )
             intro_emitted = True
             events.log("Intro synthesized.")
@@ -209,20 +214,12 @@ def execute_conversion(
                 intro_backend = pipeline_provider.get(intro_provider, request.language, request.use_gpu)
                 synthesize_text(
                     text=plan.intro.text,
-                    tts_context=tts_context,
+                    params=synth,
                     backend=intro_backend,
                     voice=intro_voice,
                     speed=intro_speed or request.speed,
-                    stats=stats,
-                    check_cancel=check_cancelled,
-                    on_progress=lambda pct, etr: events.progress(pct, etr),
                     chapter_sink=chapter_sink,
-                    audio_sink=audio_sink,
                     preview_callback=lambda text: events.log(f"  Intro: {text[:80]}"),
-                    subtitle_mode=effective_subtitle_mode,
-                    max_subtitle_words=request.max_subtitle_words,
-                    lang_code=request.language,
-                    use_spacy_segmentation=use_spacy,
                 )
                 intro_emitted = True
                 if request.chapter_intro_delay > 0:
@@ -239,20 +236,12 @@ def execute_conversion(
                 if heading_text:
                     synthesize_text(
                         text=heading_text,
-                        tts_context=tts_context,
+                        params=synth,
                         backend=chapter_backend,
                         voice=chapter_voice,
                         speed=chapter_speed or request.speed,
-                        stats=stats,
-                        check_cancel=check_cancelled,
-                        on_progress=lambda pct, etr: events.progress(pct, etr),
                         chapter_sink=chapter_sink,
-                        audio_sink=audio_sink,
                         preview_callback=lambda text: events.log(f"  Title: {text[:80]}"),
-                        subtitle_mode=effective_subtitle_mode,
-                        max_subtitle_words=request.max_subtitle_words,
-                        lang_code=request.language,
-                        use_spacy_segmentation=use_spacy,
                     )
                     if request.chapter_intro_delay > 0:
                         _append_silence(
@@ -282,20 +271,12 @@ def execute_conversion(
                 seg_start_time = stats.current_time
                 local_segments, accumulated_tokens = synthesize_text(
                     text=segment.text,
-                    tts_context=tts_context,
+                    params=synth,
                     backend=seg_backend,
                     voice=seg_voice,
                     speed=seg_speed or request.speed,
-                    stats=stats,
-                    check_cancel=check_cancelled,
-                    on_progress=lambda pct, etr: events.progress(pct, etr),
                     chapter_sink=chapter_sink,
-                    audio_sink=audio_sink,
                     preview_callback=lambda text: events.log(f"  {text[:80]}"),
-                    subtitle_mode=effective_subtitle_mode,
-                    max_subtitle_words=request.max_subtitle_words,
-                    lang_code=request.language,
-                    use_spacy_segmentation=use_spacy,
                 )
 
                 # Process subtitles
@@ -366,20 +347,12 @@ def execute_conversion(
 
             synthesize_text(
                 text=plan.outro.text,
-                tts_context=tts_context,
+                params=synth,
                 backend=outro_backend,
                 voice=outro_voice,
                 speed=outro_speed or request.speed,
-                stats=stats,
-                check_cancel=check_cancelled,
-                on_progress=lambda pct, etr: events.progress(pct, etr),
                 chapter_sink=None,
-                audio_sink=audio_sink,
                 preview_callback=lambda text: events.log(f"  {text[:80]}"),
-                subtitle_mode=effective_subtitle_mode,
-                max_subtitle_words=request.max_subtitle_words,
-                lang_code=request.language,
-                use_spacy_segmentation=use_spacy,
             )
             events.log("Outro synthesized.")
 

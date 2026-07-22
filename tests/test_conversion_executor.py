@@ -16,6 +16,7 @@ from typing import Any
 
 from abogen.domain.conversion_engine import (
     synthesize_text,
+    SynthParams,
     run_tts_segment_loop,
     process_and_write_subtitles,
     SegmentStats,
@@ -133,16 +134,20 @@ class TestSynthesizeText:
         def on_progress(pct, etr):
             progress_calls.append((pct, etr))
 
-        segments, tokens = synthesize_text(
-            text="Hello world.",
+        params = SynthParams(
             tts_context=tts_ctx,
-            backend=backend,
-            voice="M1",
-            speed=1.0,
             stats=stats,
             check_cancel=cancel,
             on_progress=on_progress,
             audio_sink=sink,
+        )
+
+        segments, tokens = synthesize_text(
+            text="Hello world.",
+            params=params,
+            backend=backend,
+            voice="M1",
+            speed=1.0,
         )
 
         assert segments >= 1
@@ -159,15 +164,19 @@ class TestSynthesizeText:
         def on_progress(pct, etr):
             progress_calls.append((pct, etr))
 
-        segments, tokens = synthesize_text(
-            text="Hello world.",
+        params = SynthParams(
             tts_context=tts_ctx,
-            backend=backend,
-            voice="M1",
-            speed=1.0,
             stats=stats,
             check_cancel=cancel,
             on_progress=on_progress,
+        )
+
+        segments, tokens = synthesize_text(
+            text="Hello world.",
+            params=params,
+            backend=backend,
+            voice="M1",
+            speed=1.0,
         )
 
         # Should stop early due to cancellation
@@ -184,17 +193,21 @@ class TestSynthesizeText:
         def on_progress(pct, etr):
             pass
 
-        segments, tokens = synthesize_text(
-            text="Hello world.",
+        params = SynthParams(
             tts_context=tts_ctx,
-            backend=backend,
-            voice="M1",
-            speed=1.0,
             stats=stats,
             check_cancel=cancel,
             on_progress=on_progress,
-            chapter_sink=chapter_sink,
             audio_sink=merged_sink,
+        )
+
+        segments, tokens = synthesize_text(
+            text="Hello world.",
+            params=params,
+            backend=backend,
+            voice="M1",
+            speed=1.0,
+            chapter_sink=chapter_sink,
         )
 
         # Both sinks should receive audio
@@ -210,15 +223,19 @@ class TestSynthesizeText:
         def on_progress(pct, etr):
             pass
 
-        segments, tokens = synthesize_text(
-            text="Hello world.",
+        params = SynthParams(
             tts_context=tts_ctx,
-            backend=backend,
-            voice="M1",
-            speed=1.0,
             stats=stats,
             check_cancel=cancel,
             on_progress=on_progress,
+        )
+
+        segments, tokens = synthesize_text(
+            text="Hello world.",
+            params=params,
+            backend=backend,
+            voice="M1",
+            speed=1.0,
             split_pattern_override=r"\n+",
         )
 
@@ -323,21 +340,25 @@ class TestFullPipeline:
             progress_calls.append((pct, etr))
 
         # Simulate full pipeline: synthesize → subtitles → finalize
-        segments, tokens = synthesize_text(
-            text="This is a test sentence. Another sentence here.",
+        params = SynthParams(
             tts_context=tts_ctx,
-            backend=backend,
-            voice="M1",
-            speed=1.0,
             stats=stats,
             check_cancel=cancel,
             on_progress=on_progress,
-            chapter_sink=chapter_sink,
             audio_sink=merged_sink,
             subtitle_mode="Sentence",
             max_subtitle_words=5,
             lang_code="a",
             use_spacy_segmentation=False,
+        )
+
+        segments, tokens = synthesize_text(
+            text="This is a test sentence. Another sentence here.",
+            params=params,
+            backend=backend,
+            voice="M1",
+            speed=1.0,
+            chapter_sink=chapter_sink,
         )
 
         # Process accumulated tokens
@@ -373,15 +394,19 @@ class TestFullPipeline:
         def on_progress(pct, etr):
             progress_calls.append((pct, etr))
 
-        segments, tokens = synthesize_text(
-            text="Hello world. " * 100,
+        params = SynthParams(
             tts_context=tts_ctx,
-            backend=backend,
-            voice="M1",
-            speed=1.0,
             stats=stats,
             check_cancel=cancel_fn,
             on_progress=on_progress,
+        )
+
+        segments, tokens = synthesize_text(
+            text="Hello world. " * 100,
+            params=params,
+            backend=backend,
+            voice="M1",
+            speed=1.0,
         )
 
         # Should have stopped before processing all text

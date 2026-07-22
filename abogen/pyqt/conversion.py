@@ -36,7 +36,7 @@ from abogen.domain.output_paths import (
 )
 from abogen.domain.audio_helpers import build_ffmpeg_command, to_float32
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
-from abogen.domain.conversion_engine import synthesize_text, SegmentStats, SegmentInfo
+from abogen.domain.conversion_engine import synthesize_text, SynthParams, SegmentStats, SegmentInfo
 from abogen.domain.intro_outro import resolve_intro, resolve_outro
 from abogen.domain.audio_buffer import (
     create_silence,
@@ -1016,18 +1016,26 @@ class ConversionThread(QThread):
                             total_characters=self.total_char_count,
                         )
 
+                        synth_params = SynthParams(
+                            tts_context=self._tts_context,
+                            stats=stats,
+                            check_cancel=_qt_check_cancel,
+                            on_progress=_qt_on_progress,
+                            audio_sink=merged_sink if merge_chapters_at_end else None,
+                            subtitle_mode=self.subtitle_mode,
+                            max_subtitle_words=self.max_subtitle_words,
+                            lang_code=self.lang_code,
+                            use_spacy_segmentation=getattr(self, "use_spacy_segmentation", False),
+                        )
+
                         try:
                             synthesize_text(
                                 text=text_segment,
-                                tts_context=self._tts_context,
+                                params=synth_params,
                                 backend=self.backend,
                                 voice=loaded_voice,
                                 speed=self.speed,
-                                stats=stats,
-                                check_cancel=_qt_check_cancel,
-                                on_progress=_qt_on_progress,
                                 chapter_sink=chapter_sink,
-                                audio_sink=merged_sink if merge_chapters_at_end else None,
                                 on_segment=_qt_on_segment,
                                 split_pattern_override=active_split_pattern,
                             )
