@@ -550,10 +550,14 @@ class ConversionThread(QThread):
 
             # --- Compile normalization rules (heteronym + pronunciation) ---
             from abogen.domain.normalization import TTSContext
-            pronunciation_overrides = merge_pronunciation_overrides(
-                getattr(self, "pronunciation_overrides", None),
-                getattr(self, "manual_overrides", None),
-            )
+
+            class _MergeJob:
+                pronunciation_overrides = getattr(self, "pronunciation_overrides", None)
+                manual_overrides = getattr(self, "manual_overrides", None)
+                heteronym_overrides = getattr(self, "heteronym_overrides", None)
+                language = self.lang_code
+
+            pronunciation_overrides = merge_pronunciation_overrides(_MergeJob())
             self._tts_context = TTSContext(
                 split_pattern=self.split_pattern,
                 pronunciation_rules=compile_pronunciation_rules(pronunciation_overrides),
