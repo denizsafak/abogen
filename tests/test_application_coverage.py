@@ -432,9 +432,16 @@ class TestExecutorGaps:
         with pytest.raises(ValueError, match="output_layout"):
             execute_conversion(plan, events, pipeline, resolver, tts_context)
 
-    def test_executor_m4b_forces_merge(self):
+    @patch("subprocess.Popen")
+    def test_executor_m4b_forces_merge(self, mock_popen):
         """Executor forces merge for m4b format."""
         from abogen.application.conversion_executor import execute_conversion
+
+        mock_proc = mock_popen.return_value
+        mock_proc.returncode = 0
+        mock_proc.wait.return_value = 0
+        mock_proc.stdin = MagicMock()
+        mock_proc.communicate.return_value = (b"", b"")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             req = ConversionRequest(
