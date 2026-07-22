@@ -99,6 +99,9 @@ def apply_newline_policy(chapters: List[ExtractedChapter], replace_single_newlin
         chapter.text = newline_regex.sub(" ", chapter.text)
 
 
+from abogen.domain.enums import SaveMode
+
+
 def resolve_output_directory(
     *,
     save_mode: str,
@@ -108,13 +111,13 @@ def resolve_output_directory(
     user_output_path: Optional[Path],
     user_cache_outputs: Optional[Path],
 ) -> Path:
-    if save_mode == "Save to Desktop" and desktop_dir:
+    if save_mode in (SaveMode.SAVE_TO_DESKTOP, "Save to Desktop") and desktop_dir:
         return desktop_dir
-    if save_mode == "Save next to input file":
+    if save_mode in (SaveMode.SAVE_NEXT_TO_INPUT, "Save next to input file"):
         return stored_path.parent
-    if save_mode == "Choose output folder" and output_folder:
+    if save_mode in (SaveMode.CHOOSE_OUTPUT_FOLDER, "Choose output folder") and output_folder:
         return Path(output_folder)
-    if save_mode == "Use default save location" and user_output_path:
+    if save_mode in (SaveMode.DEFAULT_OUTPUT, "Use default save location") and user_output_path:
         return user_output_path
     return user_cache_outputs or Path(".")
 

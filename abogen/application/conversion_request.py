@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from abogen.domain.enums import OutputFormat, SaveMode, SubtitleFormat, SubtitleMode
+
 
 @dataclass
 class ConversionRequest:
@@ -37,17 +39,17 @@ class ConversionRequest:
     supertonic_total_steps: int = 5
 
     # --- Output Format ---
-    output_format: str = "wav"
-    subtitle_mode: str = "Disabled"
-    subtitle_format: str = "srt"
+    output_format: OutputFormat = OutputFormat.WAV
+    subtitle_mode: SubtitleMode = SubtitleMode.DISABLED
+    subtitle_format: SubtitleFormat = SubtitleFormat.SRT
     max_subtitle_words: int = 50
 
     # --- Save Options ---
-    save_mode: str = "save_next_to_input"
+    save_mode: SaveMode = SaveMode.SAVE_NEXT_TO_INPUT
     output_folder: Optional[Path] = None
     save_chapters_separately: bool = False
     merge_chapters_at_end: bool = True
-    separate_chapters_format: str = "wav"
+    separate_chapters_format: OutputFormat = OutputFormat.WAV
     save_as_project: bool = False
 
     # --- Timing ---

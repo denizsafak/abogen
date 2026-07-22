@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from typing import List, Optional, Tuple
 
+from abogen.domain.enums import SubtitleMode
+
 
 # Punctuation constants for sentence splitting
 PUNCTUATION_SENTENCE = ".!?\u061f\u3002\uff01\uff1f"  # .!? .?. ??
@@ -50,17 +52,17 @@ def process_subtitle_tokens(
     # spaCy is disabled when subtitle mode is "Disabled" or "Line"
     use_spacy_for_english = (
         use_spacy_segmentation
-        and subtitle_mode not in ["Disabled", "Line"]
+        and subtitle_mode not in [SubtitleMode.DISABLED, SubtitleMode.LINE]
         and lang_code in ["a", "b"]
-        and subtitle_mode in ["Sentence", "Sentence + Comma"]
+        and subtitle_mode in [SubtitleMode.SENTENCE, SubtitleMode.SENTENCE_COMMA]
     )
 
-    if subtitle_mode == "Sentence + Highlighting":
+    if subtitle_mode == SubtitleMode.SENTENCE_HIGHLIGHTING:
         _process_karaoke_highlighting(
             processed_tokens, subtitle_entries, max_subtitle_words, fallback_end_time
         )
-    elif subtitle_mode in ["Sentence", "Sentence + Comma", "Line"]:
-        if use_spacy_for_english and subtitle_mode != "Line":
+    elif subtitle_mode in [SubtitleMode.SENTENCE, SubtitleMode.SENTENCE_COMMA, SubtitleMode.LINE]:
+        if use_spacy_for_english and subtitle_mode != SubtitleMode.LINE:
             _process_spacy_sentences(
                 processed_tokens, subtitle_entries, max_subtitle_words,
                 subtitle_mode, lang_code, fallback_end_time
@@ -176,7 +178,7 @@ def _process_spacy_sentences(
     sentence_boundaries = [sent.end_char for sent in doc.sents]
 
     # For "Sentence + Comma" mode, also split on commas
-    if subtitle_mode == "Sentence + Comma":
+    if subtitle_mode == SubtitleMode.SENTENCE_COMMA:
         comma_positions = [
             i + 1 for i, c in enumerate(full_text) if c == ","
         ]
@@ -242,9 +244,9 @@ def _process_regex_sentences(
 ) -> None:
     """Process tokens using regex for sentence boundary detection."""
     # Define separator pattern based on mode
-    if subtitle_mode == "Line":
+    if subtitle_mode == SubtitleMode.LINE:
         separator = r"\n"
-    elif subtitle_mode == "Sentence":
+    elif subtitle_mode == SubtitleMode.SENTENCE:
         # Use punctuation without comma
         separator = rf"[{re.escape(PUNCTUATION_SENTENCE)}]"
     else:  # Sentence + Comma

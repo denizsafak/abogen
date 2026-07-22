@@ -23,6 +23,7 @@ from typing import Any, Callable, List, Optional, Protocol
 
 from abogen.domain.audio_sink import AudioSink
 from abogen.domain.conversion_pipeline import tts_segments
+from abogen.domain.enums import SubtitleMode
 from abogen.domain.normalization import TTSContext
 from abogen.domain.progress import calc_etr_str
 from abogen.domain.subtitle_generation import process_subtitle_tokens
@@ -136,7 +137,7 @@ def run_tts_segment_loop(
             params.audio_sink.write(seg.audio)
 
         # Accumulate subtitle tokens (default path; skipped if on_segment handles it)
-        if not on_segment and params.subtitle_mode != "Disabled" and seg.tokens:
+        if not on_segment and params.subtitle_mode != SubtitleMode.DISABLED and seg.tokens:
             accumulated_tokens.extend(seg.tokens)
 
         # Update timing

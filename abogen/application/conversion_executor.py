@@ -33,6 +33,7 @@ from abogen.domain.conversion_engine import (
     process_and_write_subtitles,
     synthesize_text,
 )
+from abogen.domain.enums import OutputFormat, SubtitleMode
 from abogen.domain.normalization import TTSContext
 from abogen.domain.output_paths import sanitize_filename_for_chapter
 from abogen.infrastructure.subtitle_writer import make_subtitle_writer
@@ -87,7 +88,7 @@ def execute_conversion(
     )
 
     # Compute subtitle flag once (used in every synthesize_text call)
-    use_spacy = request.subtitle_mode not in ("Disabled", "Line")
+    use_spacy = request.subtitle_mode not in (SubtitleMode.DISABLED, SubtitleMode.LINE)
 
     # Output paths
     output_layout = plan.output_layout
@@ -96,7 +97,7 @@ def execute_conversion(
 
     # Determine if merged output is needed
     merge_chapters = request.merge_chapters_at_end or not request.save_chapters_separately
-    if request.output_format.lower() == "m4b":
+    if request.output_format == OutputFormat.M4B:
         merge_chapters = True
 
     # Resolve voices
@@ -125,7 +126,7 @@ def execute_conversion(
 
         # Open subtitle writer if needed
         subtitle_writer: Optional[SubtitleWriter] = None
-        if request.subtitle_mode != "Disabled" and audio_sink:
+        if request.subtitle_mode != SubtitleMode.DISABLED and audio_sink:
             subtitle_writer = make_subtitle_writer(
                 audio_path,
                 request.subtitle_format,
@@ -137,7 +138,7 @@ def execute_conversion(
                 stack.callback(subtitle_writer.close)
                 result.subtitle_paths.append(subtitle_writer.path)
 
-        effective_subtitle_mode = request.subtitle_mode if subtitle_writer else "Disabled"
+        effective_subtitle_mode = request.subtitle_mode if subtitle_writer else SubtitleMode.DISABLED
 
         synth = SynthParams(
             tts_context=tts_context,

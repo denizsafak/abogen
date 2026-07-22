@@ -19,6 +19,7 @@ from typing import Optional
 
 from abogen.application.conversion_models import OutputLayout
 from abogen.application.conversion_request import ConversionRequest
+from abogen.domain.enums import OutputFormat, SaveMode, SubtitleFormat
 from abogen.domain.output_paths import (
     resolve_project_layout,
     resolve_unique_path,
@@ -39,7 +40,7 @@ def resolve_output_layout(request: ConversionRequest) -> OutputLayout:
         OutputLayout with resolved paths
     """
     # Determine base output directory
-    if request.save_mode == "custom_folder" and request.output_folder:
+    if request.save_mode == SaveMode.CUSTOM_FOLDER and request.output_folder:
         parent_dir = Path(request.output_folder)
     elif request.source_path:
         parent_dir = request.source_path.parent
@@ -55,7 +56,7 @@ def resolve_output_layout(request: ConversionRequest) -> OutputLayout:
         base_name = "output"
 
     # Find unique output path
-    allowed_exts = {request.output_format, "srt", "ass", "vtt", "mp4", "m4b"}
+    allowed_exts = {request.output_format, SubtitleFormat.SRT, SubtitleFormat.ASS, "vtt", "mp4", OutputFormat.M4B}
     unique_base = resolve_unique_path(
         parent_dir, base_name, "", allowed_extensions=allowed_exts
     )
@@ -142,7 +143,7 @@ def should_merge_output(request: ConversionRequest) -> bool:
     Returns:
         True if merged output should be created
     """
-    if request.output_format.lower() == "m4b":
+    if request.output_format == OutputFormat.M4B:
         return True
     if not request.save_chapters_separately:
         return True

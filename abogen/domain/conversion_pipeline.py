@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+
+from abogen.domain.enums import SubtitleMode
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import numpy as np
@@ -221,7 +223,7 @@ def emit_text_to_sinks(
 
     # Flush subtitle tokens
     if subtitle_writer and accumulated_tokens:
-        _use_spacy = subtitle_mode not in ("Disabled", "Line")
+        _use_spacy = subtitle_mode not in (SubtitleMode.DISABLED, SubtitleMode.LINE)
         new_entries: List[tuple] = []
         process_subtitle_tokens(
             accumulated_tokens,

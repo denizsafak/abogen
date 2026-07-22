@@ -27,6 +27,7 @@ from abogen.application.conversion_ports import (
 )
 from abogen.application.conversion_request import ConversionRequest
 from abogen.application.conversion_result import ConversionResult
+from abogen.domain.enums import SubtitleMode
 from abogen.domain.normalization import TTSContext
 from abogen.domain.split_pattern import get_split_pattern
 
@@ -135,7 +136,7 @@ def _prepare_tts_context(
     # Compute split pattern
     split_pattern = get_split_pattern(
         str(request.language or "a"),
-        str(request.subtitle_mode or "Disabled"),
+        request.subtitle_mode or SubtitleMode.DISABLED,
     )
 
     # Merge pronunciation overrides (manual + pronunciation)
