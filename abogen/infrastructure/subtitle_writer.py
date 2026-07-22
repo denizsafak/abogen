@@ -6,21 +6,8 @@ from enum import Enum
 from pathlib import Path
 from typing import List, Optional, TextIO
 
+from abogen.domain.enums import SubtitleFormat, SubtitleMode
 from abogen.subtitle_utils import clean_subtitle_text
-
-
-class SubtitleFormat(Enum):
-    SRT = "srt"
-    ASS = "ass"
-    VTT = "vtt"
-
-
-class SubtitleMode(Enum):
-    DISABLED = "Disabled"
-    LINE = "Line"
-    SENTENCE = "Sentence"
-    SENTENCE_COMMA = "Sentence + Comma"
-    SENTENCE_HIGHLIGHT = "Sentence + Highlighting"
 
 
 class SubtitleAlignment(Enum):

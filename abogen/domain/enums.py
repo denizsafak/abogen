@@ -18,7 +18,7 @@ class SubtitleMode(str, Enum):
     LINE = "Line"
     SENTENCE = "Sentence"
     SENTENCE_COMMA = "Sentence + Comma"
-    SENTENCE_HIGHLIGHTING = "Sentence + Highlighting"
+    SENTENCE_HIGHLIGHT = "Sentence + Highlighting"
 
     @classmethod
     def from_str(cls, value: str) -> SubtitleMode:
@@ -71,6 +71,7 @@ class SubtitleFormat(str, Enum):
     """Subtitle file format."""
     SRT = "srt"
     ASS = "ass"
+    VTT = "vtt"
 
     @property
     def dot_ext(self) -> str:

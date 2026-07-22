@@ -57,7 +57,7 @@ def process_subtitle_tokens(
         and subtitle_mode in [SubtitleMode.SENTENCE, SubtitleMode.SENTENCE_COMMA]
     )
 
-    if subtitle_mode == SubtitleMode.SENTENCE_HIGHLIGHTING:
+    if subtitle_mode == SubtitleMode.SENTENCE_HIGHLIGHT:
         _process_karaoke_highlighting(
             processed_tokens, subtitle_entries, max_subtitle_words, fallback_end_time
         )
