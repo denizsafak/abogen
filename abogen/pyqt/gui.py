@@ -842,7 +842,7 @@ class WordSubstitutionsDialog(QDialog):
             self,
         )
         instructions.setStyleSheet(
-            "padding: 10px; background-color: #f0f0f0; border-radius: 5px;"
+            f"padding: 10px; background-color: {COLORS['GREY_BACKGROUND']}; border-radius: 5px;"
         )
         instructions.setWordWrap(True)
         layout.addWidget(instructions)
