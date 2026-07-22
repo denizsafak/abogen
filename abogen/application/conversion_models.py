@@ -17,7 +17,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from abogen.application.conversion_request import ConversionRequest
 
 
 @dataclass
@@ -84,7 +87,7 @@ class ConversionPlan:
     This is the output of the planning phase and input to the executor.
     """
 
-    request: Any  # ConversionRequest (forward reference to avoid circular import)
+    request: ConversionRequest
     metadata: Dict[str, Any]
     chapters: List[ChapterPlan]
     intro: Optional[IntroOutroSpec] = None
