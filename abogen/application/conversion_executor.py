@@ -85,6 +85,9 @@ def execute_conversion(
         total_characters=total_characters,
     )
 
+    # Compute subtitle flag once (used in every synthesize_text call)
+    use_spacy = request.subtitle_mode not in ("Disabled", "Line")
+
     # Output paths
     output_layout = plan.output_layout
     if not output_layout:
@@ -133,6 +136,8 @@ def execute_conversion(
                 stack.callback(subtitle_writer.close)
                 result.subtitle_paths.append(subtitle_writer.path)
 
+        effective_subtitle_mode = request.subtitle_mode if subtitle_writer else "Disabled"
+
         # Chapter directory
         chapter_dir = None
         if request.save_chapters_separately and len(plan.chapters) > 1:
@@ -159,10 +164,10 @@ def execute_conversion(
                 chapter_sink=None,
                 audio_sink=audio_sink,
                 preview_callback=lambda text: events.log(f"  {text[:80]}"),
-                subtitle_mode=request.subtitle_mode if subtitle_writer else "Disabled",
+                subtitle_mode=effective_subtitle_mode,
                 max_subtitle_words=request.max_subtitle_words,
                 lang_code=request.language,
-                use_spacy_segmentation=request.subtitle_mode not in ("Disabled", "Line"),
+                use_spacy_segmentation=use_spacy,
             )
             intro_emitted = True
             events.log("Intro synthesized.")
@@ -214,10 +219,10 @@ def execute_conversion(
                     chapter_sink=chapter_sink,
                     audio_sink=audio_sink,
                     preview_callback=lambda text: events.log(f"  Intro: {text[:80]}"),
-                    subtitle_mode=request.subtitle_mode if subtitle_writer else "Disabled",
+                    subtitle_mode=effective_subtitle_mode,
                     max_subtitle_words=request.max_subtitle_words,
                     lang_code=request.language,
-                    use_spacy_segmentation=request.subtitle_mode not in ("Disabled", "Line"),
+                    use_spacy_segmentation=use_spacy,
                 )
                 intro_emitted = True
                 if request.chapter_intro_delay > 0:
@@ -244,10 +249,10 @@ def execute_conversion(
                         chapter_sink=chapter_sink,
                         audio_sink=audio_sink,
                         preview_callback=lambda text: events.log(f"  Title: {text[:80]}"),
-                        subtitle_mode=request.subtitle_mode if subtitle_writer else "Disabled",
+                        subtitle_mode=effective_subtitle_mode,
                         max_subtitle_words=request.max_subtitle_words,
                         lang_code=request.language,
-                        use_spacy_segmentation=request.subtitle_mode not in ("Disabled", "Line"),
+                        use_spacy_segmentation=use_spacy,
                     )
                     if request.chapter_intro_delay > 0:
                         _append_silence(
@@ -287,10 +292,10 @@ def execute_conversion(
                     chapter_sink=chapter_sink,
                     audio_sink=audio_sink,
                     preview_callback=lambda text: events.log(f"  {text[:80]}"),
-                    subtitle_mode=request.subtitle_mode if subtitle_writer else "Disabled",
+                    subtitle_mode=effective_subtitle_mode,
                     max_subtitle_words=request.max_subtitle_words,
                     lang_code=request.language,
-                    use_spacy_segmentation=request.subtitle_mode not in ("Disabled", "Line"),
+                    use_spacy_segmentation=use_spacy,
                 )
 
                 # Process subtitles
@@ -301,7 +306,7 @@ def execute_conversion(
                         subtitle_mode=request.subtitle_mode,
                         max_subtitle_words=request.max_subtitle_words,
                         lang_code=request.language,
-                        use_spacy_segmentation=request.subtitle_mode not in ("Disabled", "Line"),
+                        use_spacy_segmentation=use_spacy,
                         fallback_end_time=stats.current_time,
                     )
 
@@ -371,10 +376,10 @@ def execute_conversion(
                 chapter_sink=None,
                 audio_sink=audio_sink,
                 preview_callback=lambda text: events.log(f"  {text[:80]}"),
-                subtitle_mode=request.subtitle_mode if subtitle_writer else "Disabled",
+                subtitle_mode=effective_subtitle_mode,
                 max_subtitle_words=request.max_subtitle_words,
                 lang_code=request.language,
-                use_spacy_segmentation=request.subtitle_mode not in ("Disabled", "Line"),
+                use_spacy_segmentation=use_spacy,
             )
             events.log("Outro synthesized.")
 
