@@ -33,6 +33,7 @@ from abogen.domain.conversion_engine import (
     synthesize_text,
 )
 from abogen.domain.normalization import TTSContext
+from abogen.domain.output_paths import sanitize_filename_for_chapter
 from abogen.infrastructure.subtitle_writer import make_subtitle_writer
 
 
@@ -183,7 +184,7 @@ def execute_conversion(
             chapter_sink: Optional[AudioSink] = None
             chapter_path = None
             if chapter_dir:
-                chapter_filename = _slugify(chapter.title, chapter_idx)
+                chapter_filename = sanitize_filename_for_chapter(chapter.title, chapter_idx)
                 chapter_path = chapter_dir / f"{chapter_filename}.{request.separate_chapters_format}"
                 chapter_sink = stack.enter_context(
                     open_audio_sink(
@@ -423,16 +424,6 @@ def _base_name(request: Any) -> str:
     if request.original_filename:
         return sanitize_output_stem(request.original_filename)
     return "output"
-
-
-def _slugify(title: str, index: int) -> str:
-    """Create a safe filename slug from chapter title."""
-    import re
-    slug = re.sub(r'[^\w\s-]', '', title.lower())
-    slug = re.sub(r'[\s_]+', '_', slug).strip('_')
-    if not slug:
-        slug = f"chapter_{index}"
-    return f"{index:02d}_{slug}"
 
 
 def _format_heading(title: str, index: int, request: Any) -> str:
