@@ -14,8 +14,6 @@ Subtitle file/timestamp special paths remain in ConversionThread.run() early ret
 from __future__ import annotations
 
 import os
-import threading
-import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 

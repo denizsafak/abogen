@@ -15,7 +15,6 @@ The service NEVER imports from PyQt or WebUI.
 
 from __future__ import annotations
 
-import time
 from typing import Any, Callable, Dict, Optional
 
 from abogen.application.conversion_executor import execute_conversion
@@ -113,7 +112,6 @@ def _prepare_tts_context(
         compile_pronunciation_rules,
         merge_pronunciation_overrides,
     )
-    from abogen.domain.split_pattern import get_split_pattern
 
     # Get runtime normalization settings
     normalization_settings = get_runtime_settings()

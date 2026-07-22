@@ -118,13 +118,8 @@ def execute_conversion(
             )
             result.audio_path = audio_path
 
-        # Open subtitle writer for merged output
-        subtitle_writer: Optional[SubtitleWriter] = None
-        if subtitle_writer and audio_sink:
-            # This will be set below when we know subtitle mode
-            pass
-
         # Open subtitle writer if needed
+        subtitle_writer: Optional[SubtitleWriter] = None
         if request.subtitle_mode != "Disabled" and audio_sink:
             subtitle_writer = make_subtitle_writer(
                 audio_path,
@@ -407,8 +402,8 @@ def _resolve_voice(
         return (
             resolved.provider,
             resolved.voice,
-            getattr(resolved, "speed", request.speed),
-            getattr(resolved, "supertonic_steps", None),
+            resolved.speed,
+            resolved.supertonic_steps,
         )
     except Exception:
         # Fallback to base voice
@@ -416,8 +411,8 @@ def _resolve_voice(
         return (
             resolved.provider,
             resolved.voice,
-            getattr(resolved, "speed", request.speed),
-            getattr(resolved, "supertonic_steps", None),
+            resolved.speed,
+            resolved.supertonic_steps,
         )
 
 
