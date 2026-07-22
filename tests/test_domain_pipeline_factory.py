@@ -41,8 +41,18 @@ class TestCreatePipelineForJob:
     def test_kokoro_provider(self, _dev, _reg, mock_create):
         mock_create.return_value = MagicMock()
         result = create_pipeline_for_job("kokoro", "en", use_gpu=False)
-        mock_create.assert_called_once_with("kokoro", lang_code="en", device="cpu")
+        # "en" → fallback to EN_US → kokoro code "a"
+        mock_create.assert_called_once_with("kokoro", lang_code="a", device="cpu")
         assert result is mock_create.return_value
+
+    @patch("abogen.domain.pipeline_factory.create_pipeline")
+    @patch("abogen.domain.pipeline_factory.is_plugin_registered", return_value=True)
+    @patch("abogen.domain.pipeline_factory.resolve_device", return_value="cpu")
+    def test_kokoro_provider_iso_code(self, _dev, _reg, mock_create):
+        mock_create.return_value = MagicMock()
+        result = create_pipeline_for_job("kokoro", "en-GB", use_gpu=False)
+        # "en-GB" → EN_GB → kokoro code "b"
+        mock_create.assert_called_once_with("kokoro", lang_code="b", device="cpu")
 
     @patch("abogen.domain.pipeline_factory.create_pipeline")
     @patch("abogen.domain.pipeline_factory.is_plugin_registered", return_value=False)
@@ -50,7 +60,7 @@ class TestCreatePipelineForJob:
     def test_unknown_provider_falls_back_to_kokoro(self, _dev, _reg, mock_create):
         mock_create.return_value = MagicMock()
         result = create_pipeline_for_job("unknown_provider", "en", use_gpu=False)
-        mock_create.assert_called_once_with("kokoro", lang_code="en", device="cpu")
+        mock_create.assert_called_once_with("kokoro", lang_code="a", device="cpu")
 
     @patch("abogen.domain.pipeline_factory.create_pipeline")
     @patch("abogen.domain.pipeline_factory.is_plugin_registered", return_value=True)
@@ -58,7 +68,7 @@ class TestCreatePipelineForJob:
     def test_empty_provider_defaults_to_kokoro(self, _dev, _reg, mock_create):
         mock_create.return_value = MagicMock()
         result = create_pipeline_for_job("", "en", use_gpu=False)
-        mock_create.assert_called_once_with("kokoro", lang_code="en", device="cpu")
+        mock_create.assert_called_once_with("kokoro", lang_code="a", device="cpu")
 
     @patch("abogen.domain.pipeline_factory.create_pipeline")
     @patch("abogen.domain.pipeline_factory.is_plugin_registered", return_value=True)
@@ -66,7 +76,7 @@ class TestCreatePipelineForJob:
     def test_none_provider_defaults_to_kokoro(self, _dev, _reg, mock_create):
         mock_create.return_value = MagicMock()
         result = create_pipeline_for_job(None, "en", use_gpu=False)
-        mock_create.assert_called_once_with("kokoro", lang_code="en", device="cpu")
+        mock_create.assert_called_once_with("kokoro", lang_code="a", device="cpu")
 
 
 class TestDisposePipelines:

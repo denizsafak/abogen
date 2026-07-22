@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from abogen.domain.enums import OutputFormat, SaveMode, SubtitleFormat, SubtitleMode
+from abogen.domain.enums import Language, OutputFormat, SaveMode, SubtitleFormat, SubtitleMode
 
 
 @dataclass
@@ -30,7 +30,7 @@ class ConversionRequest:
     original_filename: str = ""
 
     # --- TTS Settings ---
-    language: str = "a"
+    language: Language = Language.EN_US
     tts_provider: str = "kokoro"
     voice: str = "M1"
     voice_profile: Optional[str] = None

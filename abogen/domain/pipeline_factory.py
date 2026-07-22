@@ -9,8 +9,22 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from abogen.domain.device import select_device
+from abogen.domain.enums import Language
 from abogen.domain.voice_resolution import initialize_voice_cache
 from abogen.tts_plugin.utils import create_pipeline, is_plugin_registered
+
+# Kokoro-specific language mapping (engine's responsibility)
+_KOKORO_LANG_MAP = {
+    Language.EN_US: "a",
+    Language.EN_GB: "b",
+    Language.ES: "e",
+    Language.FR: "f",
+    Language.HI: "h",
+    Language.IT: "i",
+    Language.JA: "j",
+    Language.PT_BR: "p",
+    Language.ZH: "z",
+}
 
 
 def resolve_device(use_gpu: bool) -> str:
@@ -36,11 +50,18 @@ def create_pipeline_for_job(
     if not is_plugin_registered(provider):
         provider = "kokoro"
 
+    # Convert Language enum to Kokoro single-letter code
+    try:
+        lang = Language.from_str(language) if not isinstance(language, Language) else language
+    except ValueError:
+        lang = Language.EN_US  # fallback for unknown languages
+    kokoro_code = _KOKORO_LANG_MAP.get(lang, "a")
+
     if provider == "supertonic":
         return create_pipeline("supertonic")
 
     device = resolve_device(use_gpu)
-    return create_pipeline("kokoro", lang_code=language, device=device)
+    return create_pipeline("kokoro", lang_code=kokoro_code, device=device)
 
 
 def dispose_pipelines(pipelines: Dict[str, Any]) -> None:

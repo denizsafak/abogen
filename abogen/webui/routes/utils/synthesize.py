@@ -7,7 +7,21 @@ from flask import current_app, send_file
 from flask.typing import ResponseReturnValue
 
 from abogen.domain.device import select_device as _select_device
+from abogen.domain.enums import Language
 from abogen.domain.split_pattern import get_split_pattern
+
+# Kokoro-specific language mapping (engine's responsibility)
+_KOKORO_LANG_MAP = {
+    Language.EN_US: "a",
+    Language.EN_GB: "b",
+    Language.ES: "e",
+    Language.FR: "f",
+    Language.HI: "h",
+    Language.IT: "i",
+    Language.JA: "j",
+    Language.PT_BR: "p",
+    Language.ZH: "z",
+}
 
 
 SAMPLE_RATE = 24000
@@ -45,14 +59,21 @@ def _resolve_pipeline(language: str, use_gpu: bool) -> Tuple[Any, bool]:
 
 
 def get_preview_pipeline(language: str, device: str) -> Any:
-    key = (language, device)
+    # Convert Language enum to Kokoro single-letter code
+    try:
+        lang = Language.from_str(language) if not isinstance(language, Language) else language
+    except ValueError:
+        lang = Language.EN_US
+    kokoro_code = _KOKORO_LANG_MAP.get(lang, "a")
+
+    key = (kokoro_code, device)
     with _preview_pipeline_lock:
         pipeline = _preview_pipelines.get(key)
         if pipeline is not None:
             return pipeline
         from abogen.tts_plugin.utils import create_pipeline
 
-        pipeline = create_pipeline("kokoro", lang_code=language, device=device)
+        pipeline = create_pipeline("kokoro", lang_code=kokoro_code, device=device)
         _preview_pipelines[key] = pipeline
         return pipeline
 

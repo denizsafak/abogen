@@ -135,7 +135,7 @@ def _prepare_tts_context(
 
     # Compute split pattern
     split_pattern = get_split_pattern(
-        str(request.language or "a"),
+        request.language or Language.EN_US,
         request.subtitle_mode or SubtitleMode.DISABLED,
     )
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import List, Optional, Tuple
 
-from abogen.domain.enums import SubtitleMode
+from abogen.domain.enums import Language, SubtitleMode
 
 
 # Punctuation constants for sentence splitting
@@ -53,7 +53,7 @@ def process_subtitle_tokens(
     use_spacy_for_english = (
         use_spacy_segmentation
         and subtitle_mode not in [SubtitleMode.DISABLED, SubtitleMode.LINE]
-        and lang_code in ["a", "b"]
+        and lang_code in [Language.EN_US, Language.EN_GB]
         and subtitle_mode in [SubtitleMode.SENTENCE, SubtitleMode.SENTENCE_COMMA]
     )
 

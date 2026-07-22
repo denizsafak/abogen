@@ -2,21 +2,23 @@
 Lazy-loaded spaCy utilities for sentence segmentation.
 """
 
+from abogen.domain.enums import Language
+
 # Cached spaCy module and models (lazy loaded)
 _spacy = None
 _nlp_cache = {}
 
 # Language code to spaCy model mapping
 SPACY_MODELS = {
-    "a": "en_core_web_sm",  # American English
-    "b": "en_core_web_sm",  # British English
-    "e": "es_core_news_sm",  # Spanish
-    "f": "fr_core_news_sm",  # French
-    "i": "it_core_news_sm",  # Italian
-    "p": "pt_core_news_sm",  # Brazilian Portuguese
-    "z": "zh_core_web_sm",  # Mandarin Chinese
-    "j": "ja_core_news_sm",  # Japanese
-    "h": "xx_sent_ud_sm",  # Hindi (multi-language model)
+    Language.EN_US: "en_core_web_sm",
+    Language.EN_GB: "en_core_web_sm",
+    Language.ES: "es_core_news_sm",
+    Language.FR: "fr_core_news_sm",
+    Language.IT: "it_core_news_sm",
+    Language.PT_BR: "pt_core_news_sm",
+    Language.ZH: "zh_core_web_sm",
+    Language.JA: "ja_core_news_sm",
+    Language.HI: "xx_sent_ud_sm",
 }
 
 
@@ -36,10 +38,9 @@ def _load_spacy():
 def get_spacy_model(lang_code, log_callback=None):
     """
     Get or load a spaCy model for the given language code.
-    Downloads the model automatically if not available.
 
     Args:
-        lang_code: Language code (a, b, e, f, etc.)
+        lang_code: Language code or Language enum (e.g., "a", "en-US", Language.EN_US)
         log_callback: Optional function to log messages
 
     Returns:
@@ -57,6 +58,14 @@ def get_spacy_model(lang_code, log_callback=None):
                 print(msg)
         else:
             print(msg)
+
+    # Normalize to Language enum
+    if not isinstance(lang_code, Language):
+        try:
+            lang_code = Language.from_str(lang_code)
+        except ValueError:
+            log(f"\nspaCy: Unknown language '{lang_code}'...")
+            return None
 
     # Check if model is cached
     if lang_code in _nlp_cache:

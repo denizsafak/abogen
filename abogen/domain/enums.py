@@ -123,3 +123,57 @@ class InputFormat(str, Enum):
             return cls(suffix)
         except ValueError:
             raise ValueError(f"Unsupported input format: {path.suffix!r}. Supported: {[m.value for m in cls]}")
+
+
+class Language(str, Enum):
+    """TTS language code (ISO 639-1 with region where needed).
+
+    Each engine (Kokoro, Supertonic) maps these to its own
+    internal language identifiers.
+    """
+    EN_US = "en-US"
+    EN_GB = "en-GB"
+    ES = "es"
+    FR = "fr"
+    HI = "hi"
+    IT = "it"
+    JA = "ja"
+    PT_BR = "pt-BR"
+    ZH = "zh"
+
+    @property
+    def display_name(self) -> str:
+        """Human-readable language name."""
+        _names = {
+            "en-US": "American English",
+            "en-GB": "British English",
+            "es": "Spanish",
+            "fr": "French",
+            "hi": "Hindi",
+            "it": "Italian",
+            "ja": "Japanese",
+            "pt-BR": "Brazilian Portuguese",
+            "zh": "Mandarin Chinese",
+        }
+        return _names[self.value]
+
+    @property
+    def is_cjk(self) -> bool:
+        """True for CJK languages (Chinese, Japanese)."""
+        return self in (self.ZH, self.JA)
+
+    @property
+    def supports_subtitle_tokens(self) -> bool:
+        """True if this language generates timestamped tokens for subtitles."""
+        return self in (self.EN_US, self.EN_GB)
+
+    @classmethod
+    def from_str(cls, value: str) -> Language:
+        """Parse from user input: ISO code, case-insensitive."""
+        if isinstance(value, Language):
+            return value
+        normalized = value.strip()
+        for member in cls:
+            if member.value.lower() == normalized.lower():
+                return member
+        raise ValueError(f"Invalid Language: {value!r}. Valid: {[m.value for m in cls]}")

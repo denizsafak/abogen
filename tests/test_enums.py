@@ -5,6 +5,7 @@ from pathlib import Path
 
 from abogen.domain.enums import (
     InputFormat,
+    Language,
     OutputFormat,
     SaveMode,
     SubtitleFormat,
@@ -97,3 +98,34 @@ class TestInputFormat:
     def test_dot_ext(self):
         assert InputFormat.EPUB.dot_ext == ".epub"
         assert InputFormat.SRT.dot_ext == ".srt"
+
+
+class TestLanguage:
+    def test_iso_codes(self):
+        assert Language.EN_US == "en-US"
+        assert Language.EN_GB == "en-GB"
+        assert Language.ZH == "zh"
+        assert Language.JA == "ja"
+
+    def test_display_name(self):
+        assert Language.EN_US.display_name == "American English"
+        assert Language.JA.display_name == "Japanese"
+
+    def test_is_cjk(self):
+        assert Language.ZH.is_cjk is True
+        assert Language.JA.is_cjk is True
+        assert Language.EN_US.is_cjk is False
+
+    def test_supports_subtitle_tokens(self):
+        assert Language.EN_US.supports_subtitle_tokens is True
+        assert Language.EN_GB.supports_subtitle_tokens is True
+        assert Language.ZH.supports_subtitle_tokens is False
+
+    def test_from_str_case_insensitive(self):
+        assert Language.from_str("EN-US") == Language.EN_US
+        assert Language.from_str("en-gb") == Language.EN_GB
+        assert Language.from_str("ZH") == Language.ZH
+
+    def test_from_str_invalid(self):
+        with pytest.raises(ValueError, match="Invalid Language"):
+            Language.from_str("en")
