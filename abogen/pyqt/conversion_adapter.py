@@ -17,6 +17,12 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from abogen.application.conversion_config import (
+    ChapterChunkConfig,
+    Epub3ExportConfig,
+    PronunciationConfig,
+    WordSubstitutionConfig,
+)
 from abogen.application.conversion_request import ConversionRequest
 from abogen.application.conversion_ports import ConversionCancelled, ResolvedVoice
 
@@ -54,6 +60,25 @@ def build_conversion_request_from_thread(thread: Any) -> ConversionRequest:
     if thread.output_folder:
         output_folder = Path(thread.output_folder)
 
+    # Build pronunciation config
+    pronunciation = None
+    pron_overrides = getattr(thread, "pronunciation_overrides", []) or []
+    manual_overrides = getattr(thread, "manual_overrides", []) or []
+    heteronym_overrides = getattr(thread, "heteronym_overrides", []) or []
+    norm_overrides = getattr(thread, "normalization_overrides", None)
+    if pron_overrides or manual_overrides or heteronym_overrides or norm_overrides:
+        pronunciation = PronunciationConfig(
+            pronunciation_overrides=pron_overrides,
+            manual_overrides=manual_overrides,
+            heteronym_overrides=heteronym_overrides,
+            normalization_overrides=norm_overrides,
+        )
+
+    # Build epub3 config
+    epub3_export = None
+    if getattr(thread, "generate_epub3", False):
+        epub3_export = Epub3ExportConfig()
+
     return ConversionRequest(
         # Source
         source_path=source_path,
@@ -88,23 +113,15 @@ def build_conversion_request_from_thread(thread: Any) -> ConversionRequest:
         read_closing_outro=getattr(thread, "read_closing_outro", True),
         auto_prefix_chapter_titles=getattr(thread, "auto_prefix_chapter_titles", True),
         normalize_chapter_opening_caps=getattr(thread, "normalize_chapter_opening_caps", False),
-        # Pronunciation / Normalization
-        pronunciation_overrides=getattr(thread, "pronunciation_overrides", []) or [],
-        manual_overrides=getattr(thread, "manual_overrides", []) or [],
-        heteronym_overrides=getattr(thread, "heteronym_overrides", []) or [],
-        normalization_overrides=getattr(thread, "normalization_overrides", None),
-        # Chapter/Chunk Configuration
-        chapter_overrides=[],  # PyQt doesn't use chapter overrides from GUI
-        chunks=[],  # PyQt doesn't use chunks from GUI
-        chunk_level="paragraph",
-        speaker_mode="single",
-        speakers={},
         # Metadata
         metadata_tags=getattr(thread, "metadata_tags", {}) or {},
         # Artifacts
         cover_image_path=getattr(thread, "cover_image_path", None),
         cover_image_mime=getattr(thread, "cover_image_mime", None),
-        generate_epub3=getattr(thread, "generate_epub3", False),
+        # Feature configs
+        pronunciation=pronunciation,
+        epub3_export=epub3_export,
+        chapter_chunk=ChapterChunkConfig(),  # PyQt doesn't use chapter overrides from GUI
     )
 
 

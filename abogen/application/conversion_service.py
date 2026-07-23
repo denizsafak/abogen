@@ -141,17 +141,20 @@ def _prepare_tts_context(
 
     # Merge pronunciation overrides (manual + pronunciation)
     # Create a mock job-like object for merge_pronunciation_overrides
-    class _MockJob:
-        def __init__(self, req):
-            self.pronunciation_overrides = req.pronunciation_overrides
-            self.manual_overrides = req.manual_overrides
-            self.heteronym_overrides = req.heteronym_overrides
+    pronunciation = request.pronunciation
 
-    merged_overrides = merge_pronunciation_overrides(_MockJob(request))
+    class _MockJob:
+        def __init__(self, pron):
+            self.pronunciation_overrides = pron.pronunciation_overrides if pron else []
+            self.manual_overrides = pron.manual_overrides if pron else []
+            self.heteronym_overrides = pron.heteronym_overrides if pron else []
+
+    merged_overrides = merge_pronunciation_overrides(_MockJob(pronunciation))
 
     # Compile rules
     pronunciation_rules = compile_pronunciation_rules(merged_overrides)
-    heteronym_rules = compile_heteronym_sentence_rules(request.heteronym_overrides)
+    heteronym_overrides = pronunciation.heteronym_overrides if pronunciation else []
+    heteronym_rules = compile_heteronym_sentence_rules(heteronym_overrides)
 
     if heteronym_rules:
         events.log(
@@ -168,5 +171,5 @@ def _prepare_tts_context(
         split_pattern=split_pattern,
         pronunciation_rules=pronunciation_rules,
         heteronym_rules=heteronym_rules,
-        normalization_overrides=request.normalization_overrides,
+        normalization_overrides=pronunciation.normalization_overrides if pronunciation else None,
     )

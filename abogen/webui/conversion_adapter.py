@@ -17,6 +17,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from abogen.application.conversion_config import (
+    ChapterChunkConfig,
+    Epub3ExportConfig,
+    PronunciationConfig,
+    WordSubstitutionConfig,
+)
 from abogen.application.conversion_request import ConversionRequest
 from abogen.application.conversion_ports import ConversionCancelled, ResolvedVoice
 
@@ -33,6 +39,47 @@ def build_conversion_request_from_job(job: Any) -> ConversionRequest:
     Returns:
         ConversionRequest with all Job data mapped
     """
+    # Build word substitution config
+    word_substitution = None
+    if getattr(job, "word_substitutions_enabled", False):
+        word_substitution = WordSubstitutionConfig(
+            substitutions_list=getattr(job, "word_substitutions_list", ""),
+            case_sensitive=getattr(job, "case_sensitive_substitutions", False),
+            replace_caps=getattr(job, "replace_all_caps", False),
+            replace_numerals=getattr(job, "replace_numerals", False),
+            fix_punctuation=getattr(job, "fix_nonstandard_punctuation", False),
+        )
+
+    # Build pronunciation config
+    pronunciation = None
+    pron_overrides = job.pronunciation_overrides or []
+    manual_overrides = job.manual_overrides or []
+    heteronym_overrides = job.heteronym_overrides or []
+    norm_overrides = job.normalization_overrides or None
+    if pron_overrides or manual_overrides or heteronym_overrides or norm_overrides:
+        pronunciation = PronunciationConfig(
+            pronunciation_overrides=pron_overrides,
+            manual_overrides=manual_overrides,
+            heteronym_overrides=heteronym_overrides,
+            normalization_overrides=norm_overrides,
+        )
+
+    # Build chapter/chunk config
+    chapter_chunk = ChapterChunkConfig(
+        chapter_overrides=job.chapters or [],
+        chunks=job.chunks or [],
+        chunk_level=job.chunk_level,
+        speaker_mode=job.speaker_mode,
+        speakers=job.speakers or {},
+    )
+
+    # Build epub3 config
+    epub3_export = None
+    if getattr(job, "generate_epub3", False):
+        epub3_export = Epub3ExportConfig(
+            book_id=getattr(job, "id", ""),
+        )
+
     return ConversionRequest(
         # Source
         source_path=Path(job.stored_path) if job.stored_path else None,
@@ -66,23 +113,16 @@ def build_conversion_request_from_job(job: Any) -> ConversionRequest:
         read_closing_outro=job.read_closing_outro,
         auto_prefix_chapter_titles=job.auto_prefix_chapter_titles,
         normalize_chapter_opening_caps=job.normalize_chapter_opening_caps,
-        # Pronunciation / Normalization
-        pronunciation_overrides=job.pronunciation_overrides or [],
-        manual_overrides=job.manual_overrides or [],
-        heteronym_overrides=job.heteronym_overrides or [],
-        normalization_overrides=job.normalization_overrides or {},
-        # Chapter/Chunk Configuration
-        chapter_overrides=job.chapters or [],
-        chunks=job.chunks or [],
-        chunk_level=job.chunk_level,
-        speaker_mode=job.speaker_mode,
-        speakers=job.speakers or {},
         # Metadata
         metadata_tags=job.metadata_tags or {},
         # Artifacts
         cover_image_path=Path(job.cover_image_path) if job.cover_image_path else None,
         cover_image_mime=job.cover_image_mime,
-        generate_epub3=job.generate_epub3,
+        # Feature configs
+        word_substitution=word_substitution,
+        pronunciation=pronunciation,
+        chapter_chunk=chapter_chunk,
+        epub3_export=epub3_export,
     )
 
 

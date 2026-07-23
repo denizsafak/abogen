@@ -16,6 +16,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from abogen.application.conversion_request import ConversionRequest, ConversionRequestError
+from abogen.application.conversion_config import ChapterChunkConfig, WordSubstitutionConfig
 from abogen.domain.enums import Language, OutputFormat, SaveMode, SubtitleFormat, SubtitleMode
 from abogen.domain.normalization import TTSContext
 from abogen.domain.settings_core import settings_defaults
@@ -248,12 +249,12 @@ class TestConversionRequestValidation:
         assert req.chapter_intro_delay == 0.0
 
     def test_invalid_chunk_level_raises(self):
-        with pytest.raises(ConversionRequestError, match="chunk_level"):
-            ConversionRequest(chunk_level="invalid")
+        with pytest.raises(ValueError, match="chunk_level"):
+            ConversionRequest(chapter_chunk=ChapterChunkConfig(chunk_level="invalid"))
 
     def test_invalid_speaker_mode_raises(self):
-        with pytest.raises(ConversionRequestError, match="speaker_mode"):
-            ConversionRequest(speaker_mode="invalid")
+        with pytest.raises(ValueError, match="speaker_mode"):
+            ConversionRequest(chapter_chunk=ChapterChunkConfig(speaker_mode="invalid"))
 
     def test_invalid_max_subtitle_words_type_raises(self):
         with pytest.raises(ConversionRequestError, match="max_subtitle_words"):

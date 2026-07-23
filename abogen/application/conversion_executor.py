@@ -302,7 +302,7 @@ def execute_conversion(
                         "end": stats.current_time,
                         "speaker_id": segment.speaker_id,
                         "voice": segment.voice_spec,
-                        "level": segment.level or request.chunk_level,
+                        "level": segment.level or (request.chapter_chunk.chunk_level if request.chapter_chunk else "paragraph"),
                         "characters": len(segment.text),
                     })
 

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from abogen.application.conversion_request import ConversionRequest
+from abogen.application.conversion_config import ChapterChunkConfig, PronunciationConfig
 from abogen.application.conversion_ports import ResolvedVoice
 
 
@@ -112,25 +113,22 @@ class TestWebUIAdapter:
         assert req.output_folder is None
         assert req.cover_image_path is None
 
-    def test_chapter_overrides_mapped(self):
+    def test_chapter_chunk_mapped(self):
         from abogen.webui.conversion_adapter import build_conversion_request_from_job
 
         chapters = [{"title": "Ch1", "voice": "F1"}]
-        job = self._make_job(chapters=chapters)
-        req = build_conversion_request_from_job(job)
-
-        assert req.chapter_overrides == chapters
-
-    def test_chunks_mapped(self):
-        from abogen.webui.conversion_adapter import build_conversion_request_from_job
-
         chunks = [{"text": "Hello", "speaker": "A"}]
-        job = self._make_job(chunks=chunks)
+        job = self._make_job(chapters=chapters, chunks=chunks)
         req = build_conversion_request_from_job(job)
 
-        assert req.chunks == chunks
+        assert isinstance(req.chapter_chunk, ChapterChunkConfig)
+        assert req.chapter_chunk.chapter_overrides == chapters
+        assert req.chapter_chunk.chunks == chunks
+        assert req.chapter_chunk.chunk_level == "paragraph"
+        assert req.chapter_chunk.speaker_mode == "single"
+        assert req.chapter_chunk.speakers == {}
 
-    def test_pronunciation_overrides_mapped(self):
+    def test_pronunciation_mapped(self):
         from abogen.webui.conversion_adapter import build_conversion_request_from_job
 
         job = self._make_job(
@@ -140,9 +138,10 @@ class TestWebUIAdapter:
         )
         req = build_conversion_request_from_job(job)
 
-        assert req.pronunciation_overrides == ["word=pron"]
-        assert req.manual_overrides == ["manual=override"]
-        assert req.heteronym_overrides == ["read=reed"]
+        assert isinstance(req.pronunciation, PronunciationConfig)
+        assert req.pronunciation.pronunciation_overrides == ["word=pron"]
+        assert req.pronunciation.manual_overrides == ["manual=override"]
+        assert req.pronunciation.heteronym_overrides == ["read=reed"]
 
     def test_none_defaults_handled(self):
         from abogen.webui.conversion_adapter import build_conversion_request_from_job
@@ -399,17 +398,18 @@ class TestPyQtAdapter:
         assert req.supertonic_total_steps == 5
         assert req.max_subtitle_words == 50
 
-    def test_chapter_chunks_not_mapped(self):
+    def test_chapter_chunk_default(self):
         from abogen.pyqt.conversion_adapter import build_conversion_request_from_thread
 
         thread = self._make_thread()
         req = build_conversion_request_from_thread(thread)
 
-        assert req.chapter_overrides == []
-        assert req.chunks == []
-        assert req.chunk_level == "paragraph"
-        assert req.speaker_mode == "single"
-        assert req.speakers == {}
+        assert isinstance(req.chapter_chunk, ChapterChunkConfig)
+        assert req.chapter_chunk.chapter_overrides == []
+        assert req.chapter_chunk.chunks == []
+        assert req.chapter_chunk.chunk_level == "paragraph"
+        assert req.chapter_chunk.speaker_mode == "single"
+        assert req.chapter_chunk.speakers == {}
 
 
 class TestPyQtEvents:

@@ -144,8 +144,9 @@ def _apply_selection(
     ]
 
     # If user specified chapters, apply overrides
-    if request.chapter_overrides:
-        selected, _, diagnostics = apply_chapter_overrides(extracted, request.chapter_overrides)
+    chapter_chunk = request.chapter_chunk
+    if chapter_chunk and chapter_chunk.chapter_overrides:
+        selected, _, diagnostics = apply_chapter_overrides(extracted, chapter_chunk.chapter_overrides)
         if selected:
             # Map back to (title, text, voice) tuples
             result = []
@@ -216,9 +217,10 @@ def _build_segments(
     segments = []
 
     # Check for chunks (WebUI style)
-    if request.chunks:
+    chapter_chunk = request.chapter_chunk
+    if chapter_chunk and chapter_chunk.chunks:
         # Group chunks by chapter (simplified — assume chunks are for current chapter)
-        for chunk_idx, chunk in enumerate(request.chunks):
+        for chunk_idx, chunk in enumerate(chapter_chunk.chunks):
             chunk_text = chunk.get("normalized_text") or chunk.get("text", "")
             if not chunk_text or not chunk_text.strip():
                 continue
@@ -234,7 +236,7 @@ def _build_segments(
                     speaker_id=speaker_id,
                     chunk_id=chunk.get("id"),
                     chunk_index=chunk.get("chunk_index", chunk_idx),
-                    level=chunk.get("level", request.chunk_level),
+                    level=chunk.get("level", chapter_chunk.chunk_level),
                     source="chunk",
                 )
             )
@@ -284,8 +286,9 @@ def _resolve_chunk_voice(
     """Resolve voice for a chunk."""
     # Check for speaker-based voice
     speaker_id = chunk.get("speaker_id", "narrator")
-    if speaker_id and speaker_id != "narrator" and request.speakers:
-        speaker_config = request.speakers.get(speaker_id, {})
+    speakers = request.chapter_chunk.speakers if request.chapter_chunk else {}
+    if speaker_id and speaker_id != "narrator" and speakers:
+        speaker_config = speakers.get(speaker_id, {})
         if isinstance(speaker_config, dict):
             voice = speaker_config.get("voice")
             if voice:

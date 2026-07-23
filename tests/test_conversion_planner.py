@@ -25,6 +25,7 @@ from abogen.application.conversion_models import (
     OutputLayout,
     SegmentPlan,
 )
+from abogen.application.conversion_config import ChapterChunkConfig
 from abogen.application.conversion_planner import build_conversion_plan
 from abogen.application.conversion_request import ConversionRequest
 
@@ -74,10 +75,12 @@ class TestBuildConversionPlan:
         req = ConversionRequest(
             direct_text="Some text",
             voice="M1",
-            chunks=[
-                {"text": "Chunk 1", "speaker_id": "narrator"},
-                {"text": "Chunk 2", "speaker_id": "narrator"},
-            ],
+            chapter_chunk=ChapterChunkConfig(
+                chunks=[
+                    {"text": "Chunk 1", "speaker_id": "narrator"},
+                    {"text": "Chunk 2", "speaker_id": "narrator"},
+                ],
+            ),
         )
         plan = build_conversion_plan(req)
 
@@ -92,11 +95,13 @@ class TestBuildConversionPlan:
         req = ConversionRequest(
             direct_text="Text",
             voice="M1",
-            chunks=[
-                {"text": "Narrator speaks", "speaker_id": "narrator"},
-                {"text": "Character speaks", "speaker_id": "alice", "voice": "F1"},
-            ],
-            speakers={"alice": {"voice": "F1"}},
+            chapter_chunk=ChapterChunkConfig(
+                chunks=[
+                    {"text": "Narrator speaks", "speaker_id": "narrator"},
+                    {"text": "Character speaks", "speaker_id": "alice", "voice": "F1"},
+                ],
+                speakers={"alice": {"voice": "F1"}},
+            ),
         )
         plan = build_conversion_plan(req)
 

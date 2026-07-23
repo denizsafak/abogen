@@ -14,6 +14,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from abogen.application.conversion_config import (
+    ChapterChunkConfig,
+    Epub3ExportConfig,
+    PronunciationConfig,
+    SubtitleInputConfig,
+    WordSubstitutionConfig,
+)
 from abogen.domain.enums import Language, OutputFormat, SaveMode, SubtitleFormat, SubtitleMode
 
 
@@ -30,12 +37,6 @@ _NUMERIC_CONSTRAINTS: dict[str, tuple[float, float | None]] = {
     "chapter_intro_delay": (0.0, None),
 }
 
-# Enum-like fields that must be in allowed set
-_ENUM_CONSTRAINTS: dict[str, tuple[str, ...]] = {
-    "chunk_level": ("paragraph", "sentence"),
-    "speaker_mode": ("single", "multi"),
-}
-
 
 @dataclass
 class ConversionRequest:
@@ -44,10 +45,12 @@ class ConversionRequest:
     Only contains fields that describe the conversion task itself.
     UI-only fields (display, logging, user prompts) stay in adapters.
 
+    Feature toggles use config objects: if the object is present,
+    the feature is enabled. No boolean flags needed.
+
     Validation runs on creation via __post_init__:
     - None values → replaced with field default (from declaration)
     - Numeric fields → clamped to valid range
-    - String enums → validated against allowed set
     """
 
     # --- Source ---
@@ -89,26 +92,19 @@ class ConversionRequest:
     auto_prefix_chapter_titles: bool = True
     normalize_chapter_opening_caps: bool = False
 
-    # --- Pronunciation / Normalization ---
-    pronunciation_overrides: List[Dict[str, Any]] = field(default_factory=list)
-    manual_overrides: List[Dict[str, Any]] = field(default_factory=list)
-    heteronym_overrides: List[Dict[str, Any]] = field(default_factory=list)
-    normalization_overrides: Optional[Dict[str, Any]] = None
-
-    # --- Chapter/Chunk Configuration ---
-    chapter_overrides: List[Dict[str, Any]] = field(default_factory=list)
-    chunks: List[Dict[str, Any]] = field(default_factory=list)
-    chunk_level: str = "paragraph"
-    speaker_mode: str = "single"
-    speakers: Dict[str, Any] = field(default_factory=dict)
-
     # --- Metadata ---
     metadata_tags: Dict[str, Any] = field(default_factory=dict)
 
     # --- Artifacts ---
     cover_image_path: Optional[Path] = None
     cover_image_mime: Optional[str] = None
-    generate_epub3: bool = False
+
+    # --- Feature configs (None = disabled) ---
+    word_substitution: Optional[WordSubstitutionConfig] = None
+    subtitle_input: Optional[SubtitleInputConfig] = None
+    epub3_export: Optional[Epub3ExportConfig] = None
+    pronunciation: Optional[PronunciationConfig] = None
+    chapter_chunk: Optional[ChapterChunkConfig] = None
 
     def __post_init__(self) -> None:
         """Resolve None → default, then validate and clamp."""
@@ -116,7 +112,6 @@ class ConversionRequest:
         if not self.tts_provider:
             self.tts_provider = "kokoro"
         _clamp_numerics(self)
-        _validate_enums(self)
 
 
 def _apply_none_defaults(obj: ConversionRequest) -> None:
@@ -144,13 +139,3 @@ def _clamp_numerics(obj: ConversionRequest) -> None:
         if max_v is not None:
             clamped = min(max_v, clamped)
         setattr(obj, attr, clamped)
-
-
-def _validate_enums(obj: ConversionRequest) -> None:
-    """Validate string enum fields against allowed values."""
-    for attr, allowed in _ENUM_CONSTRAINTS.items():
-        val = getattr(obj, attr)
-        if val not in allowed:
-            raise ConversionRequestError(
-                f"{attr} must be one of {allowed}, got {val!r}"
-            )
