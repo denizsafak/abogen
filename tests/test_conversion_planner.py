@@ -25,7 +25,7 @@ from abogen.application.conversion_models import (
     OutputLayout,
     SegmentPlan,
 )
-from abogen.application.conversion_config import ChapterChunkConfig
+from abogen.application.conversion_config import ChapterChunkConfig, WordSubstitutionConfig
 from abogen.application.conversion_planner import build_conversion_plan
 from abogen.application.conversion_request import ConversionRequest
 
@@ -201,6 +201,60 @@ class TestBuildConversionPlan:
         plan = build_conversion_plan(req)
 
         assert plan.chapters[0].segments[0].kind == "body"
+
+
+class TestWordSubstitution:
+    """Tests for word substitution in the planner."""
+
+    def test_basic_substitution(self):
+        """Single word substitution is applied."""
+        req = ConversionRequest(
+            direct_text="The quick brown fox",
+            voice="M1",
+            word_substitution=WordSubstitutionConfig(
+                substitutions_list="fox|cat",
+            ),
+        )
+        plan = build_conversion_plan(req)
+        assert "cat" in plan.chapters[0].body_text
+        assert "fox" not in plan.chapters[0].body_text
+
+    def test_multiple_substitutions(self):
+        """Multiple word substitutions are applied."""
+        req = ConversionRequest(
+            direct_text="The quick brown fox jumps",
+            voice="M1",
+            word_substitution=WordSubstitutionConfig(
+                substitutions_list="fox|cat\nquick|slow",
+            ),
+        )
+        plan = build_conversion_plan(req)
+        text = plan.chapters[0].body_text
+        assert "cat" in text
+        assert "slow" in text
+
+    def test_substitution_preserves_chapter_markers(self):
+        """Chapter markers are preserved during substitution."""
+        req = ConversionRequest(
+            direct_text="<<CHAPTER_MARKER:Ch1>>\nThe quick brown fox",
+            voice="M1",
+            word_substitution=WordSubstitutionConfig(
+                substitutions_list="fox|cat",
+            ),
+        )
+        plan = build_conversion_plan(req)
+        assert len(plan.chapters) >= 1
+        assert "cat" in plan.chapters[0].body_text
+
+    def test_no_substitution_when_disabled(self):
+        """No substitution when word_substitution is None."""
+        req = ConversionRequest(
+            direct_text="The quick brown fox",
+            voice="M1",
+            word_substitution=None,
+        )
+        plan = build_conversion_plan(req)
+        assert "fox" in plan.chapters[0].body_text
 
 
 class TestPlannerWithFileSource:

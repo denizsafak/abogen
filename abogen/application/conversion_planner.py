@@ -82,16 +82,33 @@ def _extract_source_text(request: ConversionRequest) -> Optional[str]:
     from abogen.subtitle_utils import clean_text
 
     if request.direct_text:
-        return clean_text(request.direct_text)
-    if request.source_path and request.source_path.exists():
+        text = clean_text(request.direct_text)
+    elif request.source_path and request.source_path.exists():
         encoding = "utf-8"
         try:
             with open(request.source_path, "r", encoding=encoding, errors="replace") as f:
                 text = f.read()
         except Exception:
             return None
-        return clean_text(text)
-    return None
+        text = clean_text(text)
+    else:
+        return None
+
+    # Apply word substitutions if configured
+    if request.word_substitution:
+        from abogen.word_substitution import apply_word_substitutions
+
+        ws = request.word_substitution
+        text = apply_word_substitutions(
+            text,
+            ws.substitutions_list,
+            ws.case_sensitive,
+            ws.replace_caps,
+            ws.replace_numerals,
+            ws.fix_punctuation,
+        )
+
+    return text
 
 
 def _extract_metadata(request: ConversionRequest) -> Dict[str, Any]:
