@@ -25,7 +25,7 @@ from abogen.domain.file_type import auto_select_relevant_chapters
 from abogen.domain.intro_outro import resolve_intro, resolve_outro
 from abogen.domain.metadata_extraction import extract_metadata_for_file
 from abogen.domain.metadata_merge import merge_metadata
-from abogen.subtitle_utils import split_text_by_voice_markers
+from abogen.domain.voice_markers import split_text_by_voice_markers
 
 
 def build_conversion_plan(request: ConversionRequest) -> ConversionPlan:
@@ -274,7 +274,7 @@ def _build_segments(
 
     # Check for voice markers (PyQt style)
     # Detect markers even if validation fails (voice names may not be loaded yet)
-    from abogen.subtitle_utils import _VOICE_MARKER_SEARCH_PATTERN
+    from abogen.domain.voice_markers import _VOICE_MARKER_SEARCH_PATTERN
 
     has_voice_markers = bool(_VOICE_MARKER_SEARCH_PATTERN.search(body_text))
     voice_segments, last_voice, valid_count, invalid_count = split_text_by_voice_markers(
