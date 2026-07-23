@@ -13,7 +13,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple
 
-from abogen.subtitle_utils import sanitize_name_for_os
 from abogen.text_extractor import ExtractedChapter
 
 
@@ -21,12 +20,56 @@ _OUTPUT_SANITIZE_RE = re.compile(r"[^\w\-_.]+")
 
 # OS-specific illegal characters for filenames
 _WINDOWS_ILLEGAL_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_MACOS_ILLEGAL_CHARS_RE = re.compile(r"[:]")
+_LINUX_ILLEGAL_CHARS_RE = re.compile(r"[/\x00]")
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f]")
 _UNIX_CONTROL_CHARS_RE = re.compile(r'[\x00-\x1f]')
 _RESERVED_NAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL"}
     | {f"COM{i}" for i in range(1, 10)}
     | {f"LPT{i}" for i in range(1, 10)}
 )
+
+
+def sanitize_name_for_os(name: str, is_folder: bool = True) -> str:
+    """Sanitize a filename or folder name based on the operating system.
+
+    Args:
+        name: The name to sanitize
+        is_folder: Whether this is a folder name (default: True)
+
+    Returns:
+        Sanitized name safe for the current OS
+    """
+    if not name:
+        return "audiobook"
+
+    system = platform.system()
+
+    if system == "Windows":
+        sanitized = _WINDOWS_ILLEGAL_CHARS_RE.sub("_", name)
+        sanitized = _CONTROL_CHARS_RE.sub("_", sanitized)
+        sanitized = sanitized.rstrip(". ")
+        if sanitized.upper() in _RESERVED_NAMES or sanitized.upper().split(".")[0] in _RESERVED_NAMES:
+            sanitized = f"_{sanitized}"
+    elif system == "Darwin":
+        sanitized = _MACOS_ILLEGAL_CHARS_RE.sub("_", name)
+        sanitized = _CONTROL_CHARS_RE.sub("_", sanitized)
+        if is_folder and sanitized.startswith("."):
+            sanitized = "_" + sanitized[1:]
+    else:
+        sanitized = _LINUX_ILLEGAL_CHARS_RE.sub("_", name)
+        sanitized = _UNIX_CONTROL_CHARS_RE.sub("_", sanitized)
+        if is_folder and sanitized.startswith("."):
+            sanitized = "_" + sanitized[1:]
+
+    if not sanitized or sanitized.strip() == "":
+        sanitized = "audiobook"
+
+    if len(sanitized) > 255:
+        sanitized = sanitized[:255].rstrip(". ")
+
+    return sanitized
 
 
 def slugify(title: str, index: int) -> str:

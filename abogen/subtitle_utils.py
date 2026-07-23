@@ -1,5 +1,4 @@
 import re
-import platform
 from abogen.utils import detect_encoding, load_config
 from abogen.constants import SAMPLE_VOICE_TEXTS
 
@@ -23,13 +22,6 @@ _VTT_NOTE_PATTERN = re.compile(r"NOTE\s*\n.*?(?=\n\n|$)", re.DOTALL)
 _DOUBLE_NEWLINE_SPLIT_PATTERN = re.compile(r"\n\s*\n")
 _VTT_TIMESTAMP_PATTERN = re.compile(r"([\d:.]+)\s*-->\s*([\d:.]+)")
 _TIMESTAMP_ONLY_PATTERN = re.compile(r"^(\d{1,2}:\d{2}:\d{2}(?:[.,]\d{1,3})?)$")
-_WINDOWS_ILLEGAL_CHARS_PATTERN = re.compile(r'[<>:"/\\|?*]')
-_CONTROL_CHARS_PATTERN = re.compile(r"[\x00-\x1f]")
-_LINUX_CONTROL_CHARS_PATTERN = re.compile(
-    r"[\x01-\x1f]"
-)  # Linux: exclude \x00 for separate handling
-_MACOS_ILLEGAL_CHARS_PATTERN = re.compile(r"[:]")
-_LINUX_ILLEGAL_CHARS_PATTERN = re.compile(r"[/\x00]")
 
 
 def clean_subtitle_text(text):
@@ -400,70 +392,8 @@ def get_sample_voice_text(lang_code):
     return SAMPLE_VOICE_TEXTS.get(lang_code, SAMPLE_VOICE_TEXTS["a"])
 
 
-def sanitize_name_for_os(name, is_folder=True):
-    """
-    Sanitize a filename or folder name based on the operating system.
-
-    Args:
-        name: The name to sanitize
-        is_folder: Whether this is a folder name (default: True)
-
-    Returns:
-        Sanitized name safe for the current OS
-    """
-    if not name:
-        return "audiobook"
-
-    system = platform.system()
-
-    if system == "Windows":
-        # Windows illegal characters: < > : " / \ | ? *
-        # Also can't end with space or dot
-        # Use pre-compiled pattern for better performance
-        sanitized = _WINDOWS_ILLEGAL_CHARS_PATTERN.sub("_", name)
-        # Remove control characters (0-31)
-        sanitized = _CONTROL_CHARS_PATTERN.sub("_", sanitized)
-        # Remove trailing spaces and dots
-        sanitized = sanitized.rstrip(". ")
-        # Windows reserved names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
-        reserved = (
-            ["CON", "PRN", "AUX", "NUL"]
-            + [f"COM{i}" for i in range(1, 10)]
-            + [f"LPT{i}" for i in range(1, 10)]
-        )
-        if sanitized.upper() in reserved or sanitized.upper().split(".")[0] in reserved:
-            sanitized = f"_{sanitized}"
-    elif system == "Darwin":  # macOS
-        # macOS illegal characters: : (colon is converted to / by the system)
-        # Also can't start with dot (hidden file) for folders typically
-        # Use pre-compiled pattern for better performance
-        sanitized = _MACOS_ILLEGAL_CHARS_PATTERN.sub("_", name)
-        # Remove control characters
-        sanitized = _CONTROL_CHARS_PATTERN.sub("_", sanitized)
-        # Avoid leading dot for folders (creates hidden folders)
-        if is_folder and sanitized.startswith("."):
-            sanitized = "_" + sanitized[1:]
-    else:  # Linux and others
-        # Linux illegal characters: / and null character
-        # Though / is illegal, most other chars are technically allowed
-        # Use pre-compiled pattern for better performance
-        sanitized = _LINUX_ILLEGAL_CHARS_PATTERN.sub("_", name)
-        # Remove other control characters for safety (excluding \x00 which is already handled)
-        sanitized = _LINUX_CONTROL_CHARS_PATTERN.sub("_", sanitized)
-        # Avoid leading dot for folders (creates hidden folders)
-        if is_folder and sanitized.startswith("."):
-            sanitized = "_" + sanitized[1:]
-
-    # Ensure the name is not empty after sanitization
-    if not sanitized or sanitized.strip() == "":
-        sanitized = "audiobook"
-
-    # Limit length to 255 characters (common limit across filesystems)
-    if len(sanitized) > 255:
-        sanitized = sanitized[:255].rstrip(". ")
-
-    return sanitized
-
+# Backward-compatible re-exports — canonical location is domain/output_paths.py
+from abogen.domain.output_paths import sanitize_name_for_os  # noqa: E402, F401
 
 # Backward-compatible re-exports — canonical location is domain/voice_markers.py
 from abogen.domain.voice_markers import (  # noqa: E402, F401
