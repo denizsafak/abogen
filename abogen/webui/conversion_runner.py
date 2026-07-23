@@ -50,6 +50,7 @@ from abogen.domain.metadata_helpers import (
     normalize_series_number as _normalize_series_number,
     extract_series_metadata as _extract_series_metadata,
     format_series_sentence as _format_series_sentence,
+    build_metadata_payload as _build_metadata_payload,
 )
 from abogen.domain.intro_outro import resolve_intro, resolve_outro
 from abogen.domain.title_builder import (
@@ -852,15 +853,15 @@ def run_conversion_job(job: Job) -> None:
         if not audio_path and chapter_paths:
             job.result.audio_path = chapter_paths[0]
 
-        metadata_payload = {
-            "metadata": dict(job.metadata_tags or {}),
-            "chapters": chapter_markers,
-            "chunks": chunk_markers,
-            "chunk_level": job.chunk_level,
-            "speaker_mode": job.speaker_mode,
-            "speakers": dict(getattr(job, "speakers", {}) or {}),
-            "generate_epub3": job.generate_epub3,
-        }
+        metadata_payload = _build_metadata_payload(
+            metadata=job.metadata_tags,
+            chapter_markers=chapter_markers,
+            chunk_markers=chunk_markers,
+            chunk_level=job.chunk_level,
+            speaker_mode=job.speaker_mode,
+            speakers=getattr(job, "speakers", None),
+            generate_epub3=job.generate_epub3,
+        )
 
         if tts_context.usage_counter:
             _record_override_usage(job, tts_context.usage_counter, override_token_map)

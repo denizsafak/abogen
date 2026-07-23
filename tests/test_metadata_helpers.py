@@ -10,6 +10,7 @@ from abogen.domain.metadata_helpers import (
     normalize_series_number,
     extract_series_metadata,
     format_series_sentence,
+    build_metadata_payload,
 )
 
 
@@ -131,3 +132,56 @@ class TestFormatSeriesSentence:
 
     def test_with_the(self):
         assert format_series_sentence("The Lord of the Rings", "1") == "Book 1 of The Lord of the Rings"
+
+
+class TestBuildMetadataPayload:
+    def test_empty(self):
+        result = build_metadata_payload()
+        assert result == {
+            "metadata": {},
+            "chapters": [],
+            "chunks": [],
+            "chunk_level": None,
+            "speaker_mode": None,
+            "speakers": {},
+            "generate_epub3": False,
+        }
+
+    def test_with_metadata(self):
+        result = build_metadata_payload(metadata={"title": "Book", "artist": "Author"})
+        assert result["metadata"] == {"title": "Book", "artist": "Author"}
+
+    def test_metadata_is_copy(self):
+        original = {"title": "Book"}
+        result = build_metadata_payload(metadata=original)
+        result["metadata"]["title"] = "Changed"
+        assert original["title"] == "Book"
+
+    def test_with_chapters(self):
+        chapters = [{"title": "Ch1", "start": 0.0, "end": 10.0}]
+        result = build_metadata_payload(chapter_markers=chapters)
+        assert result["chapters"] == chapters
+
+    def test_with_all_fields(self):
+        result = build_metadata_payload(
+            metadata={"title": "Book"},
+            chapter_markers=[{"title": "Ch1", "start": 0.0, "end": 10.0}],
+            chunk_markers=[{"start": 0.0, "end": 5.0}],
+            chunk_level="chunk",
+            speaker_mode="multi",
+            speakers={"narrator": "M1"},
+            generate_epub3=True,
+        )
+        assert result["metadata"] == {"title": "Book"}
+        assert len(result["chapters"]) == 1
+        assert len(result["chunks"]) == 1
+        assert result["chunk_level"] == "chunk"
+        assert result["speaker_mode"] == "multi"
+        assert result["speakers"] == {"narrator": "M1"}
+        assert result["generate_epub3"] is True
+
+    def test_speakers_is_copy(self):
+        original = {"narrator": "M1"}
+        result = build_metadata_payload(speakers=original)
+        result["speakers"]["narrator"] = "M2"
+        assert original["narrator"] == "M1"

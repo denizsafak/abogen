@@ -403,3 +403,40 @@ def load_audiobookshelf_chapters(
         if title and start is not None and end is not None:
             cleaned.append({"title": str(title), "start": start, "end": end})
     return cleaned or None
+
+
+def build_metadata_payload(
+    metadata: Optional[Dict[str, Any]] = None,
+    chapter_markers: Optional[List[Dict[str, Any]]] = None,
+    chunk_markers: Optional[List[Dict[str, Any]]] = None,
+    chunk_level: Optional[str] = None,
+    speaker_mode: Optional[str] = None,
+    speakers: Optional[Dict[str, Any]] = None,
+    generate_epub3: bool = False,
+) -> Dict[str, Any]:
+    """Build the canonical metadata payload dict for persistence and downstream use.
+
+    This is the single source of truth for metadata assembly. Both PyQt and WebUI
+    runners should call this instead of building the dict manually.
+
+    Args:
+        metadata: Normalized metadata tags dict.
+        chapter_markers: List of chapter marker dicts with title/start/end.
+        chunk_markers: List of chunk marker dicts.
+        chunk_level: Chunk granularity level (e.g. 'chapter', 'chunk').
+        speaker_mode: Speaker mode ('single', 'multi', etc.).
+        speakers: Speaker profile mapping.
+        generate_epub3: Whether EPUB3 generation is enabled.
+
+    Returns:
+        Complete metadata payload dict.
+    """
+    return {
+        "metadata": dict(metadata or {}),
+        "chapters": chapter_markers or [],
+        "chunks": chunk_markers or [],
+        "chunk_level": chunk_level,
+        "speaker_mode": speaker_mode,
+        "speakers": dict(speakers or {}),
+        "generate_epub3": generate_epub3,
+    }

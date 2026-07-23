@@ -46,16 +46,8 @@ from abogen.domain.audio_buffer import (
 )
 from abogen.domain.subtitle_generation import process_subtitle_tokens
 from abogen.domain.voice_loader import VoiceCache, load_voice_cached, resolve_voice
-from abogen.domain.progress import calc_etr_str
-from abogen.domain.normalization import TTSContext
-from abogen.domain.pronunciation import (
-    compile_pronunciation_rules,
-    compile_heteronym_sentence_rules,
-    merge_pronunciation_overrides,
-)
 from abogen.domain.metadata_extraction import (
-    extract_metadata_and_build_args,
-    extract_metadata_for_file,
+    extract_metadata_from_text,
 )
 from abogen.domain.text_chapters import parse_chapters_from_text
 from abogen.infrastructure.exporters import ExportService
@@ -520,6 +512,9 @@ class ConversionThread(QThread):
                 ) as file:
                     text = file.read()
 
+            # Extract metadata BEFORE clean_text strips the tags
+            self._extracted_metadata = extract_metadata_from_text(text)
+
             # Clean up text using utility function
             text = clean_text(text)
 
@@ -545,18 +540,15 @@ class ConversionThread(QThread):
                 )
 
             # --- Compile normalization rules (heteronym + pronunciation) ---
-            from abogen.domain.normalization import TTSContext
-            pronunciation_overrides = merge_pronunciation_overrides(
-                getattr(self, "pronunciation_overrides", None),
-                getattr(self, "manual_overrides", None),
-            )
-            self._tts_context = TTSContext(
-                split_pattern=self.split_pattern,
-                pronunciation_rules=compile_pronunciation_rules(pronunciation_overrides),
-                heteronym_rules=compile_heteronym_sentence_rules(
-                    getattr(self, "heteronym_overrides", None)
-                ),
+            from abogen.domain.normalization import build_tts_context
+            self._tts_context = build_tts_context(
+                language=self.lang_code,
+                subtitle_mode=self.subtitle_mode,
+                pronunciation_overrides=getattr(self, "pronunciation_overrides", None),
+                manual_overrides=getattr(self, "manual_overrides", None),
+                heteronym_overrides=getattr(self, "heteronym_overrides", None),
                 normalization_overrides=getattr(self, "normalization_overrides", None),
+                log_callback=lambda level, msg: self.log_updated.emit((msg, "grey" if level == "info" else "orange")),
             )
 
             # --- Chapter splitting logic ---
@@ -755,7 +747,7 @@ class ConversionThread(QThread):
             intro_emitted = False
             if merge_chapters_at_end:
                 intro_spec = resolve_intro(
-                    extract_metadata_for_file(self.file_name, self.is_direct_text),
+                    self._extracted_metadata,
                     os.path.basename(self.file_name) if self.file_name else "",
                     getattr(self, "read_title_intro", False),
                     self.voice, self.voice, list(self.voice_cache._cache.keys()),
@@ -1091,7 +1083,7 @@ class ConversionThread(QThread):
             # --- Outro synthesis ---
             if merge_chapters_at_end:
                 outro_spec = resolve_outro(
-                    extract_metadata_for_file(self.file_name, self.is_direct_text),
+                    self._extracted_metadata,
                     os.path.basename(self.file_name) if self.file_name else "",
                     getattr(self, "read_closing_outro", True),
                     self.voice, self.voice, list(self.voice_cache._cache.keys()),
@@ -1132,12 +1124,7 @@ class ConversionThread(QThread):
                     # Add chapters via ExportService (unified with WebUI)
                     if total_chapters > 1:
                         export_svc = ExportService()
-                        metadata_text = read_text_for_metadata(
-                            file_path=self.file_name,
-                            is_direct_text=self.is_direct_text,
-                            direct_text=self.file_name if self.is_direct_text else None,
-                        )
-                        metadata = extract_metadata_from_text(metadata_text) if metadata_text else {}
+                        metadata = dict(getattr(self, "_extracted_metadata", {}))
                         # Convert cover_path from metadata to Path if present
                         cover_path_raw = metadata.pop("cover_path", None)
                         cover_path = Path(cover_path_raw) if cover_path_raw and os.path.exists(cover_path_raw) else None
@@ -1376,33 +1363,28 @@ class ConversionThread(QThread):
             raise ValueError(f"Unsupported output format: {self.output_format}")
 
     def _extract_and_add_metadata_tags_to_ffmpeg_cmd(self):
-        """Extract metadata tags from text content and add them to ffmpeg command"""
-        # Read text for metadata extraction
-        text = read_text_for_metadata(
-            file_path=self.file_name,
-            is_direct_text=self.is_direct_text,
-            direct_text=self.file_name if self.is_direct_text else None,
-        )
-        
-        if not text:
+        """Build ffmpeg metadata args from previously extracted metadata."""
+        metadata = getattr(self, "_extracted_metadata", None)
+        if not metadata or not any(metadata.values()):
             self.log_updated.emit(
-                ("Warning: Could not read file for metadata extraction", "orange")
+                ("Warning: No metadata tags found in text", "orange")
             )
             return [], None
         
-        # Extract metadata and build ffmpeg args
         filename = self.file_name if self.is_direct_text else (
             self.display_path if self.display_path else self.file_name
         )
         
         try:
-            metadata_options, cover_path = extract_metadata_and_build_args(
-                text=text,
-                filename=filename,
+            from abogen.domain.metadata_extraction import build_ffmpeg_metadata_args, get_filename_from_path
+            actual_filename = get_filename_from_path(
+                file_path=filename,
                 display_path=getattr(self, "display_path", None),
                 from_queue=getattr(self, "from_queue", False),
             )
-            return metadata_options, cover_path
+            args = build_ffmpeg_metadata_args(metadata, actual_filename)
+            cover_path = metadata.get("cover_path")
+            return args, cover_path
         except Exception as e:
             self.log_updated.emit(
                 (f"Warning: Metadata extraction error: {e}", "orange")
