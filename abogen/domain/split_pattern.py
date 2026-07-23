@@ -5,8 +5,12 @@ import re
 
 from abogen.domain.enums import Language, SubtitleMode
 
-PUNCTUATION_SENTENCE = r".!?。！？"
-PUNCTUATION_SENTENCE_COMMA = r".!?,。！？、，"
+# Canonical punctuation sets covering all supported scripts:
+# ASCII (. ! ?), Arabic ؟, CJK (。！？), Devanagari ।
+PUNCTUATION_SENTENCE = r".!?؟。！？।"
+# Commas: ASCII , CJK fullwidth ，CJK ideographic 、
+PUNCTUATION_SENTENCE_COMMA = r".!?,？。！？،，、।"
+PUNCTUATION_COMMAS = ",，、"
 
 
 def get_split_pattern(language: str, subtitle_mode: str) -> str:

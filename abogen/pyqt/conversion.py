@@ -78,6 +78,7 @@ from abogen.subtitle_utils import (
     sanitize_name_for_os,
     split_text_by_voice_markers
 )
+from abogen.domain.split_pattern import PUNCTUATION_SENTENCE, PUNCTUATION_SENTENCE_COMMA, PUNCTUATION_COMMAS
 
 class CountdownDialog(QDialog):
     """Base dialog with auto-accept countdown functionality"""
@@ -240,11 +241,6 @@ class ConversionThread(QThread):
     conversion_finished = pyqtSignal(object, object)  # Pass output path as second arg
     log_updated = pyqtSignal(object)  # Updated signal for log updates
     chapters_detected = pyqtSignal(int)  # Signal for chapter detection
-
-    # Punctuation constants for unified handling across languages
-    PUNCTUATION_SENTENCE = ".!?।。！？"
-    PUNCTUATION_SENTENCE_COMMA = ".!?,।。！？、，"
-    PUNCTUATION_COMMAS = ",，、"
 
     def __init__(
         self,
@@ -932,7 +928,7 @@ class ConversionThread(QThread):
                             # For Sentence + Comma mode, still split on commas within spaCy sentences
                             if self.subtitle_mode == "Sentence + Comma":
                                 active_split_pattern = r"(?<=[{}]){}|\n+".format(
-                                    self.PUNCTUATION_COMMAS, spacing_pattern
+                                    PUNCTUATION_COMMAS, spacing_pattern
                                 )
                             else:
                                 active_split_pattern = (

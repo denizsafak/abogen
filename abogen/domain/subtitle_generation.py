@@ -11,11 +11,7 @@ import re
 from typing import List, Optional, Tuple
 
 from abogen.domain.enums import Language, SubtitleMode
-
-
-# Punctuation constants for sentence splitting
-PUNCTUATION_SENTENCE = ".!?\u061f\u3002\uff01\uff1f"  # .!? .?. ??
-PUNCTUATION_SENTENCE_COMMA = ".!?,\u3001\u061f\u3002\uff01\uff0c\uff1f"  # .!?, ,. ??
+from abogen.domain.split_pattern import PUNCTUATION_SENTENCE, PUNCTUATION_SENTENCE_COMMA
 
 
 def process_subtitle_tokens(
@@ -87,7 +83,7 @@ def _process_karaoke_highlighting(
     fallback_end_time: Optional[float],
 ) -> None:
     """Process tokens for Sentence + Highlighting mode (karaoke effect)."""
-    separator = rf"[{re.escape(PUNCTUATION_SENTENCE)}]"
+    separator = rf"[{PUNCTUATION_SENTENCE}]"
     current_sentence = []
     word_count = 0
 
@@ -247,11 +243,9 @@ def _process_regex_sentences(
     if subtitle_mode == SubtitleMode.LINE:
         separator = r"\n"
     elif subtitle_mode == SubtitleMode.SENTENCE:
-        # Use punctuation without comma
-        separator = rf"[{re.escape(PUNCTUATION_SENTENCE)}]"
+        separator = rf"[{PUNCTUATION_SENTENCE}]"
     else:  # Sentence + Comma
-        # Use punctuation with comma
-        separator = rf"[{re.escape(PUNCTUATION_SENTENCE_COMMA)}]"
+        separator = rf"[{PUNCTUATION_SENTENCE_COMMA}]"
 
     current_sentence = []
     word_count = 0
