@@ -215,8 +215,8 @@ def _build_chapters(
     chapters = []
 
     for idx, (title, body_text, default_voice) in enumerate(selected_chapters, 1):
-        # Build segments for this chapter
-        segments = _build_segments(body_text, default_voice, request)
+        # Build segments for this chapter (idx is 1-based, chunks use 0-based)
+        segments = _build_segments(body_text, default_voice, request, chapter_index=idx - 1)
 
         chapter = ChapterPlan(
             index=idx,
@@ -232,7 +232,8 @@ def _build_chapters(
 
 
 def _build_segments(
-    body_text: str, default_voice: str, request: ConversionRequest
+    body_text: str, default_voice: str, request: ConversionRequest,
+    chapter_index: int = 0,
 ) -> List[SegmentPlan]:
     """Build SegmentPlan list for a chapter's body text.
 
@@ -243,8 +244,13 @@ def _build_segments(
     # Check for chunks (WebUI style)
     chapter_chunk = request.chapter_chunk
     if chapter_chunk and chapter_chunk.chunks:
-        # Group chunks by chapter (simplified — assume chunks are for current chapter)
-        for chunk_idx, chunk in enumerate(chapter_chunk.chunks):
+        # Group chunks by chapter index
+        from abogen.domain.chunk_utils import group_chunks_by_chapter
+
+        chunk_groups = group_chunks_by_chapter(chapter_chunk.chunks)
+        chunks_for_chapter = chunk_groups.get(chapter_index, [])
+
+        for chunk_idx, chunk in enumerate(chunks_for_chapter):
             chunk_text = chunk.get("normalized_text") or chunk.get("text", "")
             if not chunk_text or not chunk_text.strip():
                 continue
