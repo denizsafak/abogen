@@ -37,6 +37,9 @@ class ConversionResult:
     total_segments: int = 0
     total_characters: int = 0
 
+    # --- Override usage tracking ---
+    usage_counter: Dict[str, int] = field(default_factory=dict)
+
 
 @dataclass
 class ConversionError:

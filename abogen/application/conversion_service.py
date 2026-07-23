@@ -15,6 +15,7 @@ The service NEVER imports from PyQt or WebUI.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Any, Callable, Dict, Optional
 
 from abogen.application.conversion_executor import execute_conversion
@@ -63,7 +64,8 @@ def run_conversion(
     try:
         # Stage 1: Prepare TTS context
         events.log("Preparing conversion pipeline")
-        tts_context = _prepare_tts_context(request, events)
+        usage_counter: Dict[str, int] = defaultdict(int)
+        tts_context = _prepare_tts_context(request, events, usage_counter=usage_counter)
 
         # Stage 2: Build conversion plan
         events.log("Building conversion plan")
@@ -78,6 +80,9 @@ def run_conversion(
             voice_resolver=voice_resolver,
             tts_context=tts_context,
         )
+
+        # Propagate usage counter to result
+        result.usage_counter = dict(usage_counter)
 
         # Stage 4: Finalize (m4b metadata embedding, EPUB3 generation)
         _finalize(request, result, plan, events)
@@ -167,6 +172,8 @@ def _finalize(
 def _prepare_tts_context(
     request: ConversionRequest,
     events: ConversionEvents,
+    *,
+    usage_counter: Optional[Dict[str, int]] = None,
 ) -> TTSContext:
     """Prepare TTSContext with normalization settings.
 
@@ -184,6 +191,7 @@ def _prepare_tts_context(
         build_apostrophe_config,
         get_runtime_settings,
     )
+    from abogen.normalization_settings import apply_overrides, build_llm_configuration
     from abogen.domain.pronunciation import (
         compile_heteronym_sentence_rules,
         compile_pronunciation_rules,
@@ -193,10 +201,27 @@ def _prepare_tts_context(
     # Get runtime normalization settings
     normalization_settings = get_runtime_settings()
 
+    # Extract pronunciation config early (needed for normalization overrides)
+    pronunciation = request.pronunciation
+
+    # Apply per-job normalization overrides (same as runners)
+    job_overrides = pronunciation.normalization_overrides if pronunciation else None
+    if job_overrides:
+        normalization_settings = apply_overrides(normalization_settings, job_overrides)
+
     # Build apostrophe config
     apostrophe_config = build_apostrophe_config(
         settings=normalization_settings,
     )
+
+    # Validate LLM apostrophe mode
+    apostrophe_mode = str(normalization_settings.get("normalization_apostrophe_mode", "spacy")).lower()
+    if apostrophe_mode == "llm":
+        llm_config = build_llm_configuration(normalization_settings)
+        if not llm_config.is_configured():
+            raise RuntimeError(
+                "LLM-based apostrophe normalization is selected, but the LLM configuration is incomplete."
+            )
 
     # Check for num2words availability
     if apostrophe_config.convert_numbers:
@@ -216,8 +241,6 @@ def _prepare_tts_context(
     )
 
     # Merge pronunciation overrides (manual + pronunciation)
-    # Create a mock job-like object for merge_pronunciation_overrides
-    pronunciation = request.pronunciation
 
     class _MockJob:
         def __init__(self, pron):
@@ -248,4 +271,5 @@ def _prepare_tts_context(
         pronunciation_rules=pronunciation_rules,
         heteronym_rules=heteronym_rules,
         normalization_overrides=pronunciation.normalization_overrides if pronunciation else None,
+        usage_counter=usage_counter or {},
     )
