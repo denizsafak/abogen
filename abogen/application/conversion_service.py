@@ -79,13 +79,48 @@ def run_conversion(
             tts_context=tts_context,
         )
 
-        # Stage 4: Finalize
+        # Stage 4: Finalize (m4b metadata embedding)
+        _finalize(request, result, events)
+
         events.log("Conversion complete")
         return result
 
     except Exception as e:
         events.log(f"Conversion failed: {e}", level="error")
         raise
+
+
+def _finalize(
+    request: ConversionRequest,
+    result: ConversionResult,
+    events: ConversionEvents,
+) -> None:
+    """Post-conversion finalization (m4b metadata embedding, etc.)."""
+    from abogen.domain.enums import OutputFormat
+
+    if (
+        result.audio_path
+        and request.output_format == OutputFormat.M4B
+    ):
+        from pathlib import Path
+
+        from abogen.infrastructure.exporters import ExportService
+
+        export_svc = ExportService()
+        cover_path = request.cover_image_path if request.cover_image_path and request.cover_image_path.exists() else None
+
+        try:
+            export_svc.embed_m4b_metadata(
+                audio_path=result.audio_path,
+                metadata=result.metadata or {},
+                chapters=result.chapter_markers or [],
+                cover_path=cover_path,
+                cover_mime=request.cover_image_mime,
+                log_callback=lambda msg, level="info": events.log(msg, level=level),
+            )
+        except Exception as exc:
+            events.log(f"Failed to embed m4b metadata: {exc}", level="error")
+            raise RuntimeError(f"Failed to embed m4b metadata: {exc}") from exc
 
 
 def _prepare_tts_context(
