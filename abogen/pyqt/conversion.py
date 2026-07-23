@@ -2,6 +2,7 @@ import os
 import re
 import time
 import hashlib  # For generating unique cache filenames
+from pathlib import Path
 from platformdirs import user_desktop_dir
 from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer
 from PyQt6.QtWidgets import QCheckBox, QVBoxLayout, QDialog, QLabel, QDialogButtonBox
