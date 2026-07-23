@@ -206,6 +206,26 @@ def execute_conversion(
                 )
                 result.chapter_paths.append(chapter_path)
 
+            # Per-chapter subtitle writer
+            chapter_subtitle_writer: Optional[SubtitleWriter] = None
+            if chapter_dir and request.subtitle_mode != SubtitleMode.DISABLED and chapter_sink:
+                from abogen.infrastructure.subtitle_writer import resolve_subtitle_format
+
+                chapter_filename = sanitize_filename_for_chapter(chapter.title, chapter_idx)
+                subtitle_ext, _ = resolve_subtitle_format(
+                    request.subtitle_format, request.subtitle_mode
+                )
+                chapter_subtitle_path = chapter_dir / f"{chapter_filename}.{subtitle_ext}"
+                chapter_subtitle_writer = make_subtitle_writer(
+                    chapter_subtitle_path,
+                    request.subtitle_format,
+                    request.subtitle_mode,
+                    max_words=request.max_subtitle_words,
+                )
+                if chapter_subtitle_writer:
+                    chapter_subtitle_writer.open()
+                    result.subtitle_paths.append(chapter_subtitle_writer.path)
+
             # Intro delay before first chapter
             if not intro_emitted and plan.intro and plan.intro.enabled:
                 # Intro will be emitted with first chapter
@@ -281,16 +301,27 @@ def execute_conversion(
                 )
 
                 # Process subtitles
-                if subtitle_writer and audio_sink and accumulated_tokens:
-                    process_and_write_subtitles(
-                        accumulated_tokens,
-                        subtitle_writer,
-                        subtitle_mode=request.subtitle_mode,
-                        max_subtitle_words=request.max_subtitle_words,
-                        lang_code=request.language,
-                        use_spacy_segmentation=use_spacy,
-                        fallback_end_time=stats.current_time,
-                    )
+                if audio_sink and accumulated_tokens:
+                    if subtitle_writer:
+                        process_and_write_subtitles(
+                            accumulated_tokens,
+                            subtitle_writer,
+                            subtitle_mode=request.subtitle_mode,
+                            max_subtitle_words=request.max_subtitle_words,
+                            lang_code=request.language,
+                            use_spacy_segmentation=use_spacy,
+                            fallback_end_time=stats.current_time,
+                        )
+                    if chapter_subtitle_writer:
+                        process_and_write_subtitles(
+                            accumulated_tokens,
+                            chapter_subtitle_writer,
+                            subtitle_mode=request.subtitle_mode,
+                            max_subtitle_words=request.max_subtitle_words,
+                            lang_code=request.language,
+                            use_spacy_segmentation=use_spacy,
+                            fallback_end_time=stats.current_time,
+                        )
 
                 # Record chunk marker
                 if segment.source in ("chunk", "voice_marker"):
@@ -318,6 +349,10 @@ def execute_conversion(
             # Close chapter sink
             if chapter_sink:
                 chapter_sink.close()
+
+            # Close chapter subtitle writer
+            if chapter_subtitle_writer:
+                chapter_subtitle_writer.close()
 
             # Add chapter marker
             result.chapter_markers.append({
