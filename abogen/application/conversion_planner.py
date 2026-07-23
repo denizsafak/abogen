@@ -50,7 +50,7 @@ def build_conversion_plan(request: ConversionRequest) -> ConversionPlan:
         raise ValueError("No text content to convert")
 
     # 2. Extract metadata
-    metadata = _extract_metadata(request)
+    metadata, extraction = _extract_metadata(request)
 
     # 3. Parse chapters
     raw_chapters = _parse_chapters(source_text, request)
@@ -74,6 +74,7 @@ def build_conversion_plan(request: ConversionRequest) -> ConversionPlan:
         intro=intro,
         outro=outro,
         output_layout=output_layout,
+        extraction=extraction,
     )
 
 
@@ -111,10 +112,15 @@ def _extract_source_text(request: ConversionRequest) -> Optional[str]:
     return text
 
 
-def _extract_metadata(request: ConversionRequest) -> Dict[str, Any]:
-    """Extract metadata from source file."""
+def _extract_metadata(
+    request: ConversionRequest,
+) -> Tuple[Dict[str, Any], Optional[Any]]:
+    """Extract metadata from source file.
+
+    Returns (metadata, extraction) tuple.
+    """
     if request.direct_text:
-        return dict(request.metadata_tags)
+        return dict(request.metadata_tags), None
 
     if request.source_path and request.source_path.exists():
         try:
@@ -123,11 +129,12 @@ def _extract_metadata(request: ConversionRequest) -> Dict[str, Any]:
             )
             metadata = dict(extraction.metadata) if extraction.metadata else {}
         except Exception:
+            extraction = None
             metadata = {}
         metadata = merge_metadata(metadata, request.metadata_tags)
-        return metadata
+        return metadata, extraction
 
-    return dict(request.metadata_tags)
+    return dict(request.metadata_tags), None
 
 
 def _parse_chapters(

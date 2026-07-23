@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from abogen.application.conversion_request import ConversionRequest
+    from abogen.text_extractor import ExtractionResult
 
 
 @dataclass
@@ -93,3 +94,4 @@ class ConversionPlan:
     intro: Optional[IntroOutroSpec] = None
     outro: Optional[IntroOutroSpec] = None
     output_layout: Optional[OutputLayout] = None
+    extraction: Optional[ExtractionResult] = None

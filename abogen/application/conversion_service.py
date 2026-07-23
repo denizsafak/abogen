@@ -79,8 +79,8 @@ def run_conversion(
             tts_context=tts_context,
         )
 
-        # Stage 4: Finalize (m4b metadata embedding)
-        _finalize(request, result, events)
+        # Stage 4: Finalize (m4b metadata embedding, EPUB3 generation)
+        _finalize(request, result, plan, events)
 
         events.log("Conversion complete")
         return result
@@ -93,11 +93,13 @@ def run_conversion(
 def _finalize(
     request: ConversionRequest,
     result: ConversionResult,
+    plan: ConversionPlan,
     events: ConversionEvents,
 ) -> None:
-    """Post-conversion finalization (m4b metadata embedding, etc.)."""
+    """Post-conversion finalization (m4b metadata embedding, EPUB3 generation, etc.)."""
     from abogen.domain.enums import OutputFormat
 
+    # m4b metadata embedding
     if (
         result.audio_path
         and request.output_format == OutputFormat.M4B
@@ -121,6 +123,45 @@ def _finalize(
         except Exception as exc:
             events.log(f"Failed to embed m4b metadata: {exc}", level="error")
             raise RuntimeError(f"Failed to embed m4b metadata: {exc}") from exc
+
+    # EPUB3 generation
+    epub3_config = request.epub3_export
+    if epub3_config and plan.extraction:
+        audio_asset = result.audio_path
+        if not audio_asset and result.chapter_paths:
+            audio_asset = result.chapter_paths[0]
+
+        if audio_asset:
+            try:
+                from pathlib import Path
+
+                from abogen.epub3.exporter import build_epub3_package
+
+                epub_root = result.project_root or plan.output_layout.parent_dir
+                from abogen.domain.output_paths import build_output_path
+
+                epub_output_path = build_output_path(epub_root, request.original_filename, "epub")
+                events.log("Generating EPUB 3 package...")
+                epub_path = build_epub3_package(
+                    output_path=epub_output_path,
+                    book_id=epub3_config.book_id,
+                    extraction=plan.extraction,
+                    metadata_tags=result.metadata or {},
+                    chapter_markers=result.chapter_markers or [],
+                    chunk_markers=result.chunk_markers or [],
+                    chunks=request.chapter_chunk.chunks if request.chapter_chunk else [],
+                    audio_path=audio_asset,
+                    speaker_mode=request.chapter_chunk.speaker_mode if request.chapter_chunk else "single",
+                    cover_image_path=request.cover_image_path,
+                    cover_image_mime=request.cover_image_mime,
+                )
+                result.epub_path = epub_path
+                result.artifacts["epub3"] = epub_path
+                events.log(f"EPUB 3 package created at {epub_path}")
+            except Exception as exc:
+                events.log(f"Failed to generate EPUB 3: {exc}", level="error")
+        else:
+            events.log("Skipped EPUB 3 generation: audio output unavailable.", level="warning")
 
 
 def _prepare_tts_context(
