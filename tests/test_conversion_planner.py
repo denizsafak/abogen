@@ -246,6 +246,30 @@ class TestWordSubstitution:
         assert len(plan.chapters) >= 1
         assert "cat" in plan.chapters[0].body_text
 
+    def test_chunks_assigned_to_correct_chapter(self):
+        """Chunks are grouped by chapter_index and only assigned to matching chapters."""
+        req = ConversionRequest(
+            direct_text="<<CHAPTER_MARKER:Ch1>>\nText A\n<<CHAPTER_MARKER:Ch2>>\nText B",
+            voice="M1",
+            chapter_chunk=ChapterChunkConfig(
+                chunks=[
+                    {"text": "Ch1 chunk", "chapter_index": 0},
+                    {"text": "Ch2 chunk", "chapter_index": 1},
+                ],
+            ),
+        )
+        plan = build_conversion_plan(req)
+
+        assert len(plan.chapters) == 2
+        # Ch1 should have only its chunk
+        ch1_texts = [s.text for s in plan.chapters[0].segments]
+        assert "Ch1 chunk" in ch1_texts
+        assert "Ch2 chunk" not in ch1_texts
+        # Ch2 should have only its chunk
+        ch2_texts = [s.text for s in plan.chapters[1].segments]
+        assert "Ch2 chunk" in ch2_texts
+        assert "Ch1 chunk" not in ch2_texts
+
     def test_no_substitution_when_disabled(self):
         """No substitution when word_substitution is None."""
         req = ConversionRequest(

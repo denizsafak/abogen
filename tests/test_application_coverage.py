@@ -245,6 +245,71 @@ class TestConversionService:
             log_messages = [msg for msg, _ in events.logs]
             assert any("Conversion failed" in msg for msg in log_messages)
 
+    def test_tts_context_applies_normalization_overrides(self):
+        """Service applies normalization_overrides from request to apostrophe config."""
+        from abogen.application.conversion_service import run_conversion
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            from abogen.application.conversion_config import PronunciationConfig
+
+            req = ConversionRequest(
+                direct_text="Hello",
+                voice="M1",
+                save_mode="custom_folder",
+                output_folder=Path(tmpdir),
+                pronunciation=PronunciationConfig(
+                    normalization_overrides={"normalization_numbers": False},
+                ),
+            )
+            events = FakeEvents()
+            pipeline = FakePipelineProvider()
+            resolver = FakeVoiceResolver()
+
+            result = run_conversion(req, events, pipeline, resolver)
+            assert result is not None
+
+    def test_tts_context_rejects_unconfigured_llm_mode(self):
+        """Service raises RuntimeError if LLM apostrophe mode is selected but unconfigured."""
+        from abogen.application.conversion_service import run_conversion
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            from abogen.application.conversion_config import PronunciationConfig
+
+            req = ConversionRequest(
+                direct_text="Hello",
+                voice="M1",
+                save_mode="custom_folder",
+                output_folder=Path(tmpdir),
+                pronunciation=PronunciationConfig(
+                    normalization_overrides={"normalization_apostrophe_mode": "llm"},
+                ),
+            )
+            events = FakeEvents()
+            pipeline = FakePipelineProvider()
+            resolver = FakeVoiceResolver()
+
+            with pytest.raises(RuntimeError, match="LLM.*apostrophe"):
+                run_conversion(req, events, pipeline, resolver)
+
+    def test_usage_counter_populated_in_result(self):
+        """usage_counter is created and accessible in result."""
+        from abogen.application.conversion_service import run_conversion
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req = ConversionRequest(
+                direct_text="Hello",
+                voice="M1",
+                save_mode="custom_folder",
+                output_folder=Path(tmpdir),
+            )
+            events = FakeEvents()
+            pipeline = FakePipelineProvider()
+            resolver = FakeVoiceResolver()
+
+            result = run_conversion(req, events, pipeline, resolver)
+            assert hasattr(result, "usage_counter")
+            assert isinstance(result.usage_counter, dict)
+
 
 # ─── Tests for output_layout_service.py ─────────────────────────────
 
