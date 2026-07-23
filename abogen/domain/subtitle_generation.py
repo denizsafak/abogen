@@ -280,16 +280,28 @@ def _process_regex_sentences(
                 current_sentence = []
                 word_count = 0
 
-    # Add any remaining tokens as a sentence
+    # Add any remaining tokens as a sentence (split multi-sentence FakeToken)
     if current_sentence:
         start_time = current_sentence[0]["start"]
         end_time = current_sentence[-1]["end"]
 
-        # Simplified text joining logic
         sentence_text = ""
         for t in current_sentence:
             sentence_text += t["text"] + (t.get("whitespace") or "")
-        subtitle_entries.append((start_time, end_time, sentence_text.strip()))
+        sentence_text = sentence_text.strip()
+
+        if len(current_sentence) == 1:
+            parts = re.split(rf"(?<={separator})\s+", sentence_text)
+            if len(parts) > 1:
+                d = end_time - start_time
+                for i, p in enumerate(parts):
+                    e = end_time if i == len(parts) - 1 else start_time + d * len(p) / len(sentence_text)
+                    subtitle_entries.append((start_time, e, p.strip()))
+                    start_time = e
+                current_sentence = []
+
+        if current_sentence:
+            subtitle_entries.append((start_time, end_time, sentence_text))
 
     # Fallback for last entry
     _apply_fallback_end_time(subtitle_entries, fallback_end_time)

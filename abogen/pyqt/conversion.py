@@ -36,7 +36,7 @@ from abogen.domain.output_paths import (
 )
 from abogen.domain.audio_helpers import build_ffmpeg_command, to_float32
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
-from abogen.domain.conversion_engine import synthesize_text, SynthParams, SegmentStats, SegmentInfo
+from abogen.domain.conversion_engine import run_tts_segment_loop, synthesize_text, SynthParams, SegmentStats, SegmentInfo
 from abogen.domain.intro_outro import resolve_intro, resolve_outro
 from abogen.domain.audio_buffer import (
     create_silence,
