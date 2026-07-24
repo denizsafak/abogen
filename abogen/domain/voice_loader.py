@@ -6,7 +6,7 @@ PyQt and WebUI interfaces.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from abogen.voice_formulas import get_new_voice
 

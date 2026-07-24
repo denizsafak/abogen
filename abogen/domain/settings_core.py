@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Mapping, Optional, Sequence
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Mapping
 
 from abogen.constants import (
     LANGUAGE_DESCRIPTIONS,

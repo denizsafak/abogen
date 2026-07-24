@@ -1,5 +1,4 @@
 import os
-import re
 import time
 import hashlib  # For generating unique cache filenames
 from platformdirs import user_desktop_dir
@@ -9,7 +8,6 @@ from contextlib import ExitStack, contextmanager
 import numpy as np
 import soundfile as sf
 from abogen.utils import (
-    create_process,
     get_user_cache_path,
     detect_encoding,
 )
@@ -29,20 +27,15 @@ from abogen.domain.subtitle_processor import (
 )
 from abogen.domain.output_paths import (
     resolve_output_directory,
-    build_output_path,
-    sanitize_output_stem,
     sanitize_filename_for_chapter,
     resolve_unique_path,
 )
 from abogen.domain.audio_helpers import build_ffmpeg_command, to_float32
-from abogen.domain.audio_sink import AudioSink, open_audio_sink
+from abogen.domain.audio_sink import open_audio_sink
 from abogen.domain.conversion_engine import synthesize_text, SynthParams, SegmentStats, SegmentInfo
 from abogen.domain.intro_outro import resolve_intro, resolve_outro
 from abogen.domain.audio_buffer import (
     create_silence,
-    mix_audio,
-    normalize_audio,
-    SAMPLE_RATE,
 )
 from abogen.domain.subtitle_generation import process_subtitle_tokens
 from abogen.domain.voice_loader import VoiceCache, load_voice_cached, resolve_voice
@@ -54,7 +47,6 @@ from abogen.infrastructure.exporters import ExportService
 import abogen.hf_tracker as hf_tracker
 import static_ffmpeg
 import threading  # for efficient waiting
-import subprocess
 
 
 
@@ -70,7 +62,7 @@ from abogen.subtitle_utils import (
     sanitize_name_for_os,
     split_text_by_voice_markers
 )
-from abogen.domain.split_pattern import PUNCTUATION_SENTENCE, PUNCTUATION_SENTENCE_COMMA, PUNCTUATION_COMMAS
+from abogen.domain.split_pattern import PUNCTUATION_COMMAS
 
 class CountdownDialog(QDialog):
     """Base dialog with auto-accept countdown functionality"""

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, List, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol
 
 from abogen.domain.audio_sink import AudioSink
 from abogen.domain.conversion_pipeline import tts_segments

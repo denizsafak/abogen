@@ -180,11 +180,20 @@ def merge_pronunciation_overrides(job: Any) -> List[Dict[str, Any]]:
     we must merge manual overrides so they always apply (before TTS).
 
     Precedence: manual overrides win over existing entries for the same normalized key.
+
+    Args:
+        job: Either a job-like object with attributes, or a dict with keys:
+            ``pronunciation_overrides``, ``manual_overrides``, ``speakers``, ``language``.
     """
 
     collected: Dict[str, Dict[str, Any]] = {}
 
-    existing = getattr(job, "pronunciation_overrides", None)
+    def _get(key: str, default: Any = None) -> Any:
+        if isinstance(job, Mapping):
+            return job.get(key, default)
+        return getattr(job, key, default)
+
+    existing = _get("pronunciation_overrides")
     if isinstance(existing, list):
         for entry in existing:
             if not isinstance(entry, Mapping):
@@ -204,10 +213,10 @@ def merge_pronunciation_overrides(job: Any) -> List[Dict[str, Any]]:
                 "notes": str(entry.get("notes") or "").strip() or None,
                 "context": str(entry.get("context") or "").strip() or None,
                 "source": str(entry.get("source") or "pronunciation"),
-                "language": getattr(job, "language", None),
+                "language": _get("language"),
             }
 
-    speakers = getattr(job, "speakers", None)
+    speakers = _get("speakers")
     if isinstance(speakers, dict):
         for payload in speakers.values():
             if not isinstance(payload, Mapping):
@@ -226,16 +235,16 @@ def merge_pronunciation_overrides(job: Any) -> List[Dict[str, Any]]:
                 "voice": str(
                     payload.get("resolved_voice")
                     or payload.get("voice")
-                    or getattr(job, "voice", "")
+                    or _get("voice", "")
                 ).strip()
                 or None,
                 "notes": None,
                 "context": None,
                 "source": "speaker",
-                "language": getattr(job, "language", None),
+                "language": _get("language"),
             }
 
-    manual = getattr(job, "manual_overrides", None)
+    manual = _get("manual_overrides")
     if isinstance(manual, list):
         for entry in manual:
             if not isinstance(entry, Mapping):
@@ -255,7 +264,7 @@ def merge_pronunciation_overrides(job: Any) -> List[Dict[str, Any]]:
                 "notes": str(entry.get("notes") or "").strip() or None,
                 "context": str(entry.get("context") or "").strip() or None,
                 "source": str(entry.get("source") or "manual"),
-                "language": getattr(job, "language", None),
+                "language": _get("language"),
             }
 
     return list(collected.values())

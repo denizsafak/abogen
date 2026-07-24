@@ -6,7 +6,7 @@ across all UI layers (WebUI, PyQt, CLI).
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from abogen.domain.device import select_device
 from abogen.domain.enums import Language

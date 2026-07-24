@@ -13,10 +13,7 @@ from contextlib import ExitStack
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from abogen.application.conversion_models import (
-    ChapterPlan,
     ConversionPlan,
-    IntroOutroSpec,
-    SegmentPlan,
 )
 from abogen.application.conversion_ports import (
     AudioSink,

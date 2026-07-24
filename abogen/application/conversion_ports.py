@@ -10,7 +10,7 @@ implementations (PyQt signals, Flask Job, etc.).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, List, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol
 
 
 class ConversionCancelled(Exception):

@@ -11,7 +11,7 @@ import platform
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from abogen.text_extractor import ExtractedChapter
 

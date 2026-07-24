@@ -9,6 +9,11 @@ from flask.typing import ResponseReturnValue
 from abogen.domain.device import select_device as _select_device
 from abogen.domain.enums import Language
 from abogen.domain.split_pattern import get_split_pattern
+from abogen.domain.pronunciation import (
+    merge_pronunciation_overrides,
+    compile_pronunciation_rules,
+    apply_pronunciation_rules,
+)
 
 # Kokoro-specific language mapping (engine's responsibility)
 _KOKORO_LANG_MAP = {
@@ -100,8 +105,6 @@ def generate_preview_audio(
     source_text = text
     if pronunciation_overrides or manual_overrides or speakers:
         try:
-            from abogen.webui import conversion_runner as runner
-
             class _PreviewJob:
                 def __init__(self):
                     self.language = language
@@ -111,9 +114,9 @@ def generate_preview_audio(
                     self.pronunciation_overrides = list(pronunciation_overrides or [])
 
             job = _PreviewJob()
-            merged = runner._merge_pronunciation_overrides(job)
-            rules = runner._compile_pronunciation_rules(merged)
-            source_text = runner._apply_pronunciation_rules(source_text, rules)
+            merged = merge_pronunciation_overrides(job)
+            rules = compile_pronunciation_rules(merged)
+            source_text = apply_pronunciation_rules(source_text, rules)
         except Exception:
             current_app.logger.exception("Preview override application failed; using raw text")
             source_text = text

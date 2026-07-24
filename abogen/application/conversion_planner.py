@@ -8,14 +8,12 @@ This is Stage 2 of the conversion flow unification plan.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from abogen.application.conversion_models import (
     ChapterPlan,
     ConversionPlan,
     IntroOutroSpec,
-    OutputLayout,
     SegmentPlan,
 )
 from abogen.application.conversion_request import ConversionRequest

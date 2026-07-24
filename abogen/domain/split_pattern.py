@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 """Unified split pattern logic extracted from 3 copies."""
-import re
 
 from abogen.domain.enums import Language, SubtitleMode
 

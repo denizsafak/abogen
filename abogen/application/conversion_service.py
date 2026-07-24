@@ -16,7 +16,7 @@ The service NEVER imports from PyQt or WebUI.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, Callable, Dict, Optional
+from typing import Dict, Optional
 
 from abogen.application.conversion_executor import execute_conversion
 from abogen.application.conversion_models import ConversionPlan
@@ -109,7 +109,6 @@ def _finalize(
         result.audio_path
         and request.output_format == OutputFormat.M4B
     ):
-        from pathlib import Path
 
         from abogen.infrastructure.exporters import ExportService
 
@@ -138,7 +137,6 @@ def _finalize(
 
         if audio_asset:
             try:
-                from pathlib import Path
 
                 from abogen.epub3.exporter import build_epub3_package
 

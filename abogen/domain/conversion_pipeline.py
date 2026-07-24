@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass, field
 
 from abogen.domain.enums import SubtitleMode
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
 

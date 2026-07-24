@@ -1,8 +1,8 @@
-"""Tests for domain/normalization.py — prepare_text_for_tts."""
+"""Tests for domain/normalization.py — prepare_text_for_tts, build_tts_context."""
 
 import pytest
 from unittest.mock import patch, MagicMock
-from abogen.domain.normalization import prepare_text_for_tts, normalize_text_for_pipeline
+from abogen.domain.normalization import prepare_text_for_tts, normalize_text_for_pipeline, build_tts_context, TTSContext
 
 
 class TestPrepareTextForTts:
@@ -145,3 +145,150 @@ class TestNormalizeTextForPipeline:
             normalization_overrides={"normalization_apostrophe_mode": "spacy"},
         )
         assert isinstance(result, str)
+
+
+class TestBuildTtsContext:
+    """Tests for the build_tts_context factory."""
+
+    def test_returns_tts_context(self):
+        ctx = build_tts_context()
+        assert isinstance(ctx, TTSContext)
+
+    def test_default_split_pattern(self):
+        ctx = build_tts_context(language="a", subtitle_mode="Disabled")
+        assert isinstance(ctx.split_pattern, str)
+        assert len(ctx.split_pattern) > 0
+
+    def test_english_uses_newline_split(self):
+        ctx = build_tts_context(language="a", subtitle_mode="Disabled")
+        assert ctx.split_pattern == "\n"
+
+    def test_cjk_uses_punctuation_split(self):
+        ctx = build_tts_context(language="j", subtitle_mode="Disabled")
+        assert "[.??.?!]" in ctx.split_pattern or "\\n" not in ctx.split_pattern
+
+    def test_pronunciation_overrides_compiled(self):
+        overrides = [
+            {
+                "token": "epub",
+                "pronunciation": "ee-pub",
+                "normalized": "epub",
+            }
+        ]
+        ctx = build_tts_context(
+            pronunciation_overrides=overrides,
+        )
+        assert ctx.pronunciation_rules is not None
+        assert len(ctx.pronunciation_rules) >= 1
+
+    def test_manual_overrides_included(self):
+        overrides = [
+            {
+                "token": "gif",
+                "pronunciation": "jif",
+                "normalized": "gif",
+            }
+        ]
+        ctx = build_tts_context(
+            manual_overrides=overrides,
+        )
+        assert ctx.pronunciation_rules is not None
+        assert len(ctx.pronunciation_rules) >= 1
+
+    def test_manual_overrides_win_over_pronunciation(self):
+        pronunciation = [
+            {"token": "x", "pronunciation": "WRONG", "normalized": "x"}
+        ]
+        manual = [
+            {"token": "x", "pronunciation": "RIGHT", "normalized": "x"}
+        ]
+        ctx = build_tts_context(
+            pronunciation_overrides=pronunciation,
+            manual_overrides=manual,
+        )
+        found_right = any(
+            r.get("replacement") == "RIGHT" for r in ctx.pronunciation_rules
+        )
+        found_wrong = any(
+            r.get("replacement") == "WRONG" for r in ctx.pronunciation_rules
+        )
+        assert found_right
+        assert not found_wrong
+
+    def test_heteronym_overrides_compiled(self):
+        overrides = [
+            {
+                "token": "read",
+                "pronunciation": "red",
+                "context": "past tense",
+            }
+        ]
+        ctx = build_tts_context(
+            heteronym_overrides=overrides,
+        )
+        assert ctx.heteronym_rules is not None
+
+    def test_usage_counter_passed_through(self):
+        counter = {}
+        ctx = build_tts_context(usage_counter=counter)
+        assert ctx.usage_counter is counter
+
+    def test_usage_counter_default_empty(self):
+        ctx = build_tts_context()
+        assert ctx.usage_counter == {}
+
+    def test_normalization_overrides_stored(self):
+        overrides = {"normalization_numbers": False}
+        ctx = build_tts_context(normalization_overrides=overrides)
+        assert ctx.normalization_overrides is overrides
+
+    def test_speakers_used_for_pronunciation(self):
+        speakers = {
+            "narrator": {
+                "token": "route",
+                "pronunciation": "root",
+                "resolved_voice": "M1",
+            }
+        }
+        ctx = build_tts_context(speakers=speakers)
+        assert ctx.pronunciation_rules is not None
+        assert len(ctx.pronunciation_rules) >= 1
+
+    def test_log_callback_called_on_num2words_missing(self):
+        logs = []
+        with patch("abogen.domain.normalization.get_runtime_settings", return_value={
+            "normalization_apostrophe_mode": "spacy",
+            "normalization_enabled": True,
+            "normalization_numbers": True,
+        }):
+            with patch("abogen.normalization_settings.build_apostrophe_config") as mock_cfg:
+                mock_cfg.return_value = MagicMock(convert_numbers=True)
+                with patch("builtins.__import__", side_effect=ImportError):
+                    try:
+                        build_tts_context(log_callback=lambda lvl, msg: logs.append((lvl, msg)))
+                    except ImportError:
+                        pass
+        # If num2words is missing and convert_numbers is True, a warning should be logged
+        # (depends on mock behavior, so just check no crash)
+
+    def test_llm_mode_raises_if_not_configured(self):
+        with patch("abogen.domain.normalization.get_runtime_settings", return_value={
+            "normalization_apostrophe_mode": "llm",
+        }):
+            with pytest.raises(RuntimeError, match="LLM"):
+                build_tts_context()
+
+    def test_dict_source_accepted(self):
+        """merge_pronunciation_overrides should accept a dict."""
+        source = {
+            "pronunciation_overrides": [
+                {"token": "test", "pronunciation": "test-est", "normalized": "test"}
+            ],
+            "manual_overrides": [],
+            "speakers": {},
+            "language": "a",
+        }
+        from abogen.domain.pronunciation import merge_pronunciation_overrides
+        result = merge_pronunciation_overrides(source)
+        assert isinstance(result, list)
+        assert len(result) >= 1

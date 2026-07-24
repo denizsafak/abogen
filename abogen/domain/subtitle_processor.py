@@ -14,7 +14,6 @@ from typing import Any, Callable, List, Optional, Tuple
 import numpy as np
 
 from abogen.domain.audio_buffer import (
-    create_silence,
     fit_audio_to_duration,
     ffmpeg_time_stretch,
     mix_audio,

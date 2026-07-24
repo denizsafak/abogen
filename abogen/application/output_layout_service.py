@@ -15,7 +15,6 @@ Responsibilities:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from abogen.application.conversion_models import OutputLayout
 from abogen.application.conversion_request import ConversionRequest

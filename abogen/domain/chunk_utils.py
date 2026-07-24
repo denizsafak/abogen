@@ -7,7 +7,7 @@ text for TTS synthesis.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, Dict, Iterable, Mapping, Optional
+from typing import Any, Dict, Iterable, Mapping
 
 from abogen.pronunciation_store import increment_usage
 

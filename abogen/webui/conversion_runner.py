@@ -1,49 +1,36 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 import traceback
 import gc
 from collections import defaultdict
 from contextlib import ExitStack
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional
 
-import numpy as np
 
 from abogen.infrastructure.exporters import ExportService
 from abogen.epub3.exporter import build_epub3_package
-from abogen.kokoro_text_normalization import ApostropheConfig, normalize_for_pipeline, HAS_NUM2WORDS
-from abogen.normalization_settings import (
-    build_apostrophe_config,
-    build_llm_configuration,
-    get_runtime_settings,
-    apply_overrides as apply_normalization_overrides,
-)
 from abogen.entity_analysis import normalize_token as normalize_entity_token
 from abogen.text_extractor import extract_from_path
 from abogen.utils import (
     calculate_text_length,
-    create_process,
-    get_internal_cache_path,
     get_user_cache_path,
     get_user_output_path,
 )
 from abogen.voice_profiles import load_profiles, normalize_profile_entry
 from abogen.infrastructure.subtitle_writer import make_subtitle_writer
-from abogen.domain.chapter_titles import (
-    simplify_heading_text as _simplify_heading_text,
+from abogen.domain.chapter_titles import (  # noqa: F401
     headings_equivalent as _headings_equivalent,
+    format_spoken_chapter_title as _format_spoken_chapter_title,
     strip_duplicate_heading_line as _strip_duplicate_heading_line,
     normalize_caps_word as _normalize_caps_word,
     normalize_chapter_opening_caps as _normalize_chapter_opening_caps,
-    format_spoken_chapter_title as _format_spoken_chapter_title,
     apply_chapter_text_transforms as _apply_chapter_text_transforms,
     _HEADING_NUMBER_PREFIX_RE,
 )
-from abogen.domain.metadata_helpers import (
+from abogen.domain.metadata_helpers import (  # noqa: F401
     normalize_metadata_map as _normalize_metadata_map,
     format_author_sentence as _format_author_sentence,
     ensure_sentence as _ensure_sentence,
@@ -53,7 +40,7 @@ from abogen.domain.metadata_helpers import (
     build_metadata_payload as _build_metadata_payload,
 )
 from abogen.domain.intro_outro import resolve_intro, resolve_outro
-from abogen.domain.title_builder import (
+from abogen.domain.title_builder import (  # noqa: F401
     build_title_intro_text as _build_title_intro_text,
     build_outro_text as _build_outro_text,
 )
@@ -64,14 +51,14 @@ from abogen.domain.file_type import (
     update_metadata_for_chapter_count as _update_metadata_for_chapter_count,
     _SIGNIFICANT_LENGTH_THRESHOLDS,
 )
-from abogen.domain.pronunciation import (
-    compile_pronunciation_rules as _compile_pronunciation_rules,
-    compile_heteronym_sentence_rules as _compile_heteronym_sentence_rules,
+from abogen.domain.pronunciation import (  # noqa: F401
     apply_pronunciation_rules as _apply_pronunciation_rules,
     merge_pronunciation_overrides as _merge_pronunciation_overrides,
+    compile_pronunciation_rules as _compile_pronunciation_rules,
+    merge_pronunciation_overrides,
 )
-from abogen.domain.normalization import TTSContext
-from abogen.domain.voice_resolution import (
+from abogen.domain.normalization import TTSContext, build_tts_context  # noqa: F401
+from abogen.domain.voice_resolution import (  # noqa: F401
     spec_to_voice_ids as _spec_to_voice_ids,
     job_voice_fallback as _job_voice_fallback,
     collect_required_voice_ids as _collect_required_voice_ids,
@@ -87,14 +74,14 @@ from abogen.domain.chunk_utils import (
     record_override_usage as _record_override_usage,
     chunk_text_for_tts as _chunk_text_for_tts,
 )
-from abogen.domain.voice_utils import (
+from abogen.domain.voice_utils import (  # noqa: F401
     supertonic_voice_from_spec as _supertonic_voice_from_spec,
     split_speaker_reference as _split_speaker_reference,
     formula_from_kokoro_entry as _formula_from_kokoro_entry,
     infer_provider_from_spec as _infer_provider_from_spec,
     coerce_truthy as _coerce_truthy,
 )
-from abogen.domain.output_paths import (
+from abogen.domain.output_paths import (  # noqa: F401
     slugify as _slugify,
     sanitize_output_stem as _sanitize_output_stem,
     output_timestamp_token as _output_timestamp_token,
@@ -103,24 +90,21 @@ from abogen.domain.output_paths import (
     resolve_output_directory as _resolve_output_directory,
     resolve_project_layout as _resolve_project_layout,
 )
-from abogen.domain.device import select_device as _select_device
-from abogen.domain.split_pattern import get_split_pattern
-from abogen.domain.progress import ProgressTracker, calc_etr_str
 
-from abogen.domain.audio_helpers import (
-    build_ffmpeg_command as _build_ffmpeg_command,
-    to_float32 as _to_float32,
-)
-from abogen.domain.audio_buffer import (
+from abogen.domain.audio_buffer import (  # noqa: F401
     create_silence as _create_silence,
     normalize_audio as _normalize_audio,
-    SAMPLE_RATE,
 )
 from abogen.domain.audio_sink import AudioSink, open_audio_sink
 from abogen.domain.pipeline_factory import PipelinePool
 from abogen.domain.conversion_engine import synthesize_text, SynthParams, process_and_write_subtitles, SegmentStats
 from abogen.domain.voice_loader import VoiceCache, resolve_voice
 from abogen.domain.voice_utils import resolve_voice_target as _resolve_voice_target
+from abogen.domain.device import select_device as _select_device  # noqa: F401
+from abogen.domain.progress import ProgressTracker, calc_etr_str  # noqa: F401
+from abogen.domain.audio_helpers import build_ffmpeg_command as _build_ffmpeg_command, to_float32 as _to_float32  # noqa: F401
+from abogen.utils import create_process  # noqa: F401
+from abogen.kokoro_text_normalization import normalize_for_pipeline  # noqa: F401
 
 
 from .service import Job, JobStatus
@@ -136,42 +120,25 @@ class _JobCancelled(Exception):
     """Raised internally to abort a conversion when the client cancels."""
 
 
-_APOSTROPHE_CONFIG = ApostropheConfig()
-
-
 def run_conversion_job(job: Job) -> None:
     job.add_log("Preparing conversion pipeline")
     canceller = _make_canceller(job)
 
-    normalization_settings = get_runtime_settings()
-    job_overrides = getattr(job, "normalization_overrides", None)
-    if job_overrides:
-        normalization_settings = apply_normalization_overrides(normalization_settings, job_overrides)
-    apostrophe_config = build_apostrophe_config(
-        settings=normalization_settings,
-        base=_APOSTROPHE_CONFIG,
-    )
-    
-    if apostrophe_config.convert_numbers and not HAS_NUM2WORDS:
-        job.add_log(
-            "Number normalization is enabled but 'num2words' library is not available. "
-            "Numbers (including years) will NOT be converted to words. "
-            "Please install 'num2words' to enable this feature.",
-            level="warning"
-        )
+    usage_counter: Dict[str, int] = defaultdict(int)
 
-    apostrophe_mode = str(normalization_settings.get("normalization_apostrophe_mode", "spacy")).lower()
-    if apostrophe_mode == "llm":
-        llm_config = build_llm_configuration(normalization_settings)
-        if not llm_config.is_configured():
-            raise RuntimeError(
-                "LLM-based apostrophe normalization is selected, but the LLM configuration is incomplete."
-            )
+    def _tts_log(level: str, msg: str) -> None:
+        job.add_log(msg, level=level)
 
-    # Compute language-aware split pattern once for the entire job
-    job_split_pattern = get_split_pattern(
-        str(job.language or "a"),
-        str(job.subtitle_mode or "Disabled"),
+    tts_context = build_tts_context(
+        language=str(job.language or "a"),
+        subtitle_mode=str(job.subtitle_mode or "Disabled"),
+        pronunciation_overrides=getattr(job, "pronunciation_overrides", None),
+        manual_overrides=getattr(job, "manual_overrides", None),
+        heteronym_overrides=getattr(job, "heteronym_overrides", None),
+        speakers=getattr(job, "speakers", None),
+        normalization_overrides=getattr(job, "normalization_overrides", None),
+        usage_counter=usage_counter,
+        log_callback=_tts_log,
     )
 
     sink_stack = ExitStack()
@@ -187,7 +154,6 @@ def run_conversion_job(job: Job) -> None:
     normalized_profiles: Dict[str, Dict[str, Any]] = {}
     chunk_groups: Dict[int, List[Dict[str, Any]]] = {}
     active_chapter_configs: List[Dict[str, Any]] = []
-    usage_counter: Dict[str, int] = defaultdict(int)
     override_token_map: Dict[str, str] = {}
     try:
         # Load saved speakers once so we can resolve speaker: references during conversion.
@@ -226,30 +192,9 @@ def run_conversion_job(job: Job) -> None:
 
         extraction = extract_from_path(job.stored_path)
         file_type = _infer_file_type(job.stored_path)
-        pronunciation_overrides = _merge_pronunciation_overrides(job)
-        pronunciation_rules = _compile_pronunciation_rules(pronunciation_overrides)
-        heteronym_sentence_rules = _compile_heteronym_sentence_rules(
-            getattr(job, "heteronym_overrides", None)
-        )
-        if heteronym_sentence_rules:
-            job.add_log(
-                f"Applying {len(heteronym_sentence_rules)} heteronym override{'s' if len(heteronym_sentence_rules) != 1 else ''} during conversion.",
-                level="debug",
-            )
-        if pronunciation_rules:
-            count = len(pronunciation_rules)
-            job.add_log(
-                f"Applying {count} pronunciation override{'s' if count != 1 else ''} during conversion.",
-                level="debug",
-            )
 
-        tts_context = TTSContext(
-            split_pattern=job_split_pattern,
-            pronunciation_rules=pronunciation_rules,
-            heteronym_rules=heteronym_sentence_rules,
-            normalization_overrides=getattr(job, "normalization_overrides", None),
-            usage_counter=usage_counter,
-        )
+        # Build override_token_map from pronunciation overrides
+        pronunciation_overrides = merge_pronunciation_overrides(job)
         for override_entry in pronunciation_overrides or []:
             if not isinstance(override_entry, Mapping):
                 continue
