@@ -12,7 +12,7 @@ The loader does NOT:
 
 from __future__ import annotations
 
-import importlib
+import importlib.util
 import re
 import sys
 import types

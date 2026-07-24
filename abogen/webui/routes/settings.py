@@ -7,6 +7,7 @@ from flask import Blueprint, current_app, render_template, request, redirect, ur
 from flask.typing import ResponseReturnValue
 
 from abogen.webui.routes.utils.settings import (
+    load_integration_settings,
     load_settings,
     save_settings,
     SAVE_MODE_LABELS,

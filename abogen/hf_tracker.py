@@ -19,7 +19,7 @@ def tracked_hf_hub_download(*args, **kwargs):
     try:
         local_kwargs = dict(kwargs)
         local_kwargs["local_files_only"] = True
-        hf_hub_download(*args, **local_kwargs)
+        return hf_hub_download(*args, **local_kwargs)
     except Exception:
         repo_id = kwargs.get("repo_id", "<unknown repo>")
         filename = kwargs.get("filename", "<unknown file>")

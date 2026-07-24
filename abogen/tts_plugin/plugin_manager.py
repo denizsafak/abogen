@@ -42,8 +42,11 @@ class PluginManager:
 
         plugins_path = Path(plugins_dir)
         if not plugins_path.exists():
-            self._loaded = True
-            return
+            if plugins_dir == "plugins":
+                plugins_path = Path(__file__).resolve().parent.parent.parent / "plugins"
+            if not plugins_path.exists():
+                self._loaded = True
+                return
 
         for entry in plugins_path.iterdir():
             if entry.is_dir() and (entry / "__init__.py").exists():

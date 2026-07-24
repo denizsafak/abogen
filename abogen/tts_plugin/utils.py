@@ -179,6 +179,12 @@ class Pipeline:
 
         yield Segment(graphemes=text, audio=audio_array)
 
+    def load_single_voice(self, voice_name: str) -> Any:
+        engine_pipeline = getattr(self._engine, '_pipeline', None)
+        if engine_pipeline is not None and hasattr(engine_pipeline, 'load_single_voice'):
+            return engine_pipeline.load_single_voice(voice_name)
+        raise AttributeError(f"load_single_voice not available on {type(self._engine).__name__}")
+
     def dispose(self) -> None:
         if self._session is not None:
             try:

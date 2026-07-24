@@ -21,6 +21,19 @@ SPACY_MODELS = {
     Language.HI: "xx_sent_ud_sm",
 }
 
+# Kokoro single-letter codes -> Language enum (inverse of pipeline_factory._KOKORO_LANG_MAP)
+_KOKORO_TO_LANGUAGE = {
+    "a": Language.EN_US,
+    "b": Language.EN_GB,
+    "e": Language.ES,
+    "f": Language.FR,
+    "h": Language.HI,
+    "i": Language.IT,
+    "j": Language.JA,
+    "p": Language.PT_BR,
+    "z": Language.ZH,
+}
+
 
 def _load_spacy():
     """Lazy load spaCy module."""
@@ -61,11 +74,14 @@ def get_spacy_model(lang_code, log_callback=None):
 
     # Normalize to Language enum
     if not isinstance(lang_code, Language):
-        try:
-            lang_code = Language.from_str(lang_code)
-        except ValueError:
-            log(f"\nspaCy: Unknown language '{lang_code}'...")
-            return None
+        if isinstance(lang_code, str) and lang_code in _KOKORO_TO_LANGUAGE:
+            lang_code = _KOKORO_TO_LANGUAGE[lang_code]
+        else:
+            try:
+                lang_code = Language.from_str(lang_code)
+            except ValueError:
+                log(f"\nspaCy: Unknown language '{lang_code}'...")
+                return None
 
     # Check if model is cached
     if lang_code in _nlp_cache:

@@ -46,6 +46,8 @@ except ImportError:
     print("PyQt6 not installed.")
 
 
+from abogen.utils import get_resource_path
+
 # Pre-load "libxcb-cursor" on Linux (fixes #101)
 if platform.system() == "Linux":
     arch = platform.machine().lower()
@@ -117,6 +119,8 @@ def qt_message_handler(mode, context, message):
     if "Wayland does not support QWindow::requestActivate()" in message:
         return  # Suppress this specific message
     if "setGrabPopup called with a parent, QtWaylandClient" in message:
+        return
+    if "Failed to register with host portal" in message:
         return
 
     if mode == QtMsgType.QtWarningMsg:
