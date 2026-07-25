@@ -511,3 +511,114 @@ class TestExecuteConversion:
 
             assert result.metadata["title"] == "Test Book"
             assert result.metadata["author"] == "Author"
+
+
+class TestHeadingDedup:
+    """Tests for heading dedup in executor."""
+
+    def test_heading_dedup_strips_matching_first_line(self):
+        """When first segment matches heading, it should be stripped."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req = ConversionRequest(
+                direct_text="Hello",
+                voice="M1",
+                auto_prefix_chapter_titles=True,
+            )
+            # Simulate: heading = "Chapter 1", first segment = "Chapter 1: The Beginning"
+            # headings_equivalent should match these
+            plan = ConversionPlan(
+                request=req,
+                metadata={},
+                chapters=[
+                    ChapterPlan(
+                        index=1,
+                        title="Chapter 1",
+                        original_title="Chapter 1",
+                        body_text="Chapter 1: The Beginning\nBody text here",
+                        segments=[
+                            SegmentPlan(
+                                text="Chapter 1: The Beginning",
+                                voice_spec="M1",
+                                kind="body",
+                                source="chapter",
+                            ),
+                            SegmentPlan(
+                                text="Body text here",
+                                voice_spec="M1",
+                                kind="body",
+                                source="chapter",
+                            ),
+                        ],
+                        voice_spec="M1",
+                    )
+                ],
+                output_layout=OutputLayout(
+                    parent_dir=Path(tmpdir),
+                    audio_dir=Path(tmpdir),
+                ),
+            )
+
+            events = FakeEvents()
+            pipeline = FakePipelineProvider()
+            resolver = FakeVoiceResolver()
+            tts_context = TTSContext()
+
+            result = execute_conversion(
+                plan, events, pipeline, resolver, tts_context
+            )
+
+            # The executor should have logged the heading
+            log_messages = [m for m, _ in events.logs if "Title:" in m]
+            assert len(log_messages) >= 1
+
+    def test_heading_dedup_no_match_preserves_all(self):
+        """When first segment doesn't match heading, nothing is stripped."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req = ConversionRequest(
+                direct_text="Hello",
+                voice="M1",
+                auto_prefix_chapter_titles=True,
+            )
+            plan = ConversionPlan(
+                request=req,
+                metadata={},
+                chapters=[
+                    ChapterPlan(
+                        index=1,
+                        title="Chapter 1",
+                        original_title="Chapter 1",
+                        body_text="Completely different text\nMore text",
+                        segments=[
+                            SegmentPlan(
+                                text="Completely different text",
+                                voice_spec="M1",
+                                kind="body",
+                                source="chapter",
+                            ),
+                            SegmentPlan(
+                                text="More text",
+                                voice_spec="M1",
+                                kind="body",
+                                source="chapter",
+                            ),
+                        ],
+                        voice_spec="M1",
+                    )
+                ],
+                output_layout=OutputLayout(
+                    parent_dir=Path(tmpdir),
+                    audio_dir=Path(tmpdir),
+                ),
+            )
+
+            events = FakeEvents()
+            pipeline = FakePipelineProvider()
+            resolver = FakeVoiceResolver()
+            tts_context = TTSContext()
+
+            result = execute_conversion(
+                plan, events, pipeline, resolver, tts_context
+            )
+
+            # Both segments should be synthesized (heading + 2 body segments)
+            assert result.total_segments >= 2

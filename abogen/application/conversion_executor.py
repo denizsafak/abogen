@@ -32,6 +32,10 @@ from abogen.domain.conversion_engine import (
 )
 from abogen.domain.enums import OutputFormat, SubtitleMode
 from abogen.domain.normalization import TTSContext
+from abogen.domain.chapter_titles import (
+    apply_chapter_text_transforms,
+    headings_equivalent as _headings_equivalent,
+)
 from abogen.domain.output_paths import sanitize_filename_for_chapter
 from abogen.infrastructure.subtitle_writer import make_subtitle_writer
 
@@ -249,6 +253,7 @@ def execute_conversion(
                     )
 
             # Process heading
+            heading_text = ""
             if chapter.title:
                 heading_text = _format_heading(chapter.title, chapter_idx, request)
                 if heading_text:
@@ -269,10 +274,36 @@ def execute_conversion(
                             stats=stats,
                         )
 
+            # Heading dedup: check if first line of body matches heading
+            pending_heading_strip = False
+            if heading_text and chapter.body_text:
+                first_line = next(
+                    (line.strip() for line in chapter.body_text.splitlines() if line.strip()),
+                    "",
+                )
+                if first_line and _headings_equivalent(first_line, heading_text):
+                    pending_heading_strip = True
+
             # Process body segments
             chapter_chunk_markers: List[Dict[str, Any]] = []
+            chapter_body_start = stats.current_time
             for seg_idx, segment in enumerate(chapter.segments):
                 check_cancelled()
+
+                # Apply heading dedup to first segment (consume-once)
+                seg_text = segment.text
+                if pending_heading_strip and seg_text.strip():
+                    seg_text, heading_removed, _ = apply_chapter_text_transforms(
+                        seg_text,
+                        heading_text=heading_text,
+                        raw_title=chapter.title,
+                        strip_heading=True,
+                        normalize_caps=False,
+                    )
+                    if heading_removed:
+                        pending_heading_strip = False
+                    if not seg_text.strip():
+                        continue
 
                 # Resolve segment voice (may differ from chapter voice)
                 if segment.voice_spec != chapter.voice_spec:
@@ -288,7 +319,7 @@ def execute_conversion(
 
                 seg_start_time = stats.current_time
                 local_segments, accumulated_tokens = synthesize_text(
-                    text=segment.text,
+                    text=seg_text,
                     params=synth,
                     backend=seg_backend,
                     voice=seg_voice,
@@ -355,7 +386,7 @@ def execute_conversion(
             result.chapter_markers.append({
                 "chapter_index": chapter_idx - 1,
                 "title": chapter.title,
-                "start": stats.current_time - (stats.current_time - seg_start_time) if chapter.segments else stats.current_time,
+                "start": chapter_body_start,
                 "end": stats.current_time,
             })
 

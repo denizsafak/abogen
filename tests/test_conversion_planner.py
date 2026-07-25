@@ -641,3 +641,31 @@ class TestFeatureParity:
         if output_format.lower() == "m4b":
             merge_chapters_at_end = True
         assert merge_chapters_at_end is True
+
+
+class TestCapsNormalization:
+    """Tests for caps normalization in planner."""
+
+    def test_caps_normalization_applied_when_enabled(self):
+        """When normalize_chapter_opening_caps=True, body text is normalized."""
+        req = ConversionRequest(
+            direct_text="<<CHAPTER_MARKER:Chapter 1>>\nALL CAPS OPENING TEXT here",
+            voice="M1",
+            normalize_chapter_opening_caps=True,
+        )
+        plan = build_conversion_plan(req)
+        body = plan.chapters[0].body_text
+        # ALL CAPS should be normalized to Title Case
+        assert body != "ALL CAPS OPENING TEXT here"
+        assert "ALL CAPS" not in body
+
+    def test_caps_normalization_skipped_when_disabled(self):
+        """When normalize_chapter_opening_caps=False, body text is unchanged."""
+        req = ConversionRequest(
+            direct_text="<<CHAPTER_MARKER:Chapter 1>>\nALL CAPS OPENING TEXT here",
+            voice="M1",
+            normalize_chapter_opening_caps=False,
+        )
+        plan = build_conversion_plan(req)
+        body = plan.chapters[0].body_text
+        assert "ALL CAPS OPENING TEXT" in body

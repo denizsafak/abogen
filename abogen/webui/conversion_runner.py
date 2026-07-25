@@ -474,7 +474,7 @@ def run_conversion_job(job: Job) -> None:
             heading_text = spoken_title or raw_title
             chapter_display_title = heading_text or f"Chapter {idx}"
             job.add_log(f"Processing chapter {idx}/{total_chapters}: {chapter_display_title}")
-            normalize_opening_caps = bool(getattr(job, "normalize_chapter_opening_caps", True))
+            normalize_opening_caps = bool(job.normalize_chapter_opening_caps)
 
             chapter_start_time = current_time
             chapter_override = (

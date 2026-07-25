@@ -112,7 +112,7 @@ def build_conversion_request_from_thread(thread: Any) -> ConversionRequest:
         read_title_intro=getattr(thread, "read_title_intro", False),
         read_closing_outro=getattr(thread, "read_closing_outro", True),
         auto_prefix_chapter_titles=getattr(thread, "auto_prefix_chapter_titles", True),
-        normalize_chapter_opening_caps=getattr(thread, "normalize_chapter_opening_caps", False),
+        normalize_chapter_opening_caps=thread.normalize_chapter_opening_caps,
         # Metadata
         metadata_tags=getattr(thread, "metadata_tags", {}) or {},
         # Artifacts

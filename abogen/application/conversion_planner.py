@@ -210,9 +210,15 @@ def _build_chapters(
     selected_chapters: List[Tuple[str, str, str]], request: ConversionRequest
 ) -> List[ChapterPlan]:
     """Build ChapterPlan with SegmentPlan for each chapter."""
+    from abogen.domain.chapter_titles import normalize_chapter_opening_caps
+
     chapters = []
 
     for idx, (title, body_text, default_voice) in enumerate(selected_chapters, 1):
+        # Apply caps normalization to body text if enabled
+        if request.normalize_chapter_opening_caps and body_text:
+            body_text, _ = normalize_chapter_opening_caps(body_text)
+
         # Build segments for this chapter (idx is 1-based, chunks use 0-based)
         segments = _build_segments(body_text, default_voice, request, chapter_index=idx - 1)
 
