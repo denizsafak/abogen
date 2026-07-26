@@ -22,7 +22,7 @@ class ChunkOverlay:
     start: Optional[float]
     end: Optional[float]
     speaker_id: str
-    voice: Optional[str]
+    voice: Optional[Dict[str, str]]
     level: Optional[str] = None
     group_id: Optional[str] = None
 
@@ -273,7 +273,7 @@ class EPUB3PackageBuilder:
                     start=_safe_float(marker.get("start")),
                     end=_safe_float(marker.get("end")),
                     speaker_id=speaker_id,
-                    voice=str(voice) if voice else None,
+                    voice=voice if isinstance(voice, dict) else None,
                     level=str(level) if level else None,
                     group_id=normalized_group_id,
                 )
@@ -696,7 +696,12 @@ def _group_chunks_for_render(chunks: Sequence[ChunkOverlay]) -> List[Tuple[Optio
 def _render_chunk_inline(chunk: ChunkOverlay) -> str:
     escaped_id = html.escape(chunk.id)
     speaker_attr = f" data-speaker=\"{html.escape(chunk.speaker_id)}\"" if chunk.speaker_id else ""
-    voice_attr = f" data-voice=\"{html.escape(chunk.voice)}\"" if chunk.voice else ""
+    voice_str = None
+    if chunk.voice and isinstance(chunk.voice, dict):
+        name = chunk.voice.get("voice", "")
+        provider = chunk.voice.get("provider", "")
+        voice_str = f"{name}@{provider}" if name and provider else name or None
+    voice_attr = f" data-voice=\"{html.escape(voice_str)}\"" if voice_str else ""
     level_attr = f" data-level=\"{html.escape(chunk.level)}\"" if chunk.level else ""
     raw_text = chunk.text or ""
     escaped_text = html.escape(raw_text)

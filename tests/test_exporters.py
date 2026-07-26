@@ -69,9 +69,9 @@ class TestRenderFfmetadata:
         assert "title=Ch 1" in result
 
     def test_renders_voice_in_chapter(self):
-        chapters = [{"start": 0.0, "end": 5.0, "voice": "af_heart"}]
+        chapters = [{"start": 0.0, "end": 5.0, "voices": [{"provider": "kokoro", "voice": "af_heart"}]}]
         result = self.svc.render_ffmetadata({}, chapters)
-        assert "voice=af_heart" in result
+        assert "voice=af_heart@kokoro" in result
 
     def test_skips_chapters_without_times(self):
         chapters = [{"title": "No times"}]

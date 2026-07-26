@@ -622,3 +622,276 @@ class TestHeadingDedup:
 
             # Both segments should be synthesized (heading + 2 body segments)
             assert result.total_segments >= 2
+
+
+class TestMarkerCollector:
+    """Tests for MarkerCollector."""
+
+    def test_chapter_marker_has_voices_list(self):
+        """Chapter markers should have 'voices' as list of dicts."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req = ConversionRequest(direct_text="Hello", voice="M1")
+            plan = ConversionPlan(
+                request=req,
+                metadata={},
+                chapters=[
+                    ChapterPlan(
+                        index=1,
+                        title="Chapter 1",
+                        original_title="Chapter 1",
+                        body_text="Body text",
+                        segments=[
+                            SegmentPlan(
+                                text="Body text",
+                                voice_spec="M1",
+                                kind="body",
+                                source="chapter",
+                            ),
+                        ],
+                        voice_spec="M1",
+                    )
+                ],
+                output_layout=OutputLayout(
+                    parent_dir=Path(tmpdir),
+                    audio_dir=Path(tmpdir),
+                ),
+            )
+
+            events = FakeEvents()
+            pipeline = FakePipelineProvider()
+            resolver = FakeVoiceResolver()
+            tts_context = TTSContext()
+
+            result = execute_conversion(plan, events, pipeline, resolver, tts_context)
+
+            assert len(result.chapter_markers) == 1
+            marker = result.chapter_markers[0]
+            assert "voices" in marker
+            assert isinstance(marker["voices"], list)
+            assert len(marker["voices"]) == 1
+            assert marker["voices"][0]["provider"] == "kokoro"
+            assert marker["voices"][0]["voice"] == "M1"
+
+    def test_outro_marker_recorded(self):
+        """Outro should be recorded as a chapter marker."""
+        from abogen.application.conversion_models import IntroOutroSpec
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req = ConversionRequest(direct_text="Hello", voice="M1")
+            plan = ConversionPlan(
+                request=req,
+                metadata={},
+                chapters=[
+                    ChapterPlan(
+                        index=1,
+                        title="Chapter 1",
+                        original_title="Chapter 1",
+                        body_text="Body text",
+                        segments=[
+                            SegmentPlan(
+                                text="Body text",
+                                voice_spec="M1",
+                                kind="body",
+                                source="chapter",
+                            ),
+                        ],
+                        voice_spec="M1",
+                    )
+                ],
+                outro=IntroOutroSpec(
+                    enabled=True,
+                    text="Thanks for listening",
+                    voice_spec="M1",
+                    kind="outro",
+                ),
+                output_layout=OutputLayout(
+                    parent_dir=Path(tmpdir),
+                    audio_dir=Path(tmpdir),
+                ),
+            )
+
+            events = FakeEvents()
+            pipeline = FakePipelineProvider()
+            resolver = FakeVoiceResolver()
+            tts_context = TTSContext()
+
+            result = execute_conversion(plan, events, pipeline, resolver, tts_context)
+
+            # Should have chapter marker + outro marker
+            assert len(result.chapter_markers) == 2
+            outro_marker = result.chapter_markers[1]
+            assert outro_marker["title"] == "Outro"
+            assert "start" in outro_marker
+            assert "end" in outro_marker
+            assert outro_marker["end"] > outro_marker["start"]
+
+    def test_chunk_marker_voice_is_dict(self):
+        """Chunk markers should have 'voice' as dict with provider."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req = ConversionRequest(direct_text="Hello", voice="M1")
+            plan = ConversionPlan(
+                request=req,
+                metadata={},
+                chapters=[
+                    ChapterPlan(
+                        index=1,
+                        title="Chapter 1",
+                        original_title="Chapter 1",
+                        body_text="Body text",
+                        segments=[
+                            SegmentPlan(
+                                text="Body text",
+                                voice_spec="M1",
+                                kind="body",
+                                source="chunk",
+                                chunk_id="chunk_001",
+                                chunk_index=0,
+                                speaker_id="narrator",
+                                level="paragraph",
+                            ),
+                        ],
+                        voice_spec="M1",
+                    )
+                ],
+                output_layout=OutputLayout(
+                    parent_dir=Path(tmpdir),
+                    audio_dir=Path(tmpdir),
+                ),
+            )
+
+            events = FakeEvents()
+            pipeline = FakePipelineProvider()
+            resolver = FakeVoiceResolver()
+            tts_context = TTSContext()
+
+            result = execute_conversion(plan, events, pipeline, resolver, tts_context)
+
+            assert len(result.chunk_markers) == 1
+            chunk = result.chunk_markers[0]
+            assert isinstance(chunk["voice"], dict)
+            assert chunk["voice"]["provider"] == "kokoro"
+            assert chunk["voice"]["voice"] == "M1"
+
+    def test_multi_speaker_collects_unique_voices(self):
+        """Multi-speaker chapters should collect all unique voices."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req = ConversionRequest(direct_text="Hello", voice="M1")
+            plan = ConversionPlan(
+                request=req,
+                metadata={},
+                chapters=[
+                    ChapterPlan(
+                        index=1,
+                        title="Chapter 1",
+                        original_title="Chapter 1",
+                        body_text="Body text",
+                        segments=[
+                            SegmentPlan(
+                                text="Narrator speaks",
+                                voice_spec="M1",
+                                kind="body",
+                                source="chapter",
+                            ),
+                            SegmentPlan(
+                                text="Character speaks",
+                                voice_spec="F1",
+                                kind="body",
+                                source="chapter",
+                            ),
+                        ],
+                        voice_spec="M1",
+                    )
+                ],
+                output_layout=OutputLayout(
+                    parent_dir=Path(tmpdir),
+                    audio_dir=Path(tmpdir),
+                ),
+            )
+
+            events = FakeEvents()
+            pipeline = FakePipelineProvider()
+            resolver = FakeVoiceResolver()
+            tts_context = TTSContext()
+
+            result = execute_conversion(plan, events, pipeline, resolver, tts_context)
+
+            marker = result.chapter_markers[0]
+            assert len(marker["voices"]) == 2
+            voice_specs = {v["voice"] for v in marker["voices"]}
+            assert "M1" in voice_specs
+            assert "F1" in voice_specs
+
+
+class TestFfmetadataVoiceFormat:
+    """Tests for ffmetadata rendering with new voice format."""
+
+    def test_render_ffmetadata_with_voices_list(self):
+        """ffmetadata should render voices list as comma-separated string."""
+        from abogen.infrastructure.exporters import ExportService
+
+        svc = ExportService()
+        chapters = [
+            {
+                "title": "Chapter 1",
+                "start": 0.0,
+                "end": 60.0,
+                "voices": [
+                    {"provider": "kokoro", "voice": "M1"},
+                    {"provider": "kokoro", "voice": "F1"},
+                ],
+            }
+        ]
+        content = svc.render_ffmetadata({}, chapters)
+        assert "voice=M1@kokoro, F1@kokoro" in content
+
+    def test_render_ffmetadata_with_empty_voices(self):
+        """ffmetadata should handle empty voices list."""
+        from abogen.infrastructure.exporters import ExportService
+
+        svc = ExportService()
+        chapters = [
+            {
+                "title": "Chapter 1",
+                "start": 0.0,
+                "end": 60.0,
+                "voices": [],
+            }
+        ]
+        content = svc.render_ffmetadata({}, chapters)
+        assert "voice=" not in content
+
+
+class TestEpub3VoiceFormat:
+    """Tests for EPUB3 voice handling with new format."""
+
+    def test_chunk_overlay_voice_is_dict(self):
+        """ChunkOverlay should accept voice as dict."""
+        from abogen.epub3.exporter import ChunkOverlay
+
+        overlay = ChunkOverlay(
+            id="test",
+            text="hello",
+            original_text=None,
+            start=0.0,
+            end=1.0,
+            speaker_id="narrator",
+            voice={"provider": "kokoro", "voice": "M1"},
+        )
+        assert isinstance(overlay.voice, dict)
+        assert overlay.voice["provider"] == "kokoro"
+
+    def test_render_chunk_inline_with_voice_dict(self):
+        """_render_chunk_inline should render voice dict as data-voice attribute."""
+        from abogen.epub3.exporter import ChunkOverlay, _render_chunk_inline
+
+        overlay = ChunkOverlay(
+            id="chunk_001",
+            text="Hello world",
+            original_text=None,
+            start=0.0,
+            end=1.0,
+            speaker_id="narrator",
+            voice={"provider": "kokoro", "voice": "M1"},
+        )
+        html = _render_chunk_inline(overlay)
+        assert 'data-voice="M1@kokoro"' in html

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 from contextlib import ExitStack
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from abogen.application.conversion_models import (
     ConversionPlan,
@@ -40,6 +40,109 @@ from abogen.domain.output_paths import sanitize_filename_for_chapter
 from abogen.infrastructure.subtitle_writer import make_subtitle_writer
 
 
+# ─── MarkerCollector ───
+
+
+class MarkerCollector:
+    """Observes execution events and accumulates chapter/chunk markers.
+
+    Separates marker collection from synthesis logic.
+    """
+
+    def __init__(self) -> None:
+        self._chapter_markers: List[Dict[str, Any]] = []
+        self._chunk_markers: List[Dict[str, Any]] = []
+        self._current_chapter_voices: Set[Tuple[str, str]] = set()
+        self._current_chapter_index: int = 0
+        self._current_chapter_title: str = ""
+        self._current_chapter_start: float = 0.0
+
+    def on_chapter_start(
+        self, index: int, title: str, start_time: float
+    ) -> None:
+        """Record chapter start."""
+        self._current_chapter_index = index
+        self._current_chapter_title = title
+        self._current_chapter_start = start_time
+        self._current_chapter_voices.clear()
+
+    def on_segment(
+        self,
+        provider: str,
+        voice: Any,
+        voice_spec: str,
+        speaker_id: str = "narrator",
+    ) -> None:
+        """Record a voice used in this chapter (for multi-speaker tracking)."""
+        self._current_chapter_voices.add((provider, voice_spec))
+
+    def on_chunk(
+        self,
+        chunk_id: str,
+        chapter_index: int,
+        chunk_index: int,
+        start: float,
+        end: float,
+        speaker_id: str,
+        provider: str,
+        voice_spec: str,
+        level: str,
+        characters: int,
+    ) -> None:
+        """Record a chunk marker."""
+        self._chunk_markers.append({
+            "id": chunk_id,
+            "chapter_index": chapter_index,
+            "chunk_index": chunk_index,
+            "start": start,
+            "end": end,
+            "speaker_id": speaker_id,
+            "voice": {"provider": provider, "voice": voice_spec},
+            "level": level,
+            "characters": characters,
+        })
+
+    def on_chapter_end(self, end_time: float) -> None:
+        """Record chapter end and build chapter marker."""
+        voices = [
+            {"provider": p, "voice": v}
+            for p, v in sorted(self._current_chapter_voices)
+        ]
+        self._chapter_markers.append({
+            "chapter_index": self._current_chapter_index,
+            "index": self._current_chapter_index + 1,
+            "title": self._current_chapter_title,
+            "start": self._current_chapter_start,
+            "end": end_time,
+            "voices": voices,
+        })
+
+    def on_outro(
+        self,
+        start_time: float,
+        end_time: float,
+        provider: str,
+        voice_spec: str,
+    ) -> None:
+        """Record outro chapter marker."""
+        self._chapter_markers.append({
+            "chapter_index": len(self._chapter_markers),
+            "index": len(self._chapter_markers) + 1,
+            "title": "Outro",
+            "start": start_time,
+            "end": end_time,
+            "voices": [{"provider": provider, "voice": voice_spec}],
+        })
+
+    @property
+    def chapter_markers(self) -> List[Dict[str, Any]]:
+        return self._chapter_markers
+
+    @property
+    def chunk_markers(self) -> List[Dict[str, Any]]:
+        return self._chunk_markers
+
+
 def execute_conversion(
     plan: ConversionPlan,
     events: ConversionEvents,
@@ -67,6 +170,7 @@ def execute_conversion(
     """
     request = plan.request
     result = ConversionResult(metadata=plan.metadata)
+    collector = MarkerCollector()
 
     # Determine cancellation checker
     if check_cancelled is None:
@@ -192,6 +296,9 @@ def execute_conversion(
             )
             chapter_backend = pipeline_provider.get(chapter_provider, request.language, request.use_gpu)
 
+            # Record chapter start for markers
+            collector.on_chapter_start(chapter_idx - 1, chapter.title, stats.current_time)
+
             # Per-chapter sink
             chapter_sink: Optional[AudioSink] = None
             chapter_path = None
@@ -285,8 +392,6 @@ def execute_conversion(
                     pending_heading_strip = True
 
             # Process body segments
-            chapter_chunk_markers: List[Dict[str, Any]] = []
-            chapter_body_start = stats.current_time
             for seg_idx, segment in enumerate(chapter.segments):
                 check_cancelled()
 
@@ -316,6 +421,9 @@ def execute_conversion(
                     seg_voice = chapter_voice
                     seg_speed = chapter_speed
                     seg_backend = chapter_backend
+
+                # Track voice for chapter marker
+                collector.on_segment(seg_provider, seg_voice, segment.voice_spec)
 
                 seg_start_time = stats.current_time
                 local_segments, accumulated_tokens = synthesize_text(
@@ -353,17 +461,18 @@ def execute_conversion(
 
                 # Record chunk marker
                 if segment.source in ("chunk", "voice_marker"):
-                    chapter_chunk_markers.append({
-                        "id": segment.chunk_id,
-                        "chapter_index": chapter_idx - 1,
-                        "chunk_index": segment.chunk_index or seg_idx,
-                        "start": seg_start_time,
-                        "end": stats.current_time,
-                        "speaker_id": segment.speaker_id,
-                        "voice": segment.voice_spec,
-                        "level": segment.level or (request.chapter_chunk.chunk_level if request.chapter_chunk else "paragraph"),
-                        "characters": len(segment.text),
-                    })
+                    collector.on_chunk(
+                        chunk_id=segment.chunk_id or "",
+                        chapter_index=chapter_idx - 1,
+                        chunk_index=segment.chunk_index or seg_idx,
+                        start=seg_start_time,
+                        end=stats.current_time,
+                        speaker_id=segment.speaker_id or "narrator",
+                        provider=seg_provider,
+                        voice_spec=segment.voice_spec,
+                        level=segment.level or (request.chapter_chunk.chunk_level if request.chapter_chunk else "paragraph"),
+                        characters=len(segment.text),
+                    )
 
             # Silence between chapters
             if chapter_idx < len(plan.chapters) and request.silence_between_chapters > 0:
@@ -382,15 +491,8 @@ def execute_conversion(
             if chapter_subtitle_writer:
                 chapter_subtitle_writer.close()
 
-            # Add chapter marker
-            result.chapter_markers.append({
-                "chapter_index": chapter_idx - 1,
-                "title": chapter.title,
-                "start": chapter_body_start,
-                "end": stats.current_time,
-            })
-
-            result.chunk_markers.extend(chapter_chunk_markers)
+            # Record chapter end for markers
+            collector.on_chapter_end(stats.current_time)
 
         # Process outro
         if plan.outro and plan.outro.enabled and merge_chapters:
@@ -409,6 +511,7 @@ def execute_conversion(
                     stats=stats,
                 )
 
+            outro_start = stats.current_time
             synthesize_text(
                 text=plan.outro.text,
                 params=synth,
@@ -418,9 +521,13 @@ def execute_conversion(
                 chapter_sink=None,
                 preview_callback=lambda text: events.log(f"  {text[:80]}"),
             )
+            # Record outro marker
+            collector.on_outro(outro_start, stats.current_time, outro_provider, plan.outro.voice_spec)
             events.log("Outro synthesized.")
 
     # Set result metadata
+    result.chapter_markers = collector.chapter_markers
+    result.chunk_markers = collector.chunk_markers
     result.total_chapters = len(plan.chapters)
     result.total_segments = sum(len(ch.segments) for ch in plan.chapters)
     result.total_characters = total_characters

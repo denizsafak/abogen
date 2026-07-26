@@ -166,6 +166,39 @@ def _finalize(
         else:
             events.log("Skipped EPUB 3 generation: audio output unavailable.", level="warning")
 
+    # Build metadata payload and write metadata.json
+    if plan.output_layout and plan.output_layout.metadata_dir:
+        from abogen.domain.metadata_helpers import build_metadata_payload
+
+        metadata_payload = build_metadata_payload(
+            metadata=result.metadata,
+            chapter_markers=result.chapter_markers,
+            chunk_markers=result.chunk_markers,
+            chunk_level=request.chapter_chunk.chunk_level if request.chapter_chunk else None,
+            speaker_mode=request.chapter_chunk.speaker_mode if request.chapter_chunk else None,
+            speakers=request.chapter_chunk.speakers if request.chapter_chunk else None,
+            generate_epub3=bool(request.epub3_export),
+        )
+
+        metadata_dir = plan.output_layout.metadata_dir
+        metadata_dir.mkdir(parents=True, exist_ok=True)
+        metadata_file = metadata_dir / "metadata.json"
+
+        import json
+
+        metadata_file.write_text(json.dumps(metadata_payload, indent=2), encoding="utf-8")
+        result.artifacts["metadata"] = metadata_file
+        events.log(f"Metadata written to {metadata_file}")
+
+    # Record override usage
+    if result.usage_counter:
+        try:
+            from abogen.normalization_settings import record_override_usage
+
+            record_override_usage(result.usage_counter)
+        except Exception as exc:
+            events.log(f"Failed to record override usage: {exc}", level="debug")
+
 
 def _prepare_tts_context(
     request: ConversionRequest,

@@ -84,9 +84,14 @@ class ExportService:
             title = chapter.get("title")
             if title:
                 lines.append(f"title={self._escape_ffmetadata_value(title)}")
-            voice = chapter.get("voice")
-            if voice:
-                lines.append(f"voice={self._escape_ffmetadata_value(voice)}")
+            voices = chapter.get("voices")
+            if voices and isinstance(voices, list):
+                voice_str = ", ".join(
+                    f"{v.get('voice', '')}@{v.get('provider', '')}"
+                    for v in voices if v.get("voice")
+                )
+                if voice_str:
+                    lines.append(f"voice={self._escape_ffmetadata_value(voice_str)}")
         
         return "\n".join(lines) + "\n"
     

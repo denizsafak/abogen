@@ -14,7 +14,7 @@ def test_render_ffmetadata_includes_chapters(tmp_path):
         "publisher": "ACME=Corp",
     }
     chapters = [
-        {"start": 0.0, "end": 5.0, "title": "Intro", "voice": "voice_a"},
+        {"start": 0.0, "end": 5.0, "title": "Intro", "voices": [{"provider": "kokoro", "voice": "voice_a"}]},
         {"start": 5.0, "end": 12.345, "title": "Chapter 2"},
     ]
 
@@ -28,7 +28,7 @@ def test_render_ffmetadata_includes_chapters(tmp_path):
     assert rendered.count("[CHAPTER]") == 2
     assert "START=0" in rendered
     assert "END=5000" in rendered
-    assert "voice=voice_a" in rendered
+    assert "voice=voice_a@kokoro" in rendered
 
     audio_path = tmp_path / "book.m4b"
     metadata_path = svc.write_ffmetadata_file(audio_path, metadata, chapters)
