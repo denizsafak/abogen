@@ -181,3 +181,83 @@ class TestTtsSegments:
         ))
         assert results[0].chunk_start == 10.0
         assert results[1].chunk_start == 11.0
+
+
+class TestSpacyPreTtsSegmentation:
+    """Tests for spacy_pre_tts_segmentation()."""
+
+    def test_disabled_when_use_spacy_false(self):
+        from abogen.domain.conversion_pipeline import spacy_pre_tts_segmentation
+        from abogen.domain.enums import Language
+
+        segments, split = spacy_pre_tts_segmentation(
+            "Hello world",
+            Language.EN_US,
+            "Disabled",
+            use_spacy_segmentation=False,
+        )
+        assert segments == ["Hello world"]
+        assert isinstance(split, str)
+
+    def test_disabled_for_disabled_subtitle_mode(self):
+        from abogen.domain.conversion_pipeline import spacy_pre_tts_segmentation
+        from abogen.domain.enums import Language
+
+        segments, split = spacy_pre_tts_segmentation(
+            "Hello world",
+            Language.FR,
+            "Disabled",
+            use_spacy_segmentation=True,
+        )
+        assert segments == ["Hello world"]
+
+    def test_disabled_for_line_subtitle_mode(self):
+        from abogen.domain.conversion_pipeline import spacy_pre_tts_segmentation
+        from abogen.domain.enums import Language
+
+        segments, split = spacy_pre_tts_segmentation(
+            "Hello world",
+            Language.ES,
+            "Line",
+            use_spacy_segmentation=True,
+        )
+        assert segments == ["Hello world"]
+
+    def test_disabled_for_subtitle_input(self):
+        from abogen.domain.conversion_pipeline import spacy_pre_tts_segmentation
+        from abogen.domain.enums import Language
+
+        segments, split = spacy_pre_tts_segmentation(
+            "Hello world",
+            Language.FR,
+            "Sentence",
+            is_subtitle_input=True,
+            use_spacy_segmentation=True,
+        )
+        assert segments == ["Hello world"]
+
+    def test_english_excluded_from_pre_tts(self):
+        """English uses spaCy only for post-TTS subtitles, not pre-TTS."""
+        from abogen.domain.conversion_pipeline import spacy_pre_tts_segmentation
+        from abogen.domain.enums import Language
+
+        segments, split = spacy_pre_tts_segmentation(
+            "Hello world. How are you?",
+            Language.EN_US,
+            "Sentence",
+            use_spacy_segmentation=True,
+        )
+        # English should return single segment (no pre-TTS segmentation)
+        assert len(segments) == 1
+
+    def test_returns_at_least_one_segment(self):
+        from abogen.domain.conversion_pipeline import spacy_pre_tts_segmentation
+        from abogen.domain.enums import Language
+
+        segments, split = spacy_pre_tts_segmentation(
+            "",
+            Language.FR,
+            "Sentence",
+            use_spacy_segmentation=True,
+        )
+        assert len(segments) >= 1

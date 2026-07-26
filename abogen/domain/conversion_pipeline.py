@@ -9,8 +9,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
-from abogen.domain.enums import SubtitleMode
-from typing import Any, Dict, Iterator, List, Optional
+from abogen.domain.enums import Language, SubtitleMode
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
 
@@ -20,6 +20,112 @@ from abogen.domain.tokens import FakeToken
 from abogen.domain.audio_buffer import SAMPLE_RATE
 
 logger = logging.getLogger(__name__)
+
+# Languages where spaCy is used for pre-TTS segmentation
+# English ("a", "b") is excluded — spaCy only used for post-TTS subtitles
+_SPACY_EXCLUDED_LANGS = {Language.EN_US, Language.EN_GB}
+
+# CJK languages — different spacing pattern
+_CJK_LANGS = {Language.ZH, Language.JA}
+
+
+def spacy_pre_tts_segmentation(
+    text: str,
+    lang_code: Any,
+    subtitle_mode: Any,
+    *,
+    is_subtitle_input: bool = False,
+    use_spacy_segmentation: bool = True,
+    log_callback: Optional[Callable[[str], None]] = None,
+) -> Tuple[List[str], str]:
+    """Segment text using spaCy before TTS, with split_pattern override.
+
+    For non-English languages, spaCy sentence segmentation produces better
+    sentence boundaries than regex. This function:
+    1. Checks if spaCy should be used (toggle on, not disabled mode, not subtitle input)
+    2. For non-English: runs spaCy segmentation, computes split_pattern override
+    3. For English: returns single segment with default pattern (spaCy only for subtitles)
+    4. If spaCy fails: falls back to default pattern
+
+    Args:
+        text: Text to segment.
+        lang_code: Language code (Language enum or string like "a", "de", "fr").
+        subtitle_mode: SubtitleMode enum or string.
+        is_subtitle_input: True if source is .srt/.ass/.vtt file.
+        use_spacy_segmentation: User toggle for spaCy segmentation.
+        log_callback: Optional logging function.
+
+    Returns:
+        Tuple of (text_segments, active_split_pattern).
+        text_segments is a list of sentences (always at least one element).
+        active_split_pattern is the regex to use for TTS backend splitting.
+    """
+    from abogen.domain.split_pattern import PUNCTUATION_COMMAS, get_split_pattern
+
+    def _log(msg: str) -> None:
+        if log_callback:
+            log_callback(msg)
+
+    # Normalize language
+    lang_enum = _to_language_enum(lang_code)
+
+    # Default split pattern
+    default_split = get_split_pattern(lang_code, subtitle_mode)
+
+    # Check conditions
+    if not use_spacy_segmentation:
+        return [text], default_split
+
+    subtitle_mode_str = _to_subtitle_mode_str(subtitle_mode)
+    if subtitle_mode_str in ("Disabled", "Line"):
+        return [text], default_split
+
+    if is_subtitle_input:
+        return [text], default_split
+
+    # English: spaCy only for post-TTS subtitles, not pre-TTS
+    if lang_enum in _SPACY_EXCLUDED_LANGS:
+        return [text], default_split
+
+    # Non-English: run spaCy pre-TTS segmentation
+    from abogen.spacy_utils import segment_sentences
+
+    _log("Using spaCy for sentence segmentation (pre-TTS)...")
+    spacy_sentences = segment_sentences(text, lang_code, log_callback=log_callback)
+
+    if not spacy_sentences:
+        _log("spaCy: Fallback to default segmentation...")
+        return [text], default_split
+
+    _log(f"spaCy: Text segmented into {len(spacy_sentences)} sentences...")
+
+    # Compute split_pattern override based on subtitle mode
+    spacing_pattern = r"\s*" if lang_enum in _CJK_LANGS else r"\s+"
+
+    if subtitle_mode_str == "Sentence + Comma":
+        active_split = r"(?<=[{}]){}|\n+".format(PUNCTUATION_COMMAS, spacing_pattern)
+    else:
+        # Sentence mode: spaCy already split, only split on newlines
+        active_split = "\n"
+
+    return spacy_sentences, active_split
+
+
+def _to_language_enum(lang_code: Any) -> Language:
+    """Convert lang_code to Language enum."""
+    if isinstance(lang_code, Language):
+        return lang_code
+    try:
+        return Language.from_str(str(lang_code))
+    except (ValueError, AttributeError):
+        return Language.EN_US
+
+
+def _to_subtitle_mode_str(subtitle_mode: Any) -> str:
+    """Convert subtitle_mode to string."""
+    if isinstance(subtitle_mode, SubtitleMode):
+        return subtitle_mode.value
+    return str(subtitle_mode)
 
 
 @dataclass

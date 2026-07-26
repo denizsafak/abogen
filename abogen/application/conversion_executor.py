@@ -425,16 +425,37 @@ def execute_conversion(
                 # Track voice for chapter marker
                 collector.on_segment(seg_provider, seg_voice, segment.voice_spec)
 
-                seg_start_time = stats.current_time
-                local_segments, accumulated_tokens = synthesize_text(
-                    text=seg_text,
-                    params=synth,
-                    backend=seg_backend,
-                    voice=seg_voice,
-                    speed=seg_speed or request.speed,
-                    chapter_sink=chapter_sink,
-                    preview_callback=lambda text: events.log(f"  {text[:80]}"),
+                # spaCy pre-TTS segmentation
+                from abogen.domain.conversion_pipeline import spacy_pre_tts_segmentation
+
+                is_subtitle_input = bool(
+                    request.subtitle_input
                 )
+                spacy_segments, active_split = spacy_pre_tts_segmentation(
+                    seg_text,
+                    request.language,
+                    request.subtitle_mode,
+                    is_subtitle_input=is_subtitle_input,
+                    use_spacy_segmentation=use_spacy,
+                    log_callback=lambda msg: events.log(msg),
+                )
+
+                seg_start_time = stats.current_time
+                accumulated_tokens: List[Dict[str, Any]] = []
+                for spacy_seg in spacy_segments:
+                    if not spacy_seg.strip():
+                        continue
+                    _, seg_tokens = synthesize_text(
+                        text=spacy_seg,
+                        params=synth,
+                        backend=seg_backend,
+                        voice=seg_voice,
+                        speed=seg_speed or request.speed,
+                        chapter_sink=chapter_sink,
+                        preview_callback=lambda text: events.log(f"  {text[:80]}"),
+                        split_pattern_override=active_split,
+                    )
+                    accumulated_tokens.extend(seg_tokens)
 
                 # Process subtitles
                 if audio_sink and accumulated_tokens:
