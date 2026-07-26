@@ -208,7 +208,8 @@ def execute_conversion(
     # Resolve voices
     base_voice_spec = request.voice or "M1"
     base_provider, base_voice_choice, base_speed, base_steps = _resolve_voice(
-        voice_resolver, base_voice_spec, request
+        voice_resolver, base_voice_spec, request,
+        log_callback=lambda msg: events.log(msg, level="warning"),
     )
 
     # Use ExitStack for resource management
@@ -268,7 +269,8 @@ def execute_conversion(
         if plan.intro and plan.intro.enabled and merge_chapters:
             events.log(f"Title intro: {plan.intro.text[:80]}")
             intro_provider, intro_voice, intro_speed, intro_steps = _resolve_voice(
-                voice_resolver, plan.intro.voice_spec, request
+                voice_resolver, plan.intro.voice_spec, request,
+                log_callback=lambda msg: events.log(msg, level="warning"),
             )
             intro_backend = pipeline_provider.get(intro_provider, request.language, request.use_gpu)
             synthesize_text(
@@ -292,7 +294,8 @@ def execute_conversion(
 
             # Resolve chapter voice
             chapter_provider, chapter_voice, chapter_speed, chapter_steps = _resolve_voice(
-                voice_resolver, chapter.voice_spec, request
+                voice_resolver, chapter.voice_spec, request,
+                log_callback=lambda msg: events.log(msg, level="warning"),
             )
             chapter_backend = pipeline_provider.get(chapter_provider, request.language, request.use_gpu)
 
@@ -338,7 +341,8 @@ def execute_conversion(
             if not intro_emitted and plan.intro and plan.intro.enabled:
                 # Intro will be emitted with first chapter
                 intro_provider, intro_voice, intro_speed, intro_steps = _resolve_voice(
-                    voice_resolver, plan.intro.voice_spec, request
+                    voice_resolver, plan.intro.voice_spec, request,
+                    log_callback=lambda msg: events.log(msg, level="warning"),
                 )
                 intro_backend = pipeline_provider.get(intro_provider, request.language, request.use_gpu)
                 synthesize_text(
@@ -413,7 +417,8 @@ def execute_conversion(
                 # Resolve segment voice (may differ from chapter voice)
                 if segment.voice_spec != chapter.voice_spec:
                     seg_provider, seg_voice, seg_speed, seg_steps = _resolve_voice(
-                        voice_resolver, segment.voice_spec, request
+                        voice_resolver, segment.voice_spec, request,
+                        log_callback=lambda msg: events.log(msg, level="warning"),
                     )
                     seg_backend = pipeline_provider.get(seg_provider, request.language, request.use_gpu)
                 else:
@@ -519,7 +524,8 @@ def execute_conversion(
         if plan.outro and plan.outro.enabled and merge_chapters:
             events.log(f"Closing outro: {plan.outro.text[:80]}")
             outro_provider, outro_voice, outro_speed, outro_steps = _resolve_voice(
-                voice_resolver, plan.outro.voice_spec, request
+                voice_resolver, plan.outro.voice_spec, request,
+                log_callback=lambda msg: events.log(msg, level="warning"),
             )
             outro_backend = pipeline_provider.get(outro_provider, request.language, request.use_gpu)
 
@@ -566,6 +572,8 @@ def _resolve_voice(
     resolver: VoiceResolver,
     voice_spec: str,
     request: Any,
+    *,
+    log_callback: Optional[Callable[[str], None]] = None,
 ) -> Tuple[str, Any, Optional[float], Optional[int]]:
     """Resolve a voice spec and return (provider, voice, speed, steps)."""
     try:
@@ -576,9 +584,21 @@ def _resolve_voice(
             resolved.speed,
             resolved.supertonic_steps,
         )
-    except Exception:
+    except Exception as exc:
         # Fallback to base voice
-        resolved = resolver.resolve(request.voice or "M1")
+        base_spec = request.voice or "M1"
+        if log_callback:
+            log_callback(
+                f"Voice '{voice_spec}' failed to resolve: {exc}. "
+                f"Falling back to '{base_spec}'."
+            )
+        try:
+            resolved = resolver.resolve(base_spec)
+        except Exception as fallback_exc:
+            raise RuntimeError(
+                f"Both voice '{voice_spec}' and fallback '{base_spec}' failed to resolve. "
+                f"Primary error: {exc}; Fallback error: {fallback_exc}"
+            ) from fallback_exc
         return (
             resolved.provider,
             resolved.voice,
