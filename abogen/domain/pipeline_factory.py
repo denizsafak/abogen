@@ -95,7 +95,8 @@ class PipelinePool:
         language: str,
         use_gpu: bool,
         *,
-        job: Any = None,
+        request: Any = None,
+        events: Any = None,
     ) -> Any:
         """Get or create a cached pipeline for the given provider.
 
@@ -103,7 +104,8 @@ class PipelinePool:
             provider: TTS provider name ("kokoro" or "supertonic").
             language: Language code (for kokoro).
             use_gpu: Whether GPU acceleration is requested.
-            job: Optional job object for voice cache initialization.
+            request: ConversionRequest for voice cache initialization.
+            events: ConversionEvents for logging during cache init.
         """
         provider = str(provider or "kokoro").strip().lower() or "kokoro"
         if not is_plugin_registered(provider):
@@ -116,8 +118,8 @@ class PipelinePool:
         pipeline = create_pipeline_for_job(provider, language, use_gpu)
         self._pipelines[provider] = pipeline
 
-        if provider == "kokoro" and not self._voice_cache_initialized and job is not None:
-            initialize_voice_cache(job)
+        if provider == "kokoro" and not self._voice_cache_initialized and request is not None:
+            initialize_voice_cache(request, events=events)
             self._voice_cache_initialized = True
 
         return pipeline

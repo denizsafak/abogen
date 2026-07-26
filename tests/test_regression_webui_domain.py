@@ -122,10 +122,10 @@ class TestPipelinePoolRegression:
     def test_voice_cache_initialized_only_once(self, mock_cache, mock_create):
         mock_create.return_value = MagicMock()
         pool = PipelinePool()
-        job = MagicMock()
+        request = MagicMock()
 
-        pool.get("kokoro", "en", use_gpu=True, job=job)
-        pool.get("kokoro", "en", use_gpu=True, job=job)
+        pool.get("kokoro", "en", use_gpu=True, request=request)
+        pool.get("kokoro", "en", use_gpu=True, request=request)
         assert mock_cache.call_count == 1
 
     @patch("abogen.domain.pipeline_factory.create_pipeline_for_job")
@@ -133,13 +133,13 @@ class TestPipelinePoolRegression:
     def test_after_dispose_voice_cache_can_reinitialize(self, mock_cache, mock_create):
         mock_create.return_value = MagicMock()
         pool = PipelinePool()
-        job = MagicMock()
+        request = MagicMock()
 
-        pool.get("kokoro", "en", use_gpu=True, job=job)
+        pool.get("kokoro", "en", use_gpu=True, request=request)
         assert mock_cache.call_count == 1
 
         pool.dispose_all()
         assert pool._voice_cache_initialized is False
 
-        pool.get("kokoro", "en", use_gpu=True, job=job)
+        pool.get("kokoro", "en", use_gpu=True, request=request)
         assert mock_cache.call_count == 2

@@ -124,11 +124,11 @@ class TestPipelinePool:
         mock_create.return_value = MagicMock()
         pool = PipelinePool()
 
-        job = MagicMock()
-        pool.get("kokoro", "en", use_gpu=True, job=job)
+        request = MagicMock()
+        pool.get("kokoro", "en", use_gpu=True, request=request)
         assert mock_cache.call_count == 1
 
-        pool.get("kokoro", "en", use_gpu=True, job=job)
+        pool.get("kokoro", "en", use_gpu=True, request=request)
         assert mock_cache.call_count == 1
 
     @patch("abogen.domain.pipeline_factory.initialize_voice_cache")

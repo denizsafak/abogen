@@ -2,6 +2,9 @@
 
 Functions for resolving voice specifications, collecting required voice IDs,
 and determining the voice to use for chapters and chunks.
+
+All functions accept ConversionRequest (the app-layer contract) instead of
+UI-specific objects. This keeps the domain layer UI-agnostic.
 """
 
 from __future__ import annotations
@@ -29,12 +32,28 @@ def spec_to_voice_ids(spec: Any) -> Set[str]:
     return set()
 
 
-def job_voice_fallback(job: Any) -> str:
-    base = str(getattr(job, "voice", "") or "").strip()
+def _get_chapter_overrides(request: Any) -> list:
+    """Extract chapter overrides from ConversionRequest."""
+    cc = getattr(request, "chapter_chunk", None)
+    if cc is not None:
+        return getattr(cc, "chapter_overrides", []) or []
+    return []
+
+
+def _get_chunks(request: Any) -> list:
+    """Extract chunks from ConversionRequest."""
+    cc = getattr(request, "chapter_chunk", None)
+    if cc is not None:
+        return getattr(cc, "chunks", []) or []
+    return []
+
+
+def job_voice_fallback(request: Any) -> str:
+    base = str(getattr(request, "voice", "") or "").strip()
     if base and base != "__custom_mix":
         return base
 
-    speakers = getattr(job, "speakers", None)
+    speakers = getattr(request, "speakers", None)
     if isinstance(speakers, dict):
         narrator = speakers.get("narrator")
         if isinstance(narrator, dict):
@@ -52,7 +71,7 @@ def job_voice_fallback(job: Any) -> str:
                 if candidate and candidate != "__custom_mix":
                     return candidate
 
-    for chapter in getattr(job, "chapters", []) or []:
+    for chapter in _get_chapter_overrides(request):
         if not isinstance(chapter, dict):
             continue
         for key in ("resolved_voice", "voice_formula", "voice"):
@@ -63,24 +82,24 @@ def job_voice_fallback(job: Any) -> str:
     return ""
 
 
-def collect_required_voice_ids(job: Any) -> Set[str]:
+def collect_required_voice_ids(request: Any) -> Set[str]:
     voices: Set[str] = set()
-    voices.update(spec_to_voice_ids(job.voice))
-    voices.update(spec_to_voice_ids(job_voice_fallback(job)))
+    voices.update(spec_to_voice_ids(request.voice))
+    voices.update(spec_to_voice_ids(job_voice_fallback(request)))
 
-    for chapter in getattr(job, "chapters", []) or []:
+    for chapter in _get_chapter_overrides(request):
         if not isinstance(chapter, dict):
             continue
         for key in ("resolved_voice", "voice_formula", "voice"):
             voices.update(spec_to_voice_ids(chapter.get(key)))
 
-    for chunk in getattr(job, "chunks", []) or []:
+    for chunk in _get_chunks(request):
         if not isinstance(chunk, dict):
             continue
         for key in ("resolved_voice", "voice_formula", "voice"):
             voices.update(spec_to_voice_ids(chunk.get(key)))
 
-    speakers = getattr(job, "speakers", {})
+    speakers = getattr(request, "speakers", {})
     if isinstance(speakers, dict):
         for payload in speakers.values() or []:
             if not isinstance(payload, dict):
@@ -92,30 +111,38 @@ def collect_required_voice_ids(job: Any) -> Set[str]:
     return voices
 
 
-def initialize_voice_cache(job: Any) -> None:
+def initialize_voice_cache(request: Any, events: Any = None) -> None:
+    """Initialize voice cache by downloading required voice assets.
+
+    Args:
+        request: ConversionRequest with voice/chapter/chunk/speaker info.
+        events: ConversionEvents for logging (optional, for backward compat).
+    """
+    log = (lambda msg, level="info": events.log(msg, level=level)) if events else (lambda msg, level="info": None)
+
     try:
-        targets = collect_required_voice_ids(job)
+        targets = collect_required_voice_ids(request)
         downloaded, errors = ensure_voice_assets(
             targets,
-            on_progress=lambda message: job.add_log(message, level="debug"),
+            on_progress=lambda message: log(message, level="debug"),
         )
     except RuntimeError as exc:
-        job.add_log(f"Voice cache unavailable: {exc}", level="warning")
+        log(f"Voice cache unavailable: {exc}", level="warning")
         return
 
     if downloaded:
-        job.add_log(
+        log(
             f"Cached {len(downloaded)} voice asset{'s' if len(downloaded) != 1 else ''} locally.",
             level="info",
         )
 
     for voice_id, error in errors.items():
-        job.add_log(f"Failed to cache voice '{voice_id}': {error}", level="warning")
+        log(f"Failed to cache voice '{voice_id}': {error}", level="warning")
 
 
-def chapter_voice_spec(job: Any, override: Optional[Dict[str, Any]]) -> str:
+def chapter_voice_spec(request: Any, override: Optional[Dict[str, Any]]) -> str:
     if not override:
-        return job_voice_fallback(job)
+        return job_voice_fallback(request)
 
     resolved = str(override.get("resolved_voice", "")).strip()
     if resolved:
@@ -129,17 +156,17 @@ def chapter_voice_spec(job: Any, override: Optional[Dict[str, Any]]) -> str:
     if voice:
         return voice
 
-    return job_voice_fallback(job)
+    return job_voice_fallback(request)
 
 
-def chunk_voice_spec(job: Any, chunk: Dict[str, Any], fallback: str) -> str:
+def chunk_voice_spec(request: Any, chunk: Dict[str, Any], fallback: str) -> str:
     for key in ("resolved_voice", "voice_formula", "voice"):
         value = chunk.get(key)
         if value:
             return str(value)
 
     speaker_id = chunk.get("speaker_id")
-    speakers = getattr(job, "speakers", None)
+    speakers = getattr(request, "speakers", None)
     if isinstance(speakers, dict) and speaker_id in speakers:
         speaker_entry = speakers.get(speaker_id) or {}
         if isinstance(speaker_entry, dict):
@@ -163,7 +190,7 @@ def chunk_voice_spec(job: Any, chunk: Dict[str, Any], fallback: str) -> str:
 
     if fallback:
         return fallback
-    return job_voice_fallback(job)
+    return job_voice_fallback(request)
 
 
 def resolve_fallback_voice_spec(

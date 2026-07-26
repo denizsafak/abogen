@@ -95,6 +95,9 @@ class ConversionRequest:
     # --- Metadata ---
     metadata_tags: Dict[str, Any] = field(default_factory=dict)
 
+    # --- Voice profiles (loaded by UI, used by app for voice resolution) ---
+    speakers: Dict[str, Any] = field(default_factory=dict)
+
     # --- Artifacts ---
     cover_image_path: Optional[Path] = None
     cover_image_mime: Optional[str] = None
