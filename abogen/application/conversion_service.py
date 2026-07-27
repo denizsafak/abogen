@@ -136,7 +136,7 @@ def _finalize(
             raise RuntimeError(f"Failed to embed m4b metadata: {exc}") from exc
 
     # EPUB3 generation
-    if request.generate_epub3 and plan.extraction:
+    if request.epub3_export and plan.extraction:
         audio_asset = result.audio_path
         if not audio_asset and result.chapter_paths:
             audio_asset = result.chapter_paths[0]
@@ -153,7 +153,7 @@ def _finalize(
                 events.log("Generating EPUB 3 package...")
                 epub_path = build_epub3_package(
                     output_path=epub_output_path,
-                    book_id=request.epub3_book_id,
+                    book_id=request.epub3_export.book_id,
                     extraction=plan.extraction,
                     metadata_tags=result.metadata or {},
                     chapter_markers=result.chapter_markers or [],
@@ -183,7 +183,7 @@ def _finalize(
             chunk_level=request.chapter_chunk.chunk_level if request.chapter_chunk else None,
             speaker_mode=request.chapter_chunk.speaker_mode if request.chapter_chunk else None,
             speakers=request.chapter_chunk.speakers if request.chapter_chunk else None,
-            generate_epub3=bool(request.generate_epub3),
+            generate_epub3=bool(request.epub3_export),
         )
 
         metadata_dir = plan.output_layout.metadata_dir

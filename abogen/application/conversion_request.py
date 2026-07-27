@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 
 from abogen.application.conversion_config import (
     ChapterChunkConfig,
+    Epub3ExportConfig,
     SubtitleInputConfig,
     WordSubstitutionConfig,
 )
@@ -106,11 +107,8 @@ class ConversionRequest:
     cover_image_path: Optional[Path] = None
     cover_image_mime: Optional[str] = None
 
-    # --- Feature toggles ---
-    generate_epub3: bool = False
-    epub3_book_id: str = ""
-
     # --- Feature configs (None = disabled) ---
+    epub3_export: Optional[Epub3ExportConfig] = None
     word_substitution: Optional[WordSubstitutionConfig] = None
     subtitle_input: Optional[SubtitleInputConfig] = None
     chapter_chunk: Optional[ChapterChunkConfig] = None
