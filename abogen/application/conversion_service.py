@@ -16,16 +16,12 @@ The service NEVER imports from PyQt or WebUI.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Dict
+from typing import Any, Dict
 
 from abogen.application.conversion_executor import execute_conversion
 from abogen.application.conversion_models import ConversionPlan
 from abogen.application.conversion_planner import build_conversion_plan
-from abogen.application.conversion_ports import (
-    ConversionEvents,
-    PipelineProvider,
-    VoiceResolver,
-)
+from abogen.application.conversion_ports import ConversionEvents
 from abogen.application.conversion_request import ConversionRequest
 from abogen.application.conversion_result import ConversionResult
 from abogen.domain.normalization import build_tts_context
@@ -34,22 +30,19 @@ from abogen.domain.normalization import build_tts_context
 def run_conversion(
     request: ConversionRequest,
     events: ConversionEvents,
-    pipeline_provider: PipelineProvider,
-    voice_resolver: VoiceResolver,
 ) -> ConversionResult:
     """Execute a conversion request and return the result.
 
     This is the single entry point for both UIs. It orchestrates:
-    1. TTS context preparation
-    2. Conversion planning
-    3. Conversion execution
-    4. Resource cleanup
+    1. Voice infrastructure setup (pool, cache, resolver)
+    2. TTS context preparation
+    3. Conversion planning
+    4. Conversion execution
+    5. Resource cleanup
 
     Args:
         request: Normalized conversion request
         events: UI-specific callbacks (log, progress, check_cancelled)
-        pipeline_provider: Provides TTS backends
-        voice_resolver: Resolves voice specs into loaded voices
 
     Returns:
         ConversionResult with paths and markers
@@ -59,9 +52,18 @@ def run_conversion(
         ValueError: If request is invalid
         Exception: On TTS or I/O errors
     """
+    from abogen.domain.pipeline_factory import PipelinePool
+    from abogen.domain.voice_loader import VoiceCache
+
+    pool = PipelinePool()
+    voice_cache = VoiceCache()
+
     try:
-        # Stage 1: Prepare TTS context
+        # Stage 0: Create voice resolver
         events.log("Preparing conversion pipeline")
+        resolver = _create_voice_resolver(request, pool, voice_cache)
+
+        # Stage 1: Prepare TTS context
         usage_counter: Dict[str, int] = defaultdict(int)
         tts_context = build_tts_context(
             language=request.language,
@@ -83,8 +85,8 @@ def run_conversion(
         result = execute_conversion(
             plan=plan,
             events=events,
-            pipeline_provider=pipeline_provider,
-            voice_resolver=voice_resolver,
+            pipeline_provider=pool,
+            voice_resolver=resolver,
             tts_context=tts_context,
         )
 
@@ -100,6 +102,35 @@ def run_conversion(
     except Exception as e:
         events.log(f"Conversion failed: {e}", level="error")
         raise
+    finally:
+        pool.dispose_all()
+
+
+def _create_voice_resolver(
+    request: ConversionRequest,
+    pool: Any,
+    cache: Any,
+) -> Any:
+    """Create AppVoiceResolver with loaded profiles.
+
+    Loads voice profiles from disk, normalizes them, and creates
+    an AppVoiceResolver that can resolve voice specs into loaded voices.
+    """
+    from abogen.application.voice_resolver import AppVoiceResolver
+    from abogen.voice_profiles import load_profiles, normalize_profile_entry
+
+    try:
+        profiles = load_profiles()
+    except Exception:
+        profiles = {}
+
+    normalized_profiles: Dict[str, Dict[str, Any]] = {}
+    for name, entry in (profiles or {}).items():
+        normalized = normalize_profile_entry(entry)
+        if normalized:
+            normalized_profiles[str(name)] = normalized
+
+    return AppVoiceResolver(request, normalized_profiles, pool, cache)
 
 
 def _finalize(

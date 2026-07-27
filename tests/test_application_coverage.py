@@ -106,6 +106,23 @@ class FakeVoiceResolver:
         )
 
 
+@pytest.fixture(autouse=True)
+def _mock_pool_and_resolver():
+    """Mock PipelinePool and _create_voice_resolver for all service tests."""
+    fake_pool = FakePipelineProvider()
+    fake_resolver = FakeVoiceResolver()
+    with patch(
+        "abogen.domain.pipeline_factory.PipelinePool",
+        return_value=fake_pool,
+    ), patch(
+        "abogen.domain.voice_loader.VoiceCache",
+    ), patch(
+        "abogen.application.conversion_service._create_voice_resolver",
+        return_value=fake_resolver,
+    ):
+        yield
+
+
 # ─── Tests for conversion_service.py ───────────────────────────────
 
 
@@ -124,10 +141,8 @@ class TestConversionService:
                 output_folder=Path(tmpdir),
             )
             events = FakeEvents()
-            pipeline = FakePipelineProvider()
-            resolver = FakeVoiceResolver()
 
-            result = run_conversion(req, events, pipeline, resolver)
+            result = run_conversion(req, events)
 
             assert result is not None
             assert result.audio_path is not None
@@ -145,10 +160,8 @@ class TestConversionService:
                 output_folder=Path(tmpdir),
             )
             events = FakeEvents()
-            pipeline = FakePipelineProvider()
-            resolver = FakeVoiceResolver()
 
-            result = run_conversion(req, events, pipeline, resolver)
+            result = run_conversion(req, events)
 
             log_messages = [msg for msg, _ in events.logs]
             assert any("Preparing conversion pipeline" in msg for msg in log_messages)
@@ -169,11 +182,9 @@ class TestConversionService:
             )
             events = FakeEvents()
             events.cancelled = True
-            pipeline = FakePipelineProvider()
-            resolver = FakeVoiceResolver()
 
             with pytest.raises(RuntimeError, match="Conversion cancelled"):
-                run_conversion(req, events, pipeline, resolver)
+                run_conversion(req, events)
 
     def test_service_handles_empty_text(self):
         """Service raises ValueError for empty text."""
@@ -181,11 +192,9 @@ class TestConversionService:
 
         req = ConversionRequest(direct_text="", voice="M1")
         events = FakeEvents()
-        pipeline = FakePipelineProvider()
-        resolver = FakeVoiceResolver()
 
         with pytest.raises(ValueError, match="No text content"):
-            run_conversion(req, events, pipeline, resolver)
+            run_conversion(req, events)
 
     def test_service_multi_chapter(self):
         """Service handles multi-chapter conversion."""
@@ -199,10 +208,8 @@ class TestConversionService:
                 output_folder=Path(tmpdir),
             )
             events = FakeEvents()
-            pipeline = FakePipelineProvider()
-            resolver = FakeVoiceResolver()
 
-            result = run_conversion(req, events, pipeline, resolver)
+            result = run_conversion(req, events)
 
             assert result.total_chapters == 2
 
@@ -221,10 +228,8 @@ class TestConversionService:
                 metadata_tags={"title": "Test Book", "author": "Author"},
             )
             events = FakeEvents()
-            pipeline = FakePipelineProvider()
-            resolver = FakeVoiceResolver()
 
-            result = run_conversion(req, events, pipeline, resolver)
+            result = run_conversion(req, events)
 
             assert result is not None
 
@@ -234,13 +239,11 @@ class TestConversionService:
 
         req = ConversionRequest(direct_text="Hello", voice="M1")
         events = FakeEvents()
-        pipeline = FakePipelineProvider()
-        resolver = FakeVoiceResolver()
 
         # Mock build_conversion_plan to raise an error
         with patch("abogen.application.conversion_service.build_conversion_plan", side_effect=RuntimeError("Test error")):
             with pytest.raises(RuntimeError, match="Test error"):
-                run_conversion(req, events, pipeline, resolver)
+                run_conversion(req, events)
 
             log_messages = [msg for msg, _ in events.logs]
             assert any("Conversion failed" in msg for msg in log_messages)
@@ -258,10 +261,8 @@ class TestConversionService:
                 normalization_overrides={"normalization_numbers": False},
             )
             events = FakeEvents()
-            pipeline = FakePipelineProvider()
-            resolver = FakeVoiceResolver()
 
-            result = run_conversion(req, events, pipeline, resolver)
+            result = run_conversion(req, events)
             assert result is not None
 
     def test_tts_context_rejects_unconfigured_llm_mode(self):
@@ -277,11 +278,9 @@ class TestConversionService:
                 normalization_overrides={"normalization_apostrophe_mode": "llm"},
             )
             events = FakeEvents()
-            pipeline = FakePipelineProvider()
-            resolver = FakeVoiceResolver()
 
             with pytest.raises(RuntimeError, match="LLM.*apostrophe"):
-                run_conversion(req, events, pipeline, resolver)
+                run_conversion(req, events)
 
     def test_usage_counter_populated_in_result(self):
         """usage_counter is created and accessible in result."""
@@ -295,10 +294,8 @@ class TestConversionService:
                 output_folder=Path(tmpdir),
             )
             events = FakeEvents()
-            pipeline = FakePipelineProvider()
-            resolver = FakeVoiceResolver()
 
-            result = run_conversion(req, events, pipeline, resolver)
+            result = run_conversion(req, events)
             assert hasattr(result, "usage_counter")
             assert isinstance(result.usage_counter, dict)
 

@@ -2,7 +2,7 @@
 
 This module is the WebUI's adapter for the conversion system. It:
 1. Builds a ConversionRequest from a Job
-2. Creates adapter objects (Events, VoiceResolver)
+2. Creates an Events adapter
 3. Calls run_conversion() from the shared application layer
 4. Maps the ConversionResult back to Job state
 
@@ -17,25 +17,21 @@ from __future__ import annotations
 
 import gc
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from abogen.application.conversion_config import (
     ChapterChunkConfig,
     Epub3ExportConfig,
 )
-from abogen.application.conversion_ports import ConversionCancelled, ResolvedVoice
+from abogen.application.conversion_ports import ConversionCancelled
 from abogen.application.conversion_request import ConversionRequest
 from abogen.application.conversion_service import run_conversion
 from abogen.domain.enums import (
-    Language,
     OutputFormat,
     SaveMode,
     SubtitleFormat,
     SubtitleMode,
 )
-from abogen.domain.pipeline_factory import PipelinePool
-from abogen.domain.voice_loader import VoiceCache, resolve_voice
-from abogen.domain.voice_utils import resolve_voice_target as _resolve_voice_target
 
 from .service import Job, JobStatus
 
@@ -47,7 +43,6 @@ from .service import Job, JobStatus
 
 def _build_request(job: Job) -> ConversionRequest:
     """Build a ConversionRequest from a WebUI Job."""
-    # Determine source path
     source_path = Path(job.stored_path) if job.stored_path else None
 
     return ConversionRequest(
@@ -148,7 +143,7 @@ def _apply_result(job: Job, result: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Adapters: Events, VoiceResolver
+# Events adapter
 # ---------------------------------------------------------------------------
 
 
@@ -170,58 +165,6 @@ class WebUIEventsAdapter:
             raise ConversionCancelled("Job cancelled")
 
 
-class WebUIVoiceResolver:
-    """Adapts WebUI voice resolution to VoiceResolver protocol."""
-
-    def __init__(
-        self,
-        job: Job,
-        normalized_profiles: Dict[str, Dict[str, Any]],
-        voice_cache: VoiceCache,
-        pool: PipelinePool,
-    ):
-        self._job = job
-        self._profiles = normalized_profiles
-        self._cache = voice_cache
-        self._pool = pool
-
-    def resolve(self, voice_spec: str) -> ResolvedVoice:
-        provider, resolved, speed, steps = _resolve_voice_target(
-            voice_spec,
-            self._profiles,
-            job_voice=self._job.voice,
-            job_tts_provider=self._job.tts_provider,
-            job_supertonic_total_steps=self._job.supertonic_total_steps,
-            job_speed=self._job.speed,
-        )
-
-        cache_key = f"{provider}:{resolved}" if resolved else provider
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            return ResolvedVoice(
-                provider=provider,
-                resolved_spec=resolved,
-                voice=cached,
-                speed=speed,
-                supertonic_steps=steps or 0,
-            )
-
-        if provider == "kokoro":
-            kokoro_backend = self._pool.get("kokoro", self._job.language, self._job.use_gpu)
-            loaded = resolve_voice(resolved, kokoro_backend, self._job.use_gpu, cache=self._cache)
-        else:
-            loaded = resolved
-
-        self._cache.set(cache_key, loaded)
-        return ResolvedVoice(
-            provider=provider,
-            resolved_spec=resolved,
-            voice=loaded,
-            speed=speed,
-            supertonic_steps=steps or 0,
-        )
-
-
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -231,19 +174,11 @@ def run_conversion_job(job: Job) -> None:
     """Run a conversion job using the shared application layer."""
     job.add_log("Preparing conversion pipeline")
 
-    # Build request from job data
     request = _build_request(job)
-
-    # Create adapters
     events = WebUIEventsAdapter(job)
-    pool = PipelinePool()
-    voice_cache = VoiceCache()
-    voice_resolver = WebUIVoiceResolver(
-        job, request.speakers, voice_cache, pool,
-    )
 
     try:
-        result = run_conversion(request, events, pool, voice_resolver)
+        result = run_conversion(request, events)
         _apply_result(job, result)
 
         if job.status != JobStatus.CANCELLED:
@@ -257,8 +192,6 @@ def run_conversion_job(job: Job) -> None:
         job.status = JobStatus.FAILED
         job.add_log(f"Job failed: {exc}", level="error")
     finally:
-        pool.dispose_all()
-        voice_cache.clear()
         gc.collect()
         try:
             import torch
