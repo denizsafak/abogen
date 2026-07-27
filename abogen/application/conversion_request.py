@@ -12,12 +12,10 @@ from __future__ import annotations
 import dataclasses
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from abogen.application.conversion_config import (
     ChapterChunkConfig,
-    Epub3ExportConfig,
-    PronunciationConfig,
     SubtitleInputConfig,
     WordSubstitutionConfig,
 )
@@ -45,8 +43,11 @@ class ConversionRequest:
     Only contains fields that describe the conversion task itself.
     UI-only fields (display, logging, user prompts) stay in adapters.
 
-    Feature toggles use config objects: if the object is present,
-    the feature is enabled. No boolean flags needed.
+    Feature toggles use config objects or boolean flags:
+    - word_substitution, subtitle_input, chapter_chunk = config objects (None = disabled)
+    - generate_epub3 = boolean flag
+
+    Pronunciation overrides are raw data (lists of dicts), compiled by app layer.
 
     Validation runs on creation via __post_init__:
     - None values → replaced with field default (from declaration)
@@ -95,18 +96,23 @@ class ConversionRequest:
     # --- Metadata ---
     metadata_tags: Dict[str, Any] = field(default_factory=dict)
 
-    # --- Voice profiles (loaded by UI, used by app for voice resolution) ---
-    speakers: Dict[str, Any] = field(default_factory=dict)
+    # --- Pronunciation overrides (raw data, compiled by app layer) ---
+    pronunciation_overrides: List[Dict[str, Any]] = field(default_factory=list)
+    manual_overrides: List[Dict[str, Any]] = field(default_factory=list)
+    heteronym_overrides: List[Dict[str, Any]] = field(default_factory=list)
+    normalization_overrides: Optional[Dict[str, Any]] = None
 
     # --- Artifacts ---
     cover_image_path: Optional[Path] = None
     cover_image_mime: Optional[str] = None
 
+    # --- Feature toggles ---
+    generate_epub3: bool = False
+    epub3_book_id: str = ""
+
     # --- Feature configs (None = disabled) ---
     word_substitution: Optional[WordSubstitutionConfig] = None
     subtitle_input: Optional[SubtitleInputConfig] = None
-    epub3_export: Optional[Epub3ExportConfig] = None
-    pronunciation: Optional[PronunciationConfig] = None
     chapter_chunk: Optional[ChapterChunkConfig] = None
 
     def __post_init__(self) -> None:

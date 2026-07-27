@@ -250,16 +250,12 @@ class TestConversionService:
         from abogen.application.conversion_service import run_conversion
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            from abogen.application.conversion_config import PronunciationConfig
-
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
                 save_mode="custom_folder",
                 output_folder=Path(tmpdir),
-                pronunciation=PronunciationConfig(
-                    normalization_overrides={"normalization_numbers": False},
-                ),
+                normalization_overrides={"normalization_numbers": False},
             )
             events = FakeEvents()
             pipeline = FakePipelineProvider()
@@ -273,16 +269,12 @@ class TestConversionService:
         from abogen.application.conversion_service import run_conversion
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            from abogen.application.conversion_config import PronunciationConfig
-
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
                 save_mode="custom_folder",
                 output_folder=Path(tmpdir),
-                pronunciation=PronunciationConfig(
-                    normalization_overrides={"normalization_apostrophe_mode": "llm"},
-                ),
+                normalization_overrides={"normalization_apostrophe_mode": "llm"},
             )
             events = FakeEvents()
             pipeline = FakePipelineProvider()
