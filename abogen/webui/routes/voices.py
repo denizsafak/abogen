@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional
 from flask import Blueprint, render_template, request, jsonify, abort, flash, redirect, url_for
 from flask.typing import ResponseReturnValue
 
+from abogen.domain.enums import Language
 from abogen.webui.routes.utils.voice import (
     template_options,
     resolve_voice_setting,
@@ -39,7 +40,7 @@ def test_voice() -> ResponseReturnValue:
         return synthesize_preview(
             text=text,
             voice_spec=voice,
-            language="a", # Default language
+            language=Language.EN_US,
             speed=speed,
             use_gpu=use_gpu,
         )

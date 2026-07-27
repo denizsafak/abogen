@@ -928,10 +928,11 @@ class TestValueObjectsBehavioral:
 
     def test_engine_config_defaults(self) -> None:
         from abogen.tts_plugin.types import EngineConfig
+        from abogen.domain.enums import Language
 
         config = EngineConfig()
         assert config.device == "cpu"
-        assert config.lang_code == "a"
+        assert config.language == Language.EN_US
 
     def test_parameter_values_defaults(self) -> None:
         pv = ParameterValues()

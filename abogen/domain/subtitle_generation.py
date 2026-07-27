@@ -19,7 +19,7 @@ def process_subtitle_tokens(
     subtitle_entries: List[Tuple[float, float, str]],
     max_subtitle_words: int,
     subtitle_mode: str,
-    lang_code: str,
+    language: Language,
     use_spacy_segmentation: bool = False,
     fallback_end_time: Optional[float] = None,
 ) -> None:
@@ -35,7 +35,7 @@ def process_subtitle_tokens(
         max_subtitle_words: Maximum number of words per subtitle entry.
         subtitle_mode: One of "Disabled", "Line", "Sentence", "Sentence + Comma",
             "Sentence + Highlighting", or a string like "5" for word-count mode.
-        lang_code: Language code for spaCy processing (e.g., "a" for English).
+        language: Language enum value for spaCy processing.
         use_spacy_segmentation: Whether to use spaCy for sentence boundary detection.
         fallback_end_time: Fallback end time for the last entry if none is available.
     """
@@ -49,7 +49,7 @@ def process_subtitle_tokens(
     use_spacy_for_english = (
         use_spacy_segmentation
         and subtitle_mode not in [SubtitleMode.DISABLED, SubtitleMode.LINE]
-        and lang_code in [Language.EN_US, Language.EN_GB]
+        and language in [Language.EN_US, Language.EN_GB]
         and subtitle_mode in [SubtitleMode.SENTENCE, SubtitleMode.SENTENCE_COMMA]
     )
 
@@ -61,7 +61,7 @@ def process_subtitle_tokens(
         if use_spacy_for_english and subtitle_mode != SubtitleMode.LINE:
             _process_spacy_sentences(
                 processed_tokens, subtitle_entries, max_subtitle_words,
-                subtitle_mode, lang_code, fallback_end_time
+                subtitle_mode, language, fallback_end_time
             )
         else:
             _process_regex_sentences(
@@ -141,7 +141,7 @@ def _process_spacy_sentences(
     subtitle_entries: List[Tuple[float, float, str]],
     max_subtitle_words: int,
     subtitle_mode: str,
-    lang_code: str,
+    language: Language,
     fallback_end_time: Optional[float],
 ) -> None:
     """Process tokens using spaCy for sentence boundary detection."""
@@ -155,7 +155,7 @@ def _process_spacy_sentences(
         )
         return
 
-    nlp = get_spacy_model(lang_code)
+    nlp = get_spacy_model(language)
     if not nlp:
         _process_regex_sentences(
             tokens, subtitle_entries, max_subtitle_words,

@@ -1,6 +1,7 @@
 import re
 from abogen.utils import detect_encoding, load_config
 from abogen.constants import SAMPLE_VOICE_TEXTS
+from abogen.domain.enums import Language
 
 # Pre-compile frequently used regex patterns for better performance
 _METADATA_TAG_PATTERN = re.compile(r"<<METADATA_[^:]+:[^>]*>>")
@@ -388,8 +389,18 @@ def parse_ass_file(file_path):
     return subtitles
 
 
-def get_sample_voice_text(lang_code):
-    return SAMPLE_VOICE_TEXTS.get(lang_code, SAMPLE_VOICE_TEXTS["a"])
+def get_sample_voice_text(language):
+    """Get sample voice text for a language.
+
+    Args:
+        language: Language enum value or string (for backward compatibility).
+    """
+    if isinstance(language, str):
+        try:
+            language = Language.from_str(language)
+        except (ValueError, AttributeError):
+            language = Language.EN_US
+    return SAMPLE_VOICE_TEXTS.get(language, SAMPLE_VOICE_TEXTS[Language.EN_US])
 
 
 # Backward-compatible re-exports — canonical location is domain/output_paths.py

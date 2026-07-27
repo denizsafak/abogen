@@ -15,19 +15,6 @@ from abogen.domain.pronunciation import (
     apply_pronunciation_rules,
 )
 
-# Kokoro-specific language mapping (engine's responsibility)
-_KOKORO_LANG_MAP = {
-    Language.EN_US: "a",
-    Language.EN_GB: "b",
-    Language.ES: "e",
-    Language.FR: "f",
-    Language.HI: "h",
-    Language.IT: "i",
-    Language.JA: "j",
-    Language.PT_BR: "p",
-    Language.ZH: "z",
-}
-
 
 SAMPLE_RATE = 24000
 
@@ -46,7 +33,7 @@ def clear_preview_pipelines() -> None:
         _preview_pipelines.clear()
 
 
-def _resolve_pipeline(language: str, use_gpu: bool) -> Tuple[Any, bool]:
+def _resolve_pipeline(language: Language, use_gpu: bool) -> Tuple[Any, bool]:
     devices: List[str] = ["cpu"]
     if use_gpu:
         preferred = _select_device()
@@ -63,29 +50,22 @@ def _resolve_pipeline(language: str, use_gpu: bool) -> Tuple[Any, bool]:
     raise RuntimeError("Preview pipeline is unavailable") from last_error
 
 
-def get_preview_pipeline(language: str, device: str) -> Any:
-    # Convert Language enum to Kokoro single-letter code
-    try:
-        lang = Language.from_str(language) if not isinstance(language, Language) else language
-    except ValueError:
-        lang = Language.EN_US
-    kokoro_code = _KOKORO_LANG_MAP.get(lang, "a")
-
-    key = (kokoro_code, device)
+def get_preview_pipeline(language: Language, device: str) -> Any:
+    key = (language, device)
     with _preview_pipeline_lock:
         pipeline = _preview_pipelines.get(key)
         if pipeline is not None:
             return pipeline
         from abogen.tts_plugin.utils import create_pipeline
 
-        pipeline = create_pipeline("kokoro", lang_code=kokoro_code, device=device)
+        pipeline = create_pipeline("kokoro", language=lang, device=device)
         _preview_pipelines[key] = pipeline
         return pipeline
 
 def generate_preview_audio(
     text: str,
     voice_spec: str,
-    language: str,
+    language: Language,
     speed: float,
     use_gpu: bool,
     tts_provider: str = "kokoro",
@@ -131,7 +111,7 @@ def generate_preview_audio(
             current_app.logger.exception("Preview normalization failed; using raw text")
             normalized_text = source_text
 
-    preview_split = get_split_pattern(str(language or "a"), "Disabled")
+    preview_split = get_split_pattern(language, "Disabled")
 
     if provider == "supertonic":
         from abogen.tts_plugin.utils import create_pipeline
@@ -194,7 +174,7 @@ def generate_preview_audio(
 def synthesize_preview(
     text: str,
     voice_spec: str,
-    language: str,
+    language: Language,
     speed: float,
     use_gpu: bool,
     tts_provider: str = "kokoro",

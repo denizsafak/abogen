@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
+from abogen.domain.enums import Language
 from abogen.tts_plugin.plugin_manager import PluginManager, get_plugin_manager, reset_plugin_manager
 from abogen.tts_plugin.utils import Pipeline, create_pipeline
 from abogen.tts_plugin.engine import Engine, EngineSession
@@ -175,7 +176,7 @@ class TestCreatePipelineCompat:
             mock_engine = FakeEngine()
             mock_manager.create_engine.return_value = mock_engine
             
-            backend = create_pipeline("kokoro", lang_code="a", device="cpu")
+            backend = create_pipeline("kokoro", language=Language.EN_US, device="cpu")
             
             assert callable(backend)
             mock_manager.create_engine.assert_called_once()
@@ -185,7 +186,7 @@ class TestCreatePipelineCompat:
             assert call_args.kwargs["model_path"] is None
             assert isinstance(call_args.kwargs["config"], EngineConfig)
             assert call_args.kwargs["config"].device == "cpu"
-            assert call_args.kwargs["config"].lang_code == "a"
+            assert call_args.kwargs["config"].language == Language.EN_US
     
     def test_create_pipeline_raises_for_unknown_plugin(self):
         """create_pipeline raises KeyError for unknown plugins."""

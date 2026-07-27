@@ -277,17 +277,19 @@ def filter_voice_catalog(
 
 
 def build_voice_catalog() -> List[Dict[str, str]]:
+    from plugins.kokoro.engine import language_for_voice_id
+
     catalog: List[Dict[str, str]] = []
     gender_map = {"f": "Female", "m": "Male"}
     for voice_id in get_voices("kokoro"):
         prefix, _, rest = voice_id.partition("_")
-        language_code = prefix[0] if prefix else "a"
         gender_code = prefix[1] if len(prefix) > 1 else ""
+        lang = language_for_voice_id(voice_id)
         catalog.append(
             {
                 "id": voice_id,
-                "language": language_code,
-                "language_label": LANGUAGE_DESCRIPTIONS.get(language_code, language_code.upper()),
+                "language": lang.value,
+                "language_label": LANGUAGE_DESCRIPTIONS.get(lang, lang.value.upper()),
                 "gender": gender_map.get(gender_code, "Unknown"),
                 "gender_code": gender_code,
                 "display_name": rest.replace("_", " ").title() if rest else voice_id,

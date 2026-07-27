@@ -2,6 +2,7 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
+from abogen.domain.enums import Language
 from abogen.domain.normalization import prepare_text_for_tts, normalize_text_for_pipeline, build_tts_context, TTSContext
 
 
@@ -151,21 +152,21 @@ class TestBuildTtsContext:
     """Tests for the build_tts_context factory."""
 
     def test_returns_tts_context(self):
-        ctx = build_tts_context()
+        ctx = build_tts_context(language=Language.EN_US)
         assert isinstance(ctx, TTSContext)
 
     def test_default_split_pattern(self):
-        ctx = build_tts_context(language="a", subtitle_mode="Disabled")
+        ctx = build_tts_context(language=Language.EN_US, subtitle_mode="Disabled")
         assert isinstance(ctx.split_pattern, str)
         assert len(ctx.split_pattern) > 0
 
     def test_english_uses_newline_split(self):
-        ctx = build_tts_context(language="a", subtitle_mode="Disabled")
+        ctx = build_tts_context(language=Language.EN_US, subtitle_mode="Disabled")
         assert ctx.split_pattern == "\n"
 
     def test_cjk_uses_punctuation_split(self):
-        ctx = build_tts_context(language="j", subtitle_mode="Disabled")
-        assert "[.??.?!]" in ctx.split_pattern or "\\n" not in ctx.split_pattern
+        ctx = build_tts_context(language=Language.JA, subtitle_mode="Disabled")
+        assert r"\n" in ctx.split_pattern
 
     def test_pronunciation_overrides_compiled(self):
         overrides = [
@@ -176,6 +177,7 @@ class TestBuildTtsContext:
             }
         ]
         ctx = build_tts_context(
+            language=Language.EN_US,
             pronunciation_overrides=overrides,
         )
         assert ctx.pronunciation_rules is not None
@@ -190,6 +192,7 @@ class TestBuildTtsContext:
             }
         ]
         ctx = build_tts_context(
+            language=Language.EN_US,
             manual_overrides=overrides,
         )
         assert ctx.pronunciation_rules is not None
@@ -203,6 +206,7 @@ class TestBuildTtsContext:
             {"token": "x", "pronunciation": "RIGHT", "normalized": "x"}
         ]
         ctx = build_tts_context(
+            language=Language.EN_US,
             pronunciation_overrides=pronunciation,
             manual_overrides=manual,
         )
@@ -224,22 +228,23 @@ class TestBuildTtsContext:
             }
         ]
         ctx = build_tts_context(
+            language=Language.EN_US,
             heteronym_overrides=overrides,
         )
         assert ctx.heteronym_rules is not None
 
     def test_usage_counter_passed_through(self):
         counter = {}
-        ctx = build_tts_context(usage_counter=counter)
+        ctx = build_tts_context(language=Language.EN_US, usage_counter=counter)
         assert ctx.usage_counter is counter
 
     def test_usage_counter_default_empty(self):
-        ctx = build_tts_context()
+        ctx = build_tts_context(language=Language.EN_US)
         assert ctx.usage_counter == {}
 
     def test_normalization_overrides_stored(self):
         overrides = {"normalization_numbers": False}
-        ctx = build_tts_context(normalization_overrides=overrides)
+        ctx = build_tts_context(language=Language.EN_US, normalization_overrides=overrides)
         assert ctx.normalization_overrides is overrides
 
     def test_speakers_used_for_pronunciation(self):
@@ -250,7 +255,7 @@ class TestBuildTtsContext:
                 "resolved_voice": "M1",
             }
         }
-        ctx = build_tts_context(speakers=speakers)
+        ctx = build_tts_context(language=Language.EN_US, speakers=speakers)
         assert ctx.pronunciation_rules is not None
         assert len(ctx.pronunciation_rules) >= 1
 
@@ -265,7 +270,7 @@ class TestBuildTtsContext:
                 mock_cfg.return_value = MagicMock(convert_numbers=True)
                 with patch("builtins.__import__", side_effect=ImportError):
                     try:
-                        build_tts_context(log_callback=lambda lvl, msg: logs.append((lvl, msg)))
+                        build_tts_context(language=Language.EN_US, log_callback=lambda lvl, msg: logs.append((lvl, msg)))
                     except ImportError:
                         pass
         # If num2words is missing and convert_numbers is True, a warning should be logged
@@ -276,7 +281,7 @@ class TestBuildTtsContext:
             "normalization_apostrophe_mode": "llm",
         }):
             with pytest.raises(RuntimeError, match="LLM"):
-                build_tts_context()
+                build_tts_context(language=Language.EN_US)
 
     def test_dict_source_accepted(self):
         """merge_pronunciation_overrides should accept a dict."""

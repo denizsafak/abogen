@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional
 
+from abogen.domain.enums import Language
 from abogen.kokoro_text_normalization import (
     ApostropheConfig,
     normalize_for_pipeline as _normalize_for_pipeline,
@@ -127,7 +128,7 @@ def prepare_text_for_tts(
 
 def build_tts_context(
     *,
-    language: str = "a",
+    language: Language,
     subtitle_mode: str = "Disabled",
     pronunciation_overrides: Optional[List[Dict[str, Any]]] = None,
     manual_overrides: Optional[List[Dict[str, Any]]] = None,
@@ -143,7 +144,7 @@ def build_tts_context(
     merges pronunciation overrides, and compiles all rules.
 
     Args:
-        language: Language code (a, b, e, f, etc.).
+        language: Language enum value.
         subtitle_mode: Subtitle mode string.
         pronunciation_overrides: List of pronunciation override dicts.
         manual_overrides: List of manual override dicts.
@@ -199,15 +200,13 @@ def build_tts_context(
             )
 
     # Compute split pattern
-    try:
-        lang = Language.from_str(language) if not isinstance(language, Language) else language
-    except ValueError:
-        lang = Language.EN_US
+    if not isinstance(language, Language):
+        raise TypeError(f"language must be Language enum, got {type(language).__name__}: {language!r}")
     try:
         mode = SubtitleMode.from_str(subtitle_mode) if not isinstance(subtitle_mode, SubtitleMode) else subtitle_mode
     except ValueError:
         mode = SubtitleMode.DISABLED
-    split_pattern = get_split_pattern(lang, mode)
+    split_pattern = get_split_pattern(language, mode)
 
     # Merge pronunciation overrides (accepts dict or object)
     source = {

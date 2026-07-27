@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from abogen.domain.enums import Language
 from abogen.domain.pipeline_factory import (
     PipelinePool,
     create_pipeline_for_job,
@@ -31,7 +32,7 @@ class TestCreatePipelineForJob:
     @patch("abogen.domain.pipeline_factory.is_plugin_registered", return_value=True)
     def test_supertonic_provider(self, _reg, mock_create):
         mock_create.return_value = MagicMock()
-        result = create_pipeline_for_job("supertonic", "en", use_gpu=True)
+        result = create_pipeline_for_job("supertonic", Language.EN_US, use_gpu=True)
         mock_create.assert_called_once_with("supertonic")
         assert result is mock_create.return_value
 
@@ -40,43 +41,41 @@ class TestCreatePipelineForJob:
     @patch("abogen.domain.pipeline_factory.resolve_device", return_value="cpu")
     def test_kokoro_provider(self, _dev, _reg, mock_create):
         mock_create.return_value = MagicMock()
-        result = create_pipeline_for_job("kokoro", "en", use_gpu=False)
-        # "en" → fallback to EN_US → kokoro code "a"
-        mock_create.assert_called_once_with("kokoro", lang_code="a", device="cpu")
+        result = create_pipeline_for_job("kokoro", Language.EN_US, use_gpu=False)
+        mock_create.assert_called_once_with("kokoro", language=Language.EN_US, device="cpu")
         assert result is mock_create.return_value
 
     @patch("abogen.domain.pipeline_factory.create_pipeline")
     @patch("abogen.domain.pipeline_factory.is_plugin_registered", return_value=True)
     @patch("abogen.domain.pipeline_factory.resolve_device", return_value="cpu")
-    def test_kokoro_provider_iso_code(self, _dev, _reg, mock_create):
+    def test_kokoro_provider_en_gb(self, _dev, _reg, mock_create):
         mock_create.return_value = MagicMock()
-        result = create_pipeline_for_job("kokoro", "en-GB", use_gpu=False)
-        # "en-GB" → EN_GB → kokoro code "b"
-        mock_create.assert_called_once_with("kokoro", lang_code="b", device="cpu")
+        result = create_pipeline_for_job("kokoro", Language.EN_GB, use_gpu=False)
+        mock_create.assert_called_once_with("kokoro", language=Language.EN_GB, device="cpu")
 
     @patch("abogen.domain.pipeline_factory.create_pipeline")
     @patch("abogen.domain.pipeline_factory.is_plugin_registered", return_value=False)
     @patch("abogen.domain.pipeline_factory.resolve_device", return_value="cpu")
     def test_unknown_provider_falls_back_to_kokoro(self, _dev, _reg, mock_create):
         mock_create.return_value = MagicMock()
-        result = create_pipeline_for_job("unknown_provider", "en", use_gpu=False)
-        mock_create.assert_called_once_with("kokoro", lang_code="a", device="cpu")
+        result = create_pipeline_for_job("unknown_provider", Language.EN_US, use_gpu=False)
+        mock_create.assert_called_once_with("kokoro", language=Language.EN_US, device="cpu")
 
     @patch("abogen.domain.pipeline_factory.create_pipeline")
     @patch("abogen.domain.pipeline_factory.is_plugin_registered", return_value=True)
     @patch("abogen.domain.pipeline_factory.resolve_device", return_value="cpu")
     def test_empty_provider_defaults_to_kokoro(self, _dev, _reg, mock_create):
         mock_create.return_value = MagicMock()
-        result = create_pipeline_for_job("", "en", use_gpu=False)
-        mock_create.assert_called_once_with("kokoro", lang_code="a", device="cpu")
+        result = create_pipeline_for_job("", Language.EN_US, use_gpu=False)
+        mock_create.assert_called_once_with("kokoro", language=Language.EN_US, device="cpu")
 
     @patch("abogen.domain.pipeline_factory.create_pipeline")
     @patch("abogen.domain.pipeline_factory.is_plugin_registered", return_value=True)
     @patch("abogen.domain.pipeline_factory.resolve_device", return_value="cpu")
     def test_none_provider_defaults_to_kokoro(self, _dev, _reg, mock_create):
         mock_create.return_value = MagicMock()
-        result = create_pipeline_for_job(None, "en", use_gpu=False)
-        mock_create.assert_called_once_with("kokoro", lang_code="a", device="cpu")
+        result = create_pipeline_for_job(None, Language.EN_US, use_gpu=False)
+        mock_create.assert_called_once_with("kokoro", language=Language.EN_US, device="cpu")
 
 
 class TestDisposePipelines:
@@ -110,11 +109,11 @@ class TestPipelinePool:
         mock_create.return_value = mock_pipeline
         pool = PipelinePool()
 
-        result = pool.get("kokoro", "en", use_gpu=True)
+        result = pool.get("kokoro", Language.EN_US, use_gpu=True)
         assert result is mock_pipeline
         mock_create.assert_called_once()
 
-        result2 = pool.get("kokoro", "en", use_gpu=True)
+        result2 = pool.get("kokoro", Language.EN_US, use_gpu=True)
         assert result2 is mock_pipeline
         assert mock_create.call_count == 1
 
@@ -125,10 +124,10 @@ class TestPipelinePool:
         pool = PipelinePool()
 
         request = MagicMock()
-        pool.get("kokoro", "en", use_gpu=True, request=request)
+        pool.get("kokoro", Language.EN_US, use_gpu=True, request=request)
         assert mock_cache.call_count == 1
 
-        pool.get("kokoro", "en", use_gpu=True, request=request)
+        pool.get("kokoro", Language.EN_US, use_gpu=True, request=request)
         assert mock_cache.call_count == 1
 
     @patch("abogen.domain.pipeline_factory.initialize_voice_cache")
@@ -136,7 +135,7 @@ class TestPipelinePool:
     def test_get_no_job_skips_voice_cache(self, mock_create, mock_cache):
         mock_create.return_value = MagicMock()
         pool = PipelinePool()
-        pool.get("kokoro", "en", use_gpu=True)
+        pool.get("kokoro", Language.EN_US, use_gpu=True)
         mock_cache.assert_not_called()
 
     @patch("abogen.domain.pipeline_factory.create_pipeline_for_job")
@@ -146,8 +145,8 @@ class TestPipelinePool:
         mock_create.side_effect = [p1, p2]
         pool = PipelinePool()
 
-        r1 = pool.get("kokoro", "en", use_gpu=True)
-        r2 = pool.get("supertonic", "en", use_gpu=True)
+        r1 = pool.get("kokoro", Language.EN_US, use_gpu=True)
+        r2 = pool.get("supertonic", Language.EN_US, use_gpu=True)
         assert r1 is p1
         assert r2 is p2
         assert mock_create.call_count == 2
@@ -160,8 +159,8 @@ class TestPipelinePool:
         mock_create.side_effect = [p1, p2]
         pool = PipelinePool()
 
-        pool.get("kokoro", "en", use_gpu=True)
-        pool.get("supertonic", "en", use_gpu=True)
+        pool.get("kokoro", Language.EN_US, use_gpu=True)
+        pool.get("supertonic", Language.EN_US, use_gpu=True)
         pool.dispose_all()
 
         p1.dispose.assert_called_once()
@@ -181,5 +180,5 @@ class TestPipelinePool:
     def test_unknown_provider_falls_back(self, _reg, _cache, mock_create):
         mock_create.return_value = MagicMock()
         pool = PipelinePool()
-        pool.get("bogus_provider", "en", use_gpu=True)
-        mock_create.assert_called_once_with("kokoro", "en", True)
+        pool.get("bogus_provider", Language.EN_US, use_gpu=True)
+        mock_create.assert_called_once_with("kokoro", Language.EN_US, True)

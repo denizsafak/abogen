@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Dict, Iterable, Mapping
 
+from abogen.domain.enums import Language
 from abogen.pronunciation_store import increment_usage
 
 
@@ -44,7 +45,7 @@ def record_override_usage(
     if not usage_counter:
         return
 
-    language = getattr(job, "language", "") or "a"
+    language = getattr(job, "language", Language.EN_US) or Language.EN_US
     for normalized, amount in usage_counter.items():
         if amount <= 0:
             continue

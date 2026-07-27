@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 from dataclasses import dataclass, field
 from typing import Any
 
+from abogen.domain.enums import Language
 from abogen.domain.conversion_engine import (
     synthesize_text,
     SynthParams,
@@ -254,7 +255,7 @@ class TestProcessAndWriteSubtitles:
             writer,
             subtitle_mode="Sentence",
             max_subtitle_words=5,
-            lang_code="a",
+            language=Language.EN_US,
             use_spacy_segmentation=False,
             fallback_end_time=10.0,
         )
@@ -271,7 +272,7 @@ class TestProcessAndWriteSubtitles:
             writer,
             subtitle_mode="Sentence",
             max_subtitle_words=5,
-            lang_code="a",
+            language=Language.EN_US,
             use_spacy_segmentation=False,
             fallback_end_time=2.0,
         )
@@ -293,7 +294,7 @@ class TestProcessAndWriteSubtitles:
             writer,
             subtitle_mode="Line",
             max_subtitle_words=5,
-            lang_code="a",
+            language=Language.EN_US,
             use_spacy_segmentation=False,
             fallback_end_time=3.0,
         )
@@ -312,7 +313,7 @@ class TestProcessAndWriteSubtitles:
             writer,
             subtitle_mode="Disabled",
             max_subtitle_words=5,
-            lang_code="a",
+            language=Language.EN_US,
             use_spacy_segmentation=False,
             fallback_end_time=2.0,
         )
@@ -348,7 +349,7 @@ class TestFullPipeline:
             audio_sink=merged_sink,
             subtitle_mode="Sentence",
             max_subtitle_words=5,
-            lang_code="a",
+            language=Language.EN_US,
             use_spacy_segmentation=False,
         )
 
@@ -367,7 +368,7 @@ class TestFullPipeline:
             subtitle_writer,
             subtitle_mode="Sentence",
             max_subtitle_words=5,
-            lang_code="a",
+            language=Language.EN_US,
             use_spacy_segmentation=False,
             fallback_end_time=stats.current_time,
         )

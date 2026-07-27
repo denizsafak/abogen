@@ -2,6 +2,10 @@
 
 Provides a unified interface for creating and managing TTS pipelines
 across all UI layers (WebUI, PyQt, CLI).
+
+Language handling: the engine owns the mapping between Language enum
+and its internal format. Callers pass Language enum; the engine
+converts internally. No engine-specific codes leak outside the engine.
 """
 
 from __future__ import annotations
@@ -12,19 +16,6 @@ from abogen.domain.device import select_device
 from abogen.domain.enums import Language
 from abogen.domain.voice_resolution import initialize_voice_cache
 from abogen.tts_plugin.utils import create_pipeline, is_plugin_registered
-
-# Kokoro-specific language mapping (engine's responsibility)
-_KOKORO_LANG_MAP = {
-    Language.EN_US: "a",
-    Language.EN_GB: "b",
-    Language.ES: "e",
-    Language.FR: "f",
-    Language.HI: "h",
-    Language.IT: "i",
-    Language.JA: "j",
-    Language.PT_BR: "p",
-    Language.ZH: "z",
-}
 
 
 def resolve_device(use_gpu: bool) -> str:
@@ -39,29 +30,25 @@ def resolve_device(use_gpu: bool) -> str:
 
 def create_pipeline_for_job(
     provider: str,
-    language: str,
+    language: Language,
     use_gpu: bool,
 ) -> Any:
     """Create a TTS pipeline with proper device selection.
 
-    Handles provider validation, GPU decision, and plugin checks.
+    Args:
+        provider: TTS provider name ("kokoro" or "supertonic").
+        language: Language enum (app-layer type, not engine-specific).
+        use_gpu: Whether GPU acceleration is requested.
     """
     provider = str(provider or "kokoro").strip().lower() or "kokoro"
     if not is_plugin_registered(provider):
         provider = "kokoro"
 
-    # Convert Language enum to Kokoro single-letter code
-    try:
-        lang = Language.from_str(language) if not isinstance(language, Language) else language
-    except ValueError:
-        lang = Language.EN_US  # fallback for unknown languages
-    kokoro_code = _KOKORO_LANG_MAP.get(lang, "a")
-
     if provider == "supertonic":
         return create_pipeline("supertonic")
 
     device = resolve_device(use_gpu)
-    return create_pipeline("kokoro", lang_code=kokoro_code, device=device)
+    return create_pipeline("kokoro", language=language, device=device)
 
 
 def dispose_pipelines(pipelines: Dict[str, Any]) -> None:
@@ -80,7 +67,7 @@ class PipelinePool:
     Usage::
 
         pool = PipelinePool()
-        backend = pool.get("kokoro", "en", use_gpu=True)
+        backend = pool.get("kokoro", Language.EN_US, use_gpu=True)
         # ... use backend ...
         pool.dispose_all()
     """
@@ -92,7 +79,7 @@ class PipelinePool:
     def get(
         self,
         provider: str,
-        language: str,
+        language: Language,
         use_gpu: bool,
         *,
         request: Any = None,
@@ -102,7 +89,7 @@ class PipelinePool:
 
         Args:
             provider: TTS provider name ("kokoro" or "supertonic").
-            language: Language code (for kokoro).
+            language: Language enum (app-layer type).
             use_gpu: Whether GPU acceleration is requested.
             request: ConversionRequest for voice cache initialization.
             events: ConversionEvents for logging during cache init.

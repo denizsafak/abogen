@@ -14,9 +14,12 @@ from abogen.kokoro_text_normalization import normalize_for_pipeline
 from abogen.normalization_settings import build_apostrophe_config
 from abogen.text_extractor import extract_from_path
 from abogen.voice_cache import ensure_voice_assets
-from abogen.webui.conversion_runner import SAMPLE_RATE, _select_device, _to_float32, _spec_to_voice_ids
+from abogen.domain.device import select_device as _select_device
+from abogen.domain.audio_helpers import to_float32 as _to_float32, SAMPLE_RATE
+from abogen.domain.voice_resolution import spec_to_voice_ids as _spec_to_voice_ids
 from abogen.domain.voice_loader import resolve_voice
 from abogen.domain.split_pattern import get_split_pattern
+from abogen.domain.enums import Language
 from abogen.tts_plugin.utils import create_pipeline
 
 
@@ -43,11 +46,11 @@ def _resolve_voice_setting(value: str) -> tuple[str, Optional[str], Optional[str
     return resolve_voice_setting(value)
 
 
-def _load_pipeline(language: str, use_gpu: bool) -> Any:
+def _load_pipeline(language: Language, use_gpu: bool) -> Any:
     device = "cpu"
     if use_gpu:
         device = _select_device()
-    return create_pipeline("kokoro", lang_code=language, device=device)
+    return create_pipeline("kokoro", language=language, device=device)
 
 
 def _extract_cases_from_text(text: str) -> List[Tuple[str, str]]:
@@ -127,32 +130,14 @@ def run_debug_tts_wavs(
     if missing:
         raise RuntimeError(f"Debug EPUB missing expected codes: {', '.join(missing)}")
 
-    language = str(settings.get("language") or "a").strip() or "a"
-    # Kokoro's KPipeline expects short language codes like "a" (American English),
-    # but older settings may store ISO-like values such as "en".
-    language_aliases = {
-        "en": "a",
-        "en-us": "a",
-        "en_us": "a",
-        "en-gb": "b",
-        "en_gb": "b",
-        "es": "e",
-        "es-es": "e",
-        "fr": "f",
-        "fr-fr": "f",
-        "hi": "h",
-        "it": "i",
-        "pt": "p",
-        "pt-br": "p",
-        "ja": "j",
-        "jp": "j",
-        "zh": "z",
-        "zh-cn": "z",
-    }
-    language = language_aliases.get(language.lower(), language)
+    raw_language = str(settings.get("language") or "en-US").strip() or "en-US"
+    try:
+        language = Language.from_str(raw_language)
+    except ValueError:
+        language = Language.EN_US
     voice_spec = str(settings.get("default_voice") or "").strip()
     use_gpu = bool(settings.get("use_gpu", False))
-    speed = float(settings.get("default_speed", 1.0) or 1.0)
+    speed = float(settings.get("default_speed") or 1.0)
 
     # Settings may store "profile:<name>" which is not a Kokoro voice ID.
     # Resolve it to a concrete voice formula (e.g. "af_heart*0.5+...") so Kokoro
@@ -162,7 +147,10 @@ def run_debug_tts_wavs(
         if resolved_voice:
             voice_spec = resolved_voice
         if profile_language:
-            language = str(profile_language).strip() or language
+            try:
+                language = Language.from_str(str(profile_language).strip()) or language
+            except (ValueError, AttributeError):
+                pass
     except Exception:
         # Voice profile resolution is best-effort; fall back to raw voice_spec.
         pass

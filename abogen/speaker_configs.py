@@ -4,7 +4,7 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
-from abogen.constants import LANGUAGE_DESCRIPTIONS
+from abogen.constants import KOKORO_CODE_LABELS
 from abogen.utils import get_user_config_path
 
 _CONFIG_WRAPPER_KEY = "abogen_speaker_configs"
@@ -163,4 +163,4 @@ def list_configs() -> List[Dict[str, Any]]:
 
 def describe_language(code: str) -> str:
     code = (code or "a").lower()
-    return LANGUAGE_DESCRIPTIONS.get(code, code.upper())
+    return KOKORO_CODE_LABELS.get(code, code.upper())

@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from abogen.domain.enums import Language
+
 
 @dataclass(frozen=True)
 class AudioFormat:
@@ -103,9 +105,9 @@ class EngineConfig:
 
     Attributes:
         device: Device to use (e.g., "cpu", "cuda:0").
-        lang_code: Language code for the engine (e.g., "a" for Kokoro English).
-            Plugins that do not require a language code ignore this field.
+        language: Language enum value. The engine converts to its internal
+            format internally — callers never see engine-specific codes.
     """
 
     device: str = "cpu"
-    lang_code: str = "a"
+    language: Language = Language.EN_US

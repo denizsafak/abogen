@@ -10,6 +10,7 @@ from typing import Any, Iterator
 
 import numpy as np
 
+from abogen.domain.enums import Language
 from abogen.tts_plugin.plugin_manager import get_plugin_manager
 
 
@@ -123,7 +124,7 @@ class Pipeline:
 
     Presents the same interface that old callers expect::
 
-        pipeline = create_pipeline("kokoro", lang_code="a", device="cpu")
+        pipeline = create_pipeline("kokoro", language=Language.EN_US, device="cpu")
         for segment in pipeline(text, voice="af_nova", speed=1.0):
             audio = segment.audio
     """
@@ -200,7 +201,7 @@ class Pipeline:
 def create_pipeline(
     plugin_id: str,
     *,
-    lang_code: str = "a",
+    language: Language = Language.EN_US,
     device: str = "cpu",
 ) -> Pipeline:
     """Create a callable TTS pipeline via the Plugin Architecture.
@@ -211,7 +212,7 @@ def create_pipeline(
 
     Args:
         plugin_id: Plugin identifier (e.g., "kokoro", "supertonic").
-        lang_code: Language code for the engine.
+        language: Language enum value (app-layer type, not engine-specific).
         device: Device to use (e.g., "cpu", "cuda:0").
 
     Returns:
@@ -235,7 +236,7 @@ def create_pipeline(
         })(),
     )
 
-    config = EngineConfig(device=device, lang_code=lang_code)
+    config = EngineConfig(device=device, language=language)
 
     engine = manager.create_engine(plugin_id, context=ctx, model_path=None, config=config)
     return Pipeline(engine)

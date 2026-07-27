@@ -6,6 +6,7 @@ from pathlib import Path
 from flask import Blueprint, request, jsonify, send_file, url_for, current_app
 from flask.typing import ResponseReturnValue
 
+from abogen.domain.enums import Language
 from abogen.webui.routes.utils.settings import (
     load_settings,
     load_integration_settings,
@@ -46,6 +47,21 @@ from abogen.text_extractor import extract_from_path
 from werkzeug.utils import secure_filename
 
 api_bp = Blueprint("api", __name__)
+
+
+def _parse_language(value: Any) -> Language:
+    """Parse a frontend language value to Language enum.
+
+    This is the API boundary — frontend sends strings, backend parses
+    to Language enum. No engine-specific codes leak outside the engine.
+    """
+    if isinstance(value, Language):
+        return value
+    try:
+        return Language.from_str(str(value or "").strip())
+    except (ValueError, AttributeError):
+        return Language.EN_US
+
 
 # --- Voice Profile Routes ---
 
@@ -152,7 +168,7 @@ def api_export_voice_profiles() -> ResponseReturnValue:
 def api_voice_profiles_preview() -> ResponseReturnValue:
     payload = request.get_json(force=True, silent=True) or {}
     text = str(payload.get("text") or "").strip() or "Hello world"
-    language = str(payload.get("language") or "a").strip().lower() or "a"
+    language = _parse_language(payload.get("language"))
     speed = coerce_float(payload.get("speed"), 1.0)
     max_seconds = coerce_float(payload.get("max_seconds"), 8.0)
 
@@ -186,7 +202,7 @@ def api_voice_profiles_preview() -> ResponseReturnValue:
             speed = float(normalized_entry.get("speed") or speed)
         else:
             voice_spec = formula_from_profile(normalized_entry) or ""
-            language = str(normalized_entry.get("language") or language)
+            language = _parse_language(normalized_entry.get("language") or language)
     elif formula:
         voice_spec = formula
         resolved_provider = "kokoro"
@@ -221,7 +237,7 @@ def api_speaker_preview() -> ResponseReturnValue:
     pending_id = str(payload.get("pending_id") or "").strip()
     text = payload.get("text", "Hello world")
     voice = payload.get("voice", "af_heart")
-    language = payload.get("language", "a")
+    language = _parse_language(payload.get("language"))
     speed_value = payload.get("speed")
     speed = coerce_float(speed_value, 1.0)
     tts_provider = str(payload.get("tts_provider") or "").strip().lower()
@@ -576,7 +592,7 @@ def api_entity_pronunciation_preview() -> ResponseReturnValue:
     token = payload.get("token", "").strip()
     pronunciation = payload.get("pronunciation", "").strip()
     voice = payload.get("voice", "").strip()
-    language = payload.get("language", "a").strip()
+    language = _parse_language(payload.get("language"))
     
     if not token and not pronunciation:
         return jsonify({"error": "Token or pronunciation required"}), 400

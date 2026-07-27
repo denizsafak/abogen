@@ -37,13 +37,13 @@ class TestConversionRequestBasics:
         assert "merge_chapters_at_end" in defaults
 
     def test_split_pattern_computation(self):
-        pattern = get_split_pattern("a", "Disabled")
+        pattern = get_split_pattern(Language.EN_US, "Disabled")
         assert isinstance(pattern, str)
         assert len(pattern) > 0
 
     def test_split_pattern_varies_by_subtitle_mode(self):
-        pattern_disabled = get_split_pattern("a", "Disabled")
-        pattern_sentence = get_split_pattern("a", "Sentence")
+        pattern_disabled = get_split_pattern(Language.EN_US, "Disabled")
+        pattern_sentence = get_split_pattern(Language.EN_US, "Sentence")
         # Different modes should produce different patterns
         assert isinstance(pattern_disabled, str)
         assert isinstance(pattern_sentence, str)

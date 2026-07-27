@@ -1,3 +1,4 @@
+from abogen.domain.enums import Language
 from abogen.webui.routes.utils import synthesize
 
 
@@ -45,7 +46,7 @@ def test_preview_applies_manual_override_before_normalization(monkeypatch):
         synthesize.generate_preview_audio(
             text="He said Unfu*k loudly.",
             voice_spec="M1",
-            language="en",
+            language=Language.EN_US,
             speed=1.0,
             use_gpu=False,
             tts_provider="supertonic",

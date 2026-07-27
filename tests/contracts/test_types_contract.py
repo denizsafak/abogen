@@ -8,6 +8,7 @@ These tests verify that value objects satisfy the architectural requirements:
 
 import pytest
 
+from abogen.domain.enums import Language
 from abogen.tts_plugin.types import (
     AudioFormat,
     Duration,
@@ -192,23 +193,23 @@ class TestEngineConfigContract:
         config = EngineConfig(device="cuda:0")
         assert config.device == "cuda:0"
 
-    def test_default_lang_code(self) -> None:
+    def test_default_language(self) -> None:
         config = EngineConfig()
-        assert config.lang_code == "a"
+        assert config.language == Language.EN_US
 
-    def test_custom_lang_code(self) -> None:
-        config = EngineConfig(lang_code="j")
-        assert config.lang_code == "j"
+    def test_custom_language(self) -> None:
+        config = EngineConfig(language=Language.JA)
+        assert config.language == Language.JA
 
     def test_immutability(self) -> None:
         config = EngineConfig()
         with pytest.raises(AttributeError):
             config.device = "cuda:0"  # type: ignore[misc]
 
-    def test_immutability_lang_code(self) -> None:
+    def test_immutability_language(self) -> None:
         config = EngineConfig()
         with pytest.raises(AttributeError):
-            config.lang_code = "j"  # type: ignore[misc]
+            config.language = Language.JA  # type: ignore[misc]
 
     def test_unknown_keys_ignored_per_spec(self) -> None:
         """Architecture spec: Unknown keys are ignored (no error).
@@ -225,11 +226,11 @@ class TestEngineConfigContract:
         EngineConfig may contain fields that are not relevant to every plugin.
         Plugins MUST ignore fields they do not need, not raise on them.
         """
-        config = EngineConfig(device="cuda:0", lang_code="j")
+        config = EngineConfig(device="cuda:0", language=Language.JA)
         assert config.device == "cuda:0"
-        assert config.lang_code == "j"
+        assert config.language == Language.JA
         # A plugin that only needs device simply reads config.device
-        # and ignores config.lang_code — this must not raise.
+        # and ignores config.language — this must not raise.
 
     def test_engine_config_contains_engine_instance_configuration(self) -> None:
         """Architecture Amendment #1: EngineConfig definition.
@@ -238,7 +239,7 @@ class TestEngineConfigContract:
         Engine instance is created and that remain constant throughout
         the lifetime of that Engine.
         """
-        config = EngineConfig(device="cpu", lang_code="a")
+        config = EngineConfig(device="cpu", language=Language.EN_US)
         # Both fields are init-time, immutable, engine-scoped.
         assert config.device == "cpu"
-        assert config.lang_code == "a"
+        assert config.language == Language.EN_US

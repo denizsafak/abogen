@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Mapping
 
 from abogen.constants import (
-    LANGUAGE_DESCRIPTIONS,
+    KOKORO_CODE_LABELS,
     SUBTITLE_FORMATS,
     SUPPORTED_SOUND_FORMATS,
 )
@@ -135,10 +135,10 @@ def _norm_speaker_spec(value: Any, default: str) -> str:
 
 def _norm_language_list(value: Any, default: list) -> list:
     if isinstance(value, (list, tuple, set)):
-        return [code for code in value if isinstance(code, str) and code in LANGUAGE_DESCRIPTIONS]
+        return [code for code in value if isinstance(code, str) and code in KOKORO_CODE_LABELS]
     if isinstance(value, str):
         parts = [item.strip().lower() for item in value.split(",") if item.strip()]
-        return [code for code in parts if code in LANGUAGE_DESCRIPTIONS]
+        return [code for code in parts if code in KOKORO_CODE_LABELS]
     return default
 
 

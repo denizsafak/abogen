@@ -254,7 +254,7 @@ def execute_conversion(
             audio_sink=audio_sink,
             subtitle_mode=effective_subtitle_mode,
             max_subtitle_words=request.max_subtitle_words,
-            lang_code=request.language,
+            language=request.language,
             use_spacy_segmentation=use_spacy,
         )
 
@@ -470,7 +470,7 @@ def execute_conversion(
                             subtitle_writer,
                             subtitle_mode=request.subtitle_mode,
                             max_subtitle_words=request.max_subtitle_words,
-                            lang_code=request.language,
+                            language=request.language,
                             use_spacy_segmentation=use_spacy,
                             fallback_end_time=stats.current_time,
                         )
@@ -480,7 +480,7 @@ def execute_conversion(
                             chapter_subtitle_writer,
                             subtitle_mode=request.subtitle_mode,
                             max_subtitle_words=request.max_subtitle_words,
-                            lang_code=request.language,
+                            language=request.language,
                             use_spacy_segmentation=use_spacy,
                             fallback_end_time=stats.current_time,
                         )

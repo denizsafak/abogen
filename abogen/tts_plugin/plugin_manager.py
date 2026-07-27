@@ -8,7 +8,7 @@ Usage:
     from abogen.tts_plugin.plugin_manager import get_plugin_manager
 
     manager = get_plugin_manager()
-    engine = manager.create_engine("kokoro", lang_code="a", device="cpu")
+    engine = manager.create_engine("kokoro", language=Language.EN_US, device="cpu")
     session = engine.create_session()
     try:
         result = session.synthesize("Hello world")

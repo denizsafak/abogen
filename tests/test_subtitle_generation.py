@@ -2,6 +2,7 @@
 
 import pytest
 
+from abogen.domain.enums import Language
 from abogen.domain.subtitle_generation import (
     process_subtitle_tokens,
     PUNCTUATION_SENTENCE,
@@ -20,7 +21,7 @@ class TestProcessSubtitleTokens:
             subtitle_entries=entries,
             max_subtitle_words=50,
             subtitle_mode="Sentence",
-            lang_code="a",
+            language=Language.EN_US,
         )
         assert entries == []
 
@@ -41,7 +42,7 @@ class TestProcessSubtitleTokens:
             subtitle_entries=entries,
             max_subtitle_words=50,
             subtitle_mode="Disabled",
-            lang_code="a",
+            language=Language.EN_US,
         )
         # Disabled mode doesn't have special handling in current implementation
         # It processes tokens normally
@@ -59,7 +60,7 @@ class TestProcessSubtitleTokens:
             subtitle_entries=entries,
             max_subtitle_words=50,
             subtitle_mode="Line",
-            lang_code="a",
+            language=Language.EN_US,
         )
         # Line mode processes all tokens into entries
         assert len(entries) >= 1
@@ -82,7 +83,7 @@ class TestProcessSubtitleTokens:
             subtitle_entries=entries,
             max_subtitle_words=50,
             subtitle_mode="Sentence",
-            lang_code="a",
+            language=Language.EN_US,
         )
         assert len(entries) >= 1
         # Should have at least one entry with both sentences or split
@@ -106,7 +107,7 @@ class TestProcessSubtitleTokens:
             subtitle_entries=entries,
             max_subtitle_words=50,
             subtitle_mode="2",  # 2 words per entry
-            lang_code="a",
+            language=Language.EN_US,
         )
         assert len(entries) >= 2
         # Check that entries are split roughly by word count
@@ -125,7 +126,7 @@ class TestProcessSubtitleTokens:
             subtitle_entries=entries,
             max_subtitle_words=50,
             subtitle_mode="Line",
-            lang_code="a",
+            language=Language.EN_US,
             fallback_end_time=10.0,
         )
         assert len(entries) == 1
@@ -143,7 +144,7 @@ class TestProcessSubtitleTokens:
             subtitle_entries=entries,
             max_subtitle_words=50,
             subtitle_mode="Sentence + Highlighting",
-            lang_code="a",
+            language=Language.EN_US,
         )
         assert len(entries) >= 1
         # Should contain karaoke tags
@@ -162,7 +163,7 @@ class TestProcessSubtitleTokens:
             subtitle_entries=entries,
             max_subtitle_words=3,
             subtitle_mode="Line",
-            lang_code="a",
+            language=Language.EN_US,
         )
         # Should have more than 1 entry due to word limit
         assert len(entries) > 1
@@ -179,7 +180,7 @@ class TestProcessSubtitleTokens:
             subtitle_entries=entries,
             max_subtitle_words=50,
             subtitle_mode="Sentence",
-            lang_code="a",
+            language=Language.EN_US,
         )
         assert len(entries) >= 1
         # Check that timing is preserved

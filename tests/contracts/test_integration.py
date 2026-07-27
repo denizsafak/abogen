@@ -14,6 +14,8 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
+from abogen.domain.enums import Language
+
 from abogen.tts_plugin.engine import Engine, EngineSession
 from abogen.tts_plugin.errors import EngineError
 from abogen.tts_plugin.plugin_manager import PluginManager, get_plugin_manager, reset_plugin_manager
@@ -328,7 +330,7 @@ class TestRegression:
         manager._loaded = True
         
         with patch("abogen.tts_plugin.utils.get_plugin_manager", return_value=manager):
-            backend = create_pipeline("mock_tts", lang_code="a", device="cpu")
+            backend = create_pipeline("mock_tts", language=Language.EN_US, device="cpu")
             
             # Old interface: pipeline(text, voice=..., speed=..., split_pattern=...)
             segments = list(backend(

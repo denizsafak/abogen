@@ -23,7 +23,7 @@ from typing import Any, Callable, Optional, Protocol
 
 from abogen.domain.audio_sink import AudioSink
 from abogen.domain.conversion_pipeline import tts_segments
-from abogen.domain.enums import SubtitleMode
+from abogen.domain.enums import Language, SubtitleMode
 from abogen.domain.normalization import TTSContext
 from abogen.domain.progress import calc_etr_str
 from abogen.domain.subtitle_generation import process_subtitle_tokens
@@ -153,7 +153,7 @@ def process_and_write_subtitles(
     *,
     subtitle_mode: str,
     max_subtitle_words: int,
-    lang_code: str,
+    language: Language,
     use_spacy_segmentation: bool,
     fallback_end_time: float,
 ) -> None:
@@ -169,7 +169,7 @@ def process_and_write_subtitles(
         new_entries,
         max_subtitle_words,
         subtitle_mode,
-        lang_code,
+        language,
         use_spacy_segmentation=use_spacy_segmentation,
         fallback_end_time=fallback_end_time,
     )
@@ -191,7 +191,7 @@ class SynthParams:
     audio_sink: Optional[AudioSink] = None
     subtitle_mode: str = "Disabled"
     max_subtitle_words: int = 50
-    lang_code: str = "a"
+    language: Language = Language.EN_US
     use_spacy_segmentation: bool = False
 
 

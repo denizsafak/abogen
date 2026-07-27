@@ -165,6 +165,7 @@ def create_engine(
     """
     try:
         KPipeline = _load_kpipeline()
+        from plugins.kokoro.engine import engine_language
 
         # Determine repo_id from model_path or use default
         repo_id = "hexgrad/Kokoro-82M"
@@ -172,8 +173,9 @@ def create_engine(
             # If a specific model path is provided, use it as repo_id
             repo_id = str(model_path)
 
+        kokoro_code = engine_language(config.language)
         pipeline = KPipeline(
-            lang_code=config.lang_code,
+            lang_code=kokoro_code,
             repo_id=repo_id,
             device=config.device,
         )

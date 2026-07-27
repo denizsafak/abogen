@@ -282,7 +282,7 @@ def emit_text_to_sinks(
     # subtitle
     subtitle_writer: Any = None,
     subtitle_mode: str = "Disabled",
-    subtitle_lang: str = "a",
+    subtitle_lang: Language = Language.EN_US,
     max_subtitle_words: int = 50,
     use_spacy_segmentation: bool = True,
     # normalization

@@ -21,20 +21,6 @@ SPACY_MODELS = {
     Language.HI: "xx_sent_ud_sm",
 }
 
-# Kokoro single-letter codes -> Language enum (inverse of pipeline_factory._KOKORO_LANG_MAP)
-_KOKORO_TO_LANGUAGE = {
-    "a": Language.EN_US,
-    "b": Language.EN_GB,
-    "e": Language.ES,
-    "f": Language.FR,
-    "h": Language.HI,
-    "i": Language.IT,
-    "j": Language.JA,
-    "p": Language.PT_BR,
-    "z": Language.ZH,
-}
-
-
 def _load_spacy():
     """Lazy load spaCy module."""
     global _spacy
@@ -48,12 +34,12 @@ def _load_spacy():
     return _spacy
 
 
-def get_spacy_model(lang_code, log_callback=None):
+def get_spacy_model(language: Language, log_callback=None):
     """
-    Get or load a spaCy model for the given language code.
+    Get or load a spaCy model for the given language.
 
     Args:
-        lang_code: Language code or Language enum (e.g., "a", "en-US", Language.EN_US)
+        language: Language enum value.
         log_callback: Optional function to log messages
 
     Returns:
@@ -61,36 +47,24 @@ def get_spacy_model(lang_code, log_callback=None):
     """
 
     def log(msg, is_error=False):
-        # Prefer GUI log callback when provided to avoid spamming stdout.
         if log_callback:
             color = "red" if is_error else "grey"
             try:
                 log_callback((msg, color))
             except Exception:
-                # Fallback to printing if callback misbehaves
                 print(msg)
         else:
             print(msg)
 
-    # Normalize to Language enum
-    if not isinstance(lang_code, Language):
-        if isinstance(lang_code, str) and lang_code in _KOKORO_TO_LANGUAGE:
-            lang_code = _KOKORO_TO_LANGUAGE[lang_code]
-        else:
-            try:
-                lang_code = Language.from_str(lang_code)
-            except ValueError:
-                log(f"\nspaCy: Unknown language '{lang_code}'...")
-                return None
+    if not isinstance(language, Language):
+        raise TypeError(f"language must be Language enum, got {type(language).__name__}: {language!r}")
 
-    # Check if model is cached
-    if lang_code in _nlp_cache:
-        return _nlp_cache[lang_code]
+    if language in _nlp_cache:
+        return _nlp_cache[language]
 
-    # Check if language is supported
-    model_name = SPACY_MODELS.get(lang_code)
+    model_name = SPACY_MODELS.get(language)
     if not model_name:
-        log(f"\nspaCy: No model mapping for language '{lang_code}'...")
+        log(f"\nspaCy: No model mapping for language '{language}'...")
         return None
 
     # Lazy load spaCy
@@ -114,7 +88,7 @@ def get_spacy_model(lang_code, log_callback=None):
         if "parser" not in nlp.pipe_names and "sentencizer" not in nlp.pipe_names:
             nlp.add_pipe("sentencizer")
 
-        _nlp_cache[lang_code] = nlp
+        _nlp_cache[language] = nlp
         return nlp
     except OSError:
         # Model not found, attempt download
@@ -131,7 +105,7 @@ def get_spacy_model(lang_code, log_callback=None):
             if "parser" not in nlp.pipe_names and "sentencizer" not in nlp.pipe_names:
                 nlp.add_pipe("sentencizer")
 
-            _nlp_cache[lang_code] = nlp
+            _nlp_cache[language] = nlp
             log(f"spaCy model '{model_name}' downloaded and loaded")
             return nlp
         except Exception as e:
@@ -145,19 +119,19 @@ def get_spacy_model(lang_code, log_callback=None):
         return None
 
 
-def segment_sentences(text, lang_code, log_callback=None):
+def segment_sentences(text, language: Language, log_callback=None):
     """
     Segment text into sentences using spaCy.
 
     Args:
         text: Text to segment
-        lang_code: Language code
+        language: Language enum value
         log_callback: Optional function to log messages
 
     Returns:
         List of sentence strings, or None if spaCy unavailable
     """
-    nlp = get_spacy_model(lang_code, log_callback)
+    nlp = get_spacy_model(language, log_callback)
     if nlp is None:
         return None
 

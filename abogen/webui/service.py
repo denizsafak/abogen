@@ -14,6 +14,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Mapping
 
+from abogen.domain.enums import Language
 from abogen.utils import get_internal_cache_path, get_user_settings_dir, load_config
 from abogen.voice_cache import bootstrap_voice_cache
 from abogen.integrations.audiobookshelf import (
@@ -105,7 +106,7 @@ class Job:
     id: str
     original_filename: str
     stored_path: Path
-    language: str
+    language: Language
     voice: str
     speed: float
     use_gpu: bool
@@ -296,7 +297,7 @@ class PendingJob:
     id: str
     original_filename: str
     stored_path: Path
-    language: str
+    language: Language
     voice: str
     speed: float
     use_gpu: bool
@@ -384,7 +385,7 @@ class ConversionService:
         *,
         original_filename: str,
         stored_path: Path,
-        language: str,
+        language: Language,
         voice: str,
         speed: float,
         tts_provider: str = "kokoro",
@@ -910,7 +911,7 @@ class ConversionService:
             "id": job.id,
             "original_filename": job.original_filename,
             "stored_path": str(job.stored_path),
-            "language": job.language,
+            "language": job.language.value if isinstance(job.language, Language) else str(job.language),
             "tts_provider": getattr(job, "tts_provider", "kokoro"),
             "voice": job.voice,
             "speed": job.speed,
@@ -1026,11 +1027,19 @@ class ConversionService:
         stored_path = Path(payload["stored_path"])
         output_folder_raw = payload.get("output_folder")
         output_folder = Path(output_folder_raw) if output_folder_raw else None
+        raw_lang = payload.get("language", "")
+        if isinstance(raw_lang, Language):
+            language = raw_lang
+        else:
+            try:
+                language = Language.from_str(str(raw_lang or "").strip())
+            except (ValueError, AttributeError):
+                language = Language.EN_US
         job = Job(
             id=payload["id"],
             original_filename=payload["original_filename"],
             stored_path=stored_path,
-            language=payload.get("language", "a"),
+            language=language,
             tts_provider=str(payload.get("tts_provider") or "kokoro"),
             voice=payload.get("voice", ""),
             speed=float(payload.get("speed", 1.0)),
