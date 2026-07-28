@@ -129,12 +129,9 @@ def prepare_text_for_tts(
 def build_tts_context(
     *,
     language: Language,
-    subtitle_mode: str = "Disabled",
-    pronunciation_overrides: Optional[List[Dict[str, Any]]] = None,
-    manual_overrides: Optional[List[Dict[str, Any]]] = None,
-    heteronym_overrides: Optional[List[Dict[str, Any]]] = None,
+    subtitle: "SubtitleConfig | str" = "Disabled",
+    pronunciation: Optional["PronunciationConfig"] = None,
     speakers: Optional[Dict[str, Any]] = None,
-    normalization_overrides: Optional[Mapping[str, Any]] = None,
     usage_counter: Optional[Dict[str, int]] = None,
     log_callback: Optional[Callable[[str, str], None]] = None,
 ) -> TTSContext:
@@ -145,19 +142,17 @@ def build_tts_context(
 
     Args:
         language: Language enum value.
-        subtitle_mode: Subtitle mode string.
-        pronunciation_overrides: List of pronunciation override dicts.
-        manual_overrides: List of manual override dicts.
-        heteronym_overrides: List of heteronym override dicts.
+        subtitle: SubtitleConfig object or subtitle mode string.
+        pronunciation: PronunciationConfig with override rules.
         speakers: Speaker profile mapping.
-        normalization_overrides: Per-job normalization setting overrides.
         usage_counter: Mutable dict for tracking override usage.
         log_callback: Callable(level, message) for warnings.
 
     Returns:
         TTSContext ready for text normalization.
     """
-    from abogen.domain.enums import Language, SubtitleMode
+    from abogen.domain.config_types import PronunciationConfig, SubtitleConfig
+    from abogen.domain.enums import SubtitleMode
     from abogen.domain.pronunciation import (
         compile_heteronym_sentence_rules,
         compile_pronunciation_rules,
@@ -169,12 +164,25 @@ def build_tts_context(
         if log_callback:
             log_callback(level, msg)
 
+    # Resolve subtitle mode
+    if isinstance(subtitle, SubtitleConfig):
+        resolved_subtitle = subtitle.mode
+    else:
+        try:
+            resolved_subtitle = SubtitleMode.from_str(subtitle) if not isinstance(subtitle, SubtitleMode) else subtitle
+        except ValueError:
+            resolved_subtitle = SubtitleMode.DISABLED
+
+    # Resolve pronunciation config
+    if pronunciation is None:
+        pronunciation = PronunciationConfig()
+
     # Get runtime normalization settings
     runtime_settings = get_runtime_settings()
 
     # Apply per-job normalization overrides
-    if normalization_overrides:
-        runtime_settings = _apply_overrides(runtime_settings, normalization_overrides)
+    if pronunciation.normalization_overrides:
+        runtime_settings = _apply_overrides(runtime_settings, pronunciation.normalization_overrides)
 
     # Build apostrophe config
     apostrophe_config = build_apostrophe_config(settings=runtime_settings)
@@ -202,16 +210,12 @@ def build_tts_context(
     # Compute split pattern
     if not isinstance(language, Language):
         raise TypeError(f"language must be Language enum, got {type(language).__name__}: {language!r}")
-    try:
-        mode = SubtitleMode.from_str(subtitle_mode) if not isinstance(subtitle_mode, SubtitleMode) else subtitle_mode
-    except ValueError:
-        mode = SubtitleMode.DISABLED
-    split_pattern = get_split_pattern(language, mode)
+    split_pattern = get_split_pattern(language, resolved_subtitle)
 
-    # Merge pronunciation overrides (accepts dict or object)
+    # Merge pronunciation overrides
     source = {
-        "pronunciation_overrides": pronunciation_overrides or [],
-        "manual_overrides": manual_overrides or [],
+        "pronunciation_overrides": pronunciation.pronunciation_overrides,
+        "manual_overrides": pronunciation.manual_overrides,
         "speakers": speakers or {},
         "language": language,
     }
@@ -219,7 +223,7 @@ def build_tts_context(
 
     # Compile rules
     pronunciation_rules = compile_pronunciation_rules(merged_overrides)
-    heteronym_rules = compile_heteronym_sentence_rules(heteronym_overrides or [])
+    heteronym_rules = compile_heteronym_sentence_rules(pronunciation.heteronym_overrides)
 
     if heteronym_rules:
         _log(
@@ -236,6 +240,6 @@ def build_tts_context(
         split_pattern=split_pattern,
         pronunciation_rules=pronunciation_rules,
         heteronym_rules=heteronym_rules,
-        normalization_overrides=normalization_overrides,
+        normalization_overrides=pronunciation.normalization_overrides,
         usage_counter=usage_counter if usage_counter is not None else {},
     )

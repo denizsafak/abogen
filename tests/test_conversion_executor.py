@@ -14,7 +14,8 @@ from unittest.mock import MagicMock, patch
 from dataclasses import dataclass, field
 from typing import Any
 
-from abogen.domain.enums import Language
+from abogen.domain.config_types import SubtitleConfig
+from abogen.domain.enums import Language, SubtitleMode
 from abogen.domain.conversion_engine import (
     synthesize_text,
     SynthParams,
@@ -253,8 +254,7 @@ class TestProcessAndWriteSubtitles:
         process_and_write_subtitles(
             [],
             writer,
-            subtitle_mode="Sentence",
-            max_subtitle_words=5,
+            subtitle=SubtitleConfig(mode=SubtitleMode.SENTENCE, max_words=5),
             language=Language.EN_US,
             use_spacy_segmentation=False,
             fallback_end_time=10.0,
@@ -270,8 +270,7 @@ class TestProcessAndWriteSubtitles:
         process_and_write_subtitles(
             tokens,
             writer,
-            subtitle_mode="Sentence",
-            max_subtitle_words=5,
+            subtitle=SubtitleConfig(mode=SubtitleMode.SENTENCE, max_words=5),
             language=Language.EN_US,
             use_spacy_segmentation=False,
             fallback_end_time=2.0,
@@ -292,8 +291,7 @@ class TestProcessAndWriteSubtitles:
         process_and_write_subtitles(
             tokens,
             writer,
-            subtitle_mode="Line",
-            max_subtitle_words=5,
+            subtitle=SubtitleConfig(mode=SubtitleMode.LINE, max_words=5),
             language=Language.EN_US,
             use_spacy_segmentation=False,
             fallback_end_time=3.0,
@@ -311,8 +309,7 @@ class TestProcessAndWriteSubtitles:
         process_and_write_subtitles(
             tokens,
             writer,
-            subtitle_mode="Disabled",
-            max_subtitle_words=5,
+            subtitle=SubtitleConfig(mode=SubtitleMode.DISABLED, max_words=5),
             language=Language.EN_US,
             use_spacy_segmentation=False,
             fallback_end_time=2.0,
@@ -366,8 +363,7 @@ class TestFullPipeline:
         process_and_write_subtitles(
             tokens,
             subtitle_writer,
-            subtitle_mode="Sentence",
-            max_subtitle_words=5,
+            subtitle=SubtitleConfig(mode=SubtitleMode.SENTENCE, max_words=5),
             language=Language.EN_US,
             use_spacy_segmentation=False,
             fallback_end_time=stats.current_time,

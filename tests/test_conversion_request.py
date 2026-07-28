@@ -16,7 +16,14 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from abogen.application.conversion_request import ConversionRequest, ConversionRequestError
-from abogen.application.conversion_config import ChapterChunkConfig, WordSubstitutionConfig
+from abogen.application.conversion_config import (
+    ChapterChunkConfig,
+    CoverConfig,
+    PronunciationConfig,
+    SaveConfig,
+    SubtitleConfig,
+    WordSubstitutionConfig,
+)
 from abogen.domain.enums import Language, OutputFormat, SaveMode, SubtitleFormat, SubtitleMode
 from abogen.domain.normalization import TTSContext
 from abogen.domain.settings_core import settings_defaults
@@ -202,23 +209,11 @@ class TestConversionRequestValidation:
 
     def test_defaults_are_valid(self):
         req = ConversionRequest()
-        assert req.max_subtitle_words == 50
+        assert req.subtitle.max_words == 50
         assert req.speed == 1.0
         assert req.supertonic_total_steps == 5
         assert req.output_format == OutputFormat.WAV
-        assert req.subtitle_mode == SubtitleMode.DISABLED
-
-    def test_max_subtitle_words_clamped_below_min(self):
-        req = ConversionRequest(max_subtitle_words=0)
-        assert req.max_subtitle_words == 1
-
-    def test_max_subtitle_words_clamped_above_max(self):
-        req = ConversionRequest(max_subtitle_words=999)
-        assert req.max_subtitle_words == 500
-
-    def test_max_subtitle_words_valid(self):
-        req = ConversionRequest(max_subtitle_words=100)
-        assert req.max_subtitle_words == 100
+        assert req.subtitle.mode == SubtitleMode.DISABLED
 
     def test_speed_clamped_below_min(self):
         req = ConversionRequest(speed=0.1)
@@ -256,10 +251,6 @@ class TestConversionRequestValidation:
         with pytest.raises(ValueError, match="speaker_mode"):
             ConversionRequest(chapter_chunk=ChapterChunkConfig(speaker_mode="invalid"))
 
-    def test_invalid_max_subtitle_words_type_raises(self):
-        with pytest.raises(ConversionRequestError, match="max_subtitle_words"):
-            ConversionRequest(max_subtitle_words="not_a_number")
-
     def test_invalid_speed_type_raises(self):
         with pytest.raises(ConversionRequestError, match="speed"):
             ConversionRequest(speed="fast")
@@ -276,12 +267,27 @@ class TestConversionRequestValidation:
         req = ConversionRequest(
             language=Language.FR,
             output_format=OutputFormat.MP3,
-            subtitle_mode=SubtitleMode.SENTENCE,
-            subtitle_format=SubtitleFormat.ASS,
-            save_mode=SaveMode.CUSTOM_FOLDER,
+            subtitle=SubtitleConfig(
+                mode=SubtitleMode.SENTENCE,
+                format=SubtitleFormat.ASS,
+            ),
+            save=SaveConfig(mode=SaveMode.CUSTOM_FOLDER),
         )
         assert req.language == Language.FR
         assert req.output_format == OutputFormat.MP3
-        assert req.subtitle_mode == SubtitleMode.SENTENCE
-        assert req.subtitle_format == SubtitleFormat.ASS
-        assert req.save_mode == SaveMode.CUSTOM_FOLDER
+        assert req.subtitle.mode == SubtitleMode.SENTENCE
+        assert req.subtitle.format == SubtitleFormat.ASS
+        assert req.save.mode == SaveMode.CUSTOM_FOLDER
+
+    def test_config_objects_constructed(self):
+        req = ConversionRequest(
+            subtitle=SubtitleConfig(max_words=100),
+            cover=CoverConfig(path=Path("/tmp/cover.jpg"), mime="image/jpeg"),
+            pronunciation=PronunciationConfig(normalization_overrides={"key": "val"}),
+            save=SaveConfig(save_as_project=True),
+        )
+        assert req.subtitle.max_words == 100
+        assert req.cover.path == Path("/tmp/cover.jpg")
+        assert req.cover.mime == "image/jpeg"
+        assert req.pronunciation.normalization_overrides == {"key": "val"}
+        assert req.save.save_as_project is True

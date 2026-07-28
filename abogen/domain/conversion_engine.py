@@ -151,24 +151,34 @@ def process_and_write_subtitles(
     accumulated_tokens: list[dict],
     subtitle_writer: Any,
     *,
-    subtitle_mode: str,
-    max_subtitle_words: int,
+    subtitle: "SubtitleConfig | str",
+    max_subtitle_words: int | None = None,
     language: Language,
     use_spacy_segmentation: bool,
     fallback_end_time: float,
 ) -> None:
     """Process accumulated subtitle tokens and write entries to a subtitle writer.
 
-    This is the standard subtitle post-processing step shared by both UIs.
+    Accepts a SubtitleConfig object or a subtitle mode string
+    for backward compatibility.
     """
+    from abogen.domain.config_types import SubtitleConfig
+
+    if isinstance(subtitle, SubtitleConfig):
+        mode_str = subtitle.mode.value
+        words = subtitle.max_words
+    else:
+        mode_str = subtitle
+        words = max_subtitle_words or 50
+
     if not accumulated_tokens or not subtitle_writer:
         return
     new_entries: list[tuple] = []
     process_subtitle_tokens(
         accumulated_tokens,
         new_entries,
-        max_subtitle_words,
-        subtitle_mode,
+        words,
+        mode_str,
         language,
         use_spacy_segmentation=use_spacy_segmentation,
         fallback_end_time=fallback_end_time,

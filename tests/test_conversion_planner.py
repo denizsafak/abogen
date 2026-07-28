@@ -125,12 +125,12 @@ class TestBuildConversionPlan:
 
     def test_output_layout(self):
         """Output layout is resolved from request."""
+        from abogen.application.conversion_config import SaveConfig
         with tempfile.TemporaryDirectory() as tmpdir:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             plan = build_conversion_plan(req)
 

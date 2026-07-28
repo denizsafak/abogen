@@ -20,7 +20,11 @@ from typing import Any
 
 from abogen.application.conversion_config import (
     ChapterChunkConfig,
+    CoverConfig,
     Epub3ExportConfig,
+    PronunciationConfig,
+    SaveConfig,
+    SubtitleConfig,
 )
 from abogen.application.conversion_ports import ConversionCancelled
 from abogen.application.conversion_request import ConversionRequest
@@ -57,16 +61,6 @@ def _build_request(job: Job) -> ConversionRequest:
         supertonic_total_steps=job.supertonic_total_steps,
         # Output Format
         output_format=_resolve_output_format(job.output_format),
-        subtitle_mode=_resolve_subtitle_mode(job.subtitle_mode),
-        subtitle_format=_resolve_subtitle_format(job.subtitle_format),
-        max_subtitle_words=job.max_subtitle_words,
-        # Save Options
-        save_mode=_resolve_save_mode(job.save_mode),
-        output_folder=job.output_folder,
-        save_chapters_separately=job.save_chapters_separately,
-        merge_chapters_at_end=job.merge_chapters_at_end,
-        separate_chapters_format=_resolve_output_format(job.separate_chapters_format),
-        save_as_project=job.save_as_project,
         # Timing
         silence_between_chapters=job.silence_between_chapters,
         chapter_intro_delay=job.chapter_intro_delay,
@@ -78,14 +72,30 @@ def _build_request(job: Job) -> ConversionRequest:
         normalize_chapter_opening_caps=job.normalize_chapter_opening_caps,
         # Metadata
         metadata_tags=job.metadata_tags or {},
-        # Artifacts
-        cover_image_path=job.cover_image_path,
-        cover_image_mime=job.cover_image_mime,
-        # Pronunciation overrides (raw data)
-        pronunciation_overrides=job.pronunciation_overrides or [],
-        manual_overrides=job.manual_overrides or [],
-        heteronym_overrides=job.heteronym_overrides or [],
-        normalization_overrides=job.normalization_overrides or None,
+        # Grouped configs
+        subtitle=SubtitleConfig(
+            mode=_resolve_subtitle_mode(job.subtitle_mode),
+            format=_resolve_subtitle_format(job.subtitle_format),
+            max_words=job.max_subtitle_words,
+        ),
+        save=SaveConfig(
+            mode=_resolve_save_mode(job.save_mode),
+            output_folder=job.output_folder,
+            save_chapters_separately=job.save_chapters_separately,
+            merge_chapters_at_end=job.merge_chapters_at_end,
+            separate_chapters_format=_resolve_output_format(job.separate_chapters_format),
+            save_as_project=job.save_as_project,
+        ),
+        cover=CoverConfig(
+            path=job.cover_image_path,
+            mime=job.cover_image_mime,
+        ),
+        pronunciation=PronunciationConfig(
+            pronunciation_overrides=job.pronunciation_overrides or [],
+            manual_overrides=job.manual_overrides or [],
+            heteronym_overrides=job.heteronym_overrides or [],
+            normalization_overrides=job.normalization_overrides or None,
+        ),
         # Feature configs
         epub3_export=Epub3ExportConfig(book_id=job.id) if job.generate_epub3 else None,
         chapter_chunk=ChapterChunkConfig(

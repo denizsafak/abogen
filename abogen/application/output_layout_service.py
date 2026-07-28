@@ -39,8 +39,8 @@ def resolve_output_layout(request: ConversionRequest) -> OutputLayout:
         OutputLayout with resolved paths
     """
     # Determine base output directory
-    if request.save_mode == SaveMode.CUSTOM_FOLDER and request.output_folder:
-        parent_dir = Path(request.output_folder)
+    if request.save.mode == SaveMode.CUSTOM_FOLDER and request.save.output_folder:
+        parent_dir = Path(request.save.output_folder)
     elif request.source_path:
         parent_dir = request.source_path.parent
     else:
@@ -66,7 +66,7 @@ def resolve_output_layout(request: ConversionRequest) -> OutputLayout:
     subtitle_dir = None
     metadata_dir = None
 
-    if request.save_as_project:
+    if request.save.save_as_project:
         project_root, audio_dir, subtitle_dir, metadata_dir = resolve_project_layout(
             original_filename=request.original_filename,
             save_as_project=True,
@@ -124,7 +124,7 @@ def resolve_chapter_path(
     slug = re.sub(r'[\s_]+', '_', slug).strip('_')
     if not slug:
         slug = f"chapter_{chapter_index}"
-    filename = f"{chapter_index:02d}_{slug}.{request.separate_chapters_format}"
+    filename = f"{chapter_index:02d}_{slug}.{request.save.separate_chapters_format}"
     return layout.audio_dir / "chapters" / filename
 
 
@@ -144,6 +144,6 @@ def should_merge_output(request: ConversionRequest) -> bool:
     """
     if request.output_format == OutputFormat.M4B:
         return True
-    if not request.save_chapters_separately:
+    if not request.save.save_chapters_separately:
         return True
-    return request.merge_chapters_at_end
+    return request.save.merge_chapters_at_end

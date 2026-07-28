@@ -5,12 +5,19 @@ If the object is None, the feature is disabled.
 
 This keeps ConversionRequest clean: no boolean flags for feature toggles,
 no scattered parameters across unrelated fields.
+
+Domain config types (PronunciationConfig, SubtitleConfig) live in
+domain/config_types.py — domain defines the contract, app fills them.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from abogen.domain.config_types import CoverConfig, PronunciationConfig, SubtitleConfig
+from abogen.domain.enums import OutputFormat, SaveMode
 
 
 @dataclass(frozen=True)
@@ -49,19 +56,6 @@ class Epub3ExportConfig:
 
 
 @dataclass(frozen=True)
-class PronunciationConfig:
-    """Pronunciation and normalization override settings.
-
-    Groups all pronunciation/heteronym/normalization overrides
-    that are compiled into a TTSContext before conversion.
-    """
-    pronunciation_overrides: List[Dict[str, Any]] = field(default_factory=list)
-    manual_overrides: List[Dict[str, Any]] = field(default_factory=list)
-    heteronym_overrides: List[Dict[str, Any]] = field(default_factory=list)
-    normalization_overrides: Optional[Dict[str, Any]] = None
-
-
-@dataclass(frozen=True)
 class ChapterChunkConfig:
     """Chapter and chunk configuration.
 
@@ -85,3 +79,17 @@ class ChapterChunkConfig:
             raise ValueError(
                 f"speaker_mode must be one of {_VALID_SPEAKER_MODES}, got {self.speaker_mode!r}"
             )
+
+
+@dataclass(frozen=True)
+class SaveConfig:
+    """Save/output settings.
+
+    Groups save mode, output folder, chapter splitting, and merge options.
+    """
+    mode: SaveMode = SaveMode.SAVE_NEXT_TO_INPUT
+    output_folder: Optional[Path] = None
+    save_chapters_separately: bool = False
+    merge_chapters_at_end: bool = True
+    separate_chapters_format: OutputFormat = OutputFormat.WAV
+    save_as_project: bool = False

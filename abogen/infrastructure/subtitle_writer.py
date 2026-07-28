@@ -278,24 +278,28 @@ def create_subtitle_writer(
 
 
 def resolve_subtitle_format(
-    subtitle_format: str | None,
-    subtitle_mode: str,
+    subtitle: "SubtitleConfig | str | None",
+    subtitle_mode: str | None = None,
 ) -> tuple[str, str]:
-    """Resolve a subtitle_format setting string to (file_extension, alignment).
+    """Resolve a subtitle config to (file_extension, alignment).
 
-    Handles the PyQt convention where format strings encode alignment
-    (e.g. ``"ass_centered_narrow"`` → extension ``"ass"``, alignment
-    ``"center_narrow"``).
-
-    Also enforces that ``"Sentence + Highlighting"`` mode requires ASS.
+    Accepts a SubtitleConfig object or individual format/mode strings
+    for backward compatibility.
 
     Returns:
         Tuple of (file_extension, alignment) suitable for
         :func:`create_subtitle_writer`.
     """
-    fmt = (subtitle_format or "srt").lower()
+    from abogen.domain.config_types import SubtitleConfig
 
-    if subtitle_mode == "Sentence + Highlighting" and fmt == "srt":
+    if isinstance(subtitle, SubtitleConfig):
+        fmt = subtitle.format.value.lower()
+        mode_str = subtitle.mode.value
+    else:
+        fmt = (subtitle or "srt").lower()
+        mode_str = subtitle_mode or "Disabled"
+
+    if mode_str == "Sentence + Highlighting" and fmt == "srt":
         fmt = "ass"
 
     if "ass" in fmt:
@@ -317,26 +321,39 @@ def resolve_subtitle_format(
 
 def make_subtitle_writer(
     audio_path: Path,
-    subtitle_format: str | None,
-    subtitle_mode: str,
-    max_words: int = 50,
+    subtitle: "SubtitleConfig | str | None",
+    subtitle_mode: str | None = None,
+    max_words: int | None = None,
 ) -> SubtitleWriter | None:
     """Convenience: resolve format and create a writer, or return None if disabled.
 
-    Returns ``None`` when ``subtitle_mode`` is ``"Disabled"`` or the
+    Accepts a SubtitleConfig object or individual format/mode strings
+    for backward compatibility.
+
+    Returns ``None`` when subtitle mode is ``"Disabled"`` or the
     format is unsupported.
     """
-    if subtitle_mode == "Disabled":
-        return None
+    from abogen.domain.config_types import SubtitleConfig
 
-    extension, alignment = resolve_subtitle_format(subtitle_format, subtitle_mode)
+    if isinstance(subtitle, SubtitleConfig):
+        mode_str = subtitle.mode.value
+        if mode_str == "Disabled":
+            return None
+        words = subtitle.max_words
+    else:
+        mode_str = subtitle_mode or subtitle or "Disabled"
+        if mode_str == "Disabled":
+            return None
+        words = max_words or 50
+
+    extension, alignment = resolve_subtitle_format(subtitle, subtitle_mode)
     try:
         return create_subtitle_writer(
             audio_path.with_suffix(f".{extension}"),
             extension,
-            subtitle_mode,
+            mode_str,
             alignment=alignment,
-            max_words=max_words,
+            max_words=words,
         )
     except (ValueError, KeyError):
         return None

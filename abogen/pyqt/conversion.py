@@ -533,14 +533,17 @@ class ConversionThread(QThread):
                 )
 
             # --- Compile normalization rules (heteronym + pronunciation) ---
+            from abogen.domain.config_types import PronunciationConfig
             from abogen.domain.normalization import build_tts_context
             self._tts_context = build_tts_context(
                 language=self.lang_code,
-                subtitle_mode=self.subtitle_mode,
-                pronunciation_overrides=getattr(self, "pronunciation_overrides", None),
-                manual_overrides=getattr(self, "manual_overrides", None),
-                heteronym_overrides=getattr(self, "heteronym_overrides", None),
-                normalization_overrides=getattr(self, "normalization_overrides", None),
+                subtitle=self.subtitle_mode,
+                pronunciation=PronunciationConfig(
+                    pronunciation_overrides=getattr(self, "pronunciation_overrides", None) or [],
+                    manual_overrides=getattr(self, "manual_overrides", None) or [],
+                    heteronym_overrides=getattr(self, "heteronym_overrides", None) or [],
+                    normalization_overrides=getattr(self, "normalization_overrides", None),
+                ),
                 log_callback=lambda level, msg: self.log_updated.emit((msg, "grey" if level == "info" else "orange")),
             )
 

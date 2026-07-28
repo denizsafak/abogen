@@ -193,7 +193,7 @@ def execute_conversion(
     )
 
     # Compute subtitle flag once (used in every synthesize_text call)
-    use_spacy = request.subtitle_mode not in (SubtitleMode.DISABLED, SubtitleMode.LINE)
+    use_spacy = request.subtitle.mode not in (SubtitleMode.DISABLED, SubtitleMode.LINE)
 
     # Output paths
     output_layout = plan.output_layout
@@ -201,7 +201,7 @@ def execute_conversion(
         raise ValueError("ConversionPlan must have an output_layout")
 
     # Determine if merged output is needed
-    merge_chapters = request.merge_chapters_at_end or not request.save_chapters_separately
+    merge_chapters = request.save.merge_chapters_at_end or not request.save.save_chapters_separately
     if request.output_format == OutputFormat.M4B:
         merge_chapters = True
 
@@ -232,19 +232,17 @@ def execute_conversion(
 
         # Open subtitle writer if needed
         subtitle_writer: Optional[SubtitleWriter] = None
-        if request.subtitle_mode != SubtitleMode.DISABLED and audio_sink:
+        if request.subtitle.mode != SubtitleMode.DISABLED and audio_sink:
             subtitle_writer = make_subtitle_writer(
                 audio_path,
-                request.subtitle_format,
-                request.subtitle_mode,
-                max_words=request.max_subtitle_words,
+                request.subtitle,
             )
             if subtitle_writer:
                 subtitle_writer.open()
                 stack.callback(subtitle_writer.close)
                 result.subtitle_paths.append(subtitle_writer.path)
 
-        effective_subtitle_mode = request.subtitle_mode if subtitle_writer else SubtitleMode.DISABLED
+        effective_subtitle_mode = request.subtitle.mode if subtitle_writer else SubtitleMode.DISABLED
 
         synth = SynthParams(
             tts_context=tts_context,
@@ -253,14 +251,14 @@ def execute_conversion(
             on_progress=lambda pct, etr: events.progress(pct, etr),
             audio_sink=audio_sink,
             subtitle_mode=effective_subtitle_mode,
-            max_subtitle_words=request.max_subtitle_words,
+            max_subtitle_words=request.subtitle.max_words,
             language=request.language,
             use_spacy_segmentation=use_spacy,
         )
 
         # Chapter directory
         chapter_dir = None
-        if request.save_chapters_separately and len(plan.chapters) > 1:
+        if request.save.save_chapters_separately and len(plan.chapters) > 1:
             chapter_dir = output_layout.audio_dir / "chapters"
             chapter_dir.mkdir(parents=True, exist_ok=True)
 
@@ -307,11 +305,11 @@ def execute_conversion(
             chapter_path = None
             if chapter_dir:
                 chapter_filename = sanitize_filename_for_chapter(chapter.title, chapter_idx)
-                chapter_path = chapter_dir / f"{chapter_filename}.{request.separate_chapters_format}"
+                chapter_path = chapter_dir / f"{chapter_filename}.{request.save.separate_chapters_format}"
                 chapter_sink = stack.enter_context(
                     open_audio_sink(
                         chapter_path,
-                        request.separate_chapters_format,
+                        request.save.separate_chapters_format,
                         cancel_check=check_cancelled,
                     )
                 )
@@ -319,19 +317,17 @@ def execute_conversion(
 
             # Per-chapter subtitle writer
             chapter_subtitle_writer: Optional[SubtitleWriter] = None
-            if chapter_dir and request.subtitle_mode != SubtitleMode.DISABLED and chapter_sink:
+            if chapter_dir and request.subtitle.mode != SubtitleMode.DISABLED and chapter_sink:
                 from abogen.infrastructure.subtitle_writer import resolve_subtitle_format
 
                 chapter_filename = sanitize_filename_for_chapter(chapter.title, chapter_idx)
                 subtitle_ext, _ = resolve_subtitle_format(
-                    request.subtitle_format, request.subtitle_mode
+                    request.subtitle
                 )
                 chapter_subtitle_path = chapter_dir / f"{chapter_filename}.{subtitle_ext}"
                 chapter_subtitle_writer = make_subtitle_writer(
                     chapter_subtitle_path,
-                    request.subtitle_format,
-                    request.subtitle_mode,
-                    max_words=request.max_subtitle_words,
+                    request.subtitle,
                 )
                 if chapter_subtitle_writer:
                     chapter_subtitle_writer.open()
@@ -439,7 +435,7 @@ def execute_conversion(
                 spacy_segments, active_split = spacy_pre_tts_segmentation(
                     seg_text,
                     request.language,
-                    request.subtitle_mode,
+                    request.subtitle.mode,
                     is_subtitle_input=is_subtitle_input,
                     use_spacy_segmentation=use_spacy,
                     log_callback=lambda msg: events.log(msg),
@@ -468,8 +464,7 @@ def execute_conversion(
                         process_and_write_subtitles(
                             accumulated_tokens,
                             subtitle_writer,
-                            subtitle_mode=request.subtitle_mode,
-                            max_subtitle_words=request.max_subtitle_words,
+                            subtitle=request.subtitle,
                             language=request.language,
                             use_spacy_segmentation=use_spacy,
                             fallback_end_time=stats.current_time,
@@ -478,8 +473,7 @@ def execute_conversion(
                         process_and_write_subtitles(
                             accumulated_tokens,
                             chapter_subtitle_writer,
-                            subtitle_mode=request.subtitle_mode,
-                            max_subtitle_words=request.max_subtitle_words,
+                            subtitle=request.subtitle,
                             language=request.language,
                             use_spacy_segmentation=use_spacy,
                             fallback_end_time=stats.current_time,

@@ -67,11 +67,8 @@ def run_conversion(
         usage_counter: Dict[str, int] = defaultdict(int)
         tts_context = build_tts_context(
             language=request.language,
-            subtitle_mode=request.subtitle_mode.value if request.subtitle_mode else "Disabled",
-            pronunciation_overrides=request.pronunciation_overrides,
-            manual_overrides=request.manual_overrides,
-            heteronym_overrides=request.heteronym_overrides,
-            normalization_overrides=request.normalization_overrides,
+            subtitle=request.subtitle,
+            pronunciation=request.pronunciation,
             usage_counter=usage_counter,
             log_callback=lambda level, msg: events.log(msg, level=level),
         )
@@ -154,15 +151,13 @@ def _finalize(
         from abogen.infrastructure.exporters import ExportService
 
         export_svc = ExportService()
-        cover_path = request.cover_image_path if request.cover_image_path and request.cover_image_path.exists() else None
 
         try:
             export_svc.embed_m4b_metadata(
                 audio_path=result.audio_path,
                 metadata=result.metadata or {},
                 chapters=result.chapter_markers or [],
-                cover_path=cover_path,
-                cover_mime=request.cover_image_mime,
+                cover=request.cover,
                 log_callback=lambda msg, level="info": events.log(msg, level=level),
             )
         except Exception as exc:
@@ -195,8 +190,7 @@ def _finalize(
                     chunks=request.chapter_chunk.chunks if request.chapter_chunk else [],
                     audio_path=audio_asset,
                     speaker_mode=request.chapter_chunk.speaker_mode if request.chapter_chunk else "single",
-                    cover_image_path=request.cover_image_path,
-                    cover_image_mime=request.cover_image_mime,
+                    cover=request.cover,
                 )
                 result.epub_path = epub_path
                 result.artifacts["epub3"] = epub_path

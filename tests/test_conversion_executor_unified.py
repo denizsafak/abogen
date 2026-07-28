@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+from abogen.application.conversion_config import SaveConfig
 from abogen.application.conversion_executor import execute_conversion
 from abogen.application.conversion_models import (
     ChapterPlan,
@@ -150,8 +151,7 @@ class TestExecuteConversion:
             req = ConversionRequest(
                 direct_text="Hello world",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             plan = ConversionPlan(
                 request=req,
@@ -198,10 +198,7 @@ class TestExecuteConversion:
             req = ConversionRequest(
                 direct_text="Text",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
-                save_chapters_separately=True,
-                merge_chapters_at_end=True,
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir), save_chapters_separately=True, merge_chapters_at_end=True),
             )
             plan = ConversionPlan(
                 request=req,
@@ -262,8 +259,7 @@ class TestExecuteConversion:
             req = ConversionRequest(
                 direct_text="Text",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             plan = ConversionPlan(
                 request=req,
@@ -315,8 +311,7 @@ class TestExecuteConversion:
             req = ConversionRequest(
                 direct_text="Text",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             plan = ConversionPlan(
                 request=req,
@@ -377,8 +372,7 @@ class TestExecuteConversion:
             req = ConversionRequest(
                 direct_text="Text",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             plan = ConversionPlan(
                 request=req,
@@ -424,8 +418,7 @@ class TestExecuteConversion:
             req = ConversionRequest(
                 direct_text="Hello world",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             plan = ConversionPlan(
                 request=req,
@@ -471,8 +464,7 @@ class TestExecuteConversion:
             req = ConversionRequest(
                 direct_text="Text",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             plan = ConversionPlan(
                 request=req,

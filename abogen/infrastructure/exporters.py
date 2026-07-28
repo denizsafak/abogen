@@ -132,11 +132,16 @@ class ExportService:
         audio_path: Path,
         metadata: Dict[str, Any],
         chapters: List[Dict[str, Any]],
+        cover: "CoverConfig | None" = None,
         cover_path: Optional[Path] = None,
         cover_mime: Optional[str] = None,
         log_callback: Optional[callable] = None,
     ) -> None:
         """Embed metadata and chapters into M4B file using FFmpeg + Mutagen."""
+        from abogen.domain.config_types import CoverConfig
+        if isinstance(cover, CoverConfig):
+            cover_path = cover.path
+            cover_mime = cover.mime
         ffmetadata_path = self.write_ffmetadata_file(audio_path, metadata, chapters)
         
         metadata_args = self._metadata_to_ffmpeg_args(metadata)

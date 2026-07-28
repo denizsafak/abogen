@@ -11,6 +11,12 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from abogen.application.conversion_config import (
+    CoverConfig,
+    PronunciationConfig,
+    SaveConfig,
+    SubtitleConfig,
+)
 from abogen.application.conversion_request import ConversionRequest
 from abogen.application.conversion_models import (
     ChapterPlan,
@@ -137,8 +143,7 @@ class TestConversionService:
             req = ConversionRequest(
                 direct_text="Hello world",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             events = FakeEvents()
 
@@ -156,8 +161,7 @@ class TestConversionService:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             events = FakeEvents()
 
@@ -177,8 +181,7 @@ class TestConversionService:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             events = FakeEvents()
             events.cancelled = True
@@ -204,8 +207,7 @@ class TestConversionService:
             req = ConversionRequest(
                 direct_text="<<CHAPTER_MARKER:Ch1>>\nText A\n<<CHAPTER_MARKER:Ch2>>\nText B",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             events = FakeEvents()
 
@@ -221,8 +223,7 @@ class TestConversionService:
             req = ConversionRequest(
                 direct_text="Body text",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
                 read_title_intro=True,
                 read_closing_outro=True,
                 metadata_tags={"title": "Test Book", "author": "Author"},
@@ -256,9 +257,10 @@ class TestConversionService:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
-                normalization_overrides={"normalization_numbers": False},
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
+                pronunciation=PronunciationConfig(
+                    normalization_overrides={"normalization_numbers": False},
+                ),
             )
             events = FakeEvents()
 
@@ -273,9 +275,10 @@ class TestConversionService:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
-                normalization_overrides={"normalization_apostrophe_mode": "llm"},
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
+                pronunciation=PronunciationConfig(
+                    normalization_overrides={"normalization_apostrophe_mode": "llm"},
+                ),
             )
             events = FakeEvents()
 
@@ -290,8 +293,7 @@ class TestConversionService:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             events = FakeEvents()
 
@@ -314,8 +316,7 @@ class TestOutputLayoutService:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             layout = resolve_output_layout(req)
 
@@ -332,7 +333,7 @@ class TestOutputLayoutService:
             req = ConversionRequest(
                 source_path=source,
                 voice="M1",
-                save_mode="save_next_to_input",
+                save=SaveConfig(mode="save_next_to_input"),
             )
             layout = resolve_output_layout(req)
 
@@ -346,9 +347,11 @@ class TestOutputLayoutService:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
-                save_as_project=True,
+                save=SaveConfig(
+                    mode="custom_folder",
+                    output_folder=Path(tmpdir),
+                    save_as_project=True,
+                ),
                 original_filename="test.wav",
             )
             layout = resolve_output_layout(req)
@@ -388,7 +391,7 @@ class TestOutputLayoutService:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                separate_chapters_format="wav",
+                save=SaveConfig(separate_chapters_format="wav"),
             )
             path = resolve_chapter_path(layout, req, "Chapter 1", 1)
 
@@ -407,7 +410,7 @@ class TestOutputLayoutService:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                separate_chapters_format="wav",
+                save=SaveConfig(separate_chapters_format="wav"),
             )
             path = resolve_chapter_path(layout, req, "", 3)
 
@@ -421,7 +424,7 @@ class TestOutputLayoutService:
             direct_text="Hello",
             voice="M1",
             output_format="m4b",
-            merge_chapters_at_end=False,
+            save=SaveConfig(merge_chapters_at_end=False),
         )
         assert should_merge_output(req) is True
 
@@ -432,7 +435,7 @@ class TestOutputLayoutService:
         req = ConversionRequest(
             direct_text="Hello",
             voice="M1",
-            save_chapters_separately=False,
+            save=SaveConfig(save_chapters_separately=False),
         )
         assert should_merge_output(req) is True
 
@@ -443,8 +446,10 @@ class TestOutputLayoutService:
         req = ConversionRequest(
             direct_text="Hello",
             voice="M1",
-            save_chapters_separately=True,
-            merge_chapters_at_end=True,
+            save=SaveConfig(
+                save_chapters_separately=True,
+                merge_chapters_at_end=True,
+            ),
         )
         assert should_merge_output(req) is True
 
@@ -455,8 +460,10 @@ class TestOutputLayoutService:
         req = ConversionRequest(
             direct_text="Hello",
             voice="M1",
-            save_chapters_separately=True,
-            merge_chapters_at_end=False,
+            save=SaveConfig(
+                save_chapters_separately=True,
+                merge_chapters_at_end=False,
+            ),
         )
         assert should_merge_output(req) is False
 
@@ -501,11 +508,13 @@ class TestExecutorGaps:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(
+                    mode="custom_folder",
+                    output_folder=Path(tmpdir),
+                    save_chapters_separately=True,
+                    merge_chapters_at_end=False,
+                ),
                 output_format="m4b",
-                save_chapters_separately=True,
-                merge_chapters_at_end=False,
             )
             plan = ConversionPlan(
                 request=req,
@@ -546,10 +555,12 @@ class TestExecutorGaps:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
-                save_chapters_separately=True,
-                merge_chapters_at_end=True,
+                save=SaveConfig(
+                    mode="custom_folder",
+                    output_folder=Path(tmpdir),
+                    save_chapters_separately=True,
+                    merge_chapters_at_end=True,
+                ),
             )
             plan = ConversionPlan(
                 request=req,
@@ -599,8 +610,7 @@ class TestExecutorGaps:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             plan = ConversionPlan(
                 request=req,
@@ -657,8 +667,7 @@ class TestExecutorGaps:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
             )
             plan = ConversionPlan(
                 request=req,
@@ -698,8 +707,7 @@ class TestExecutorGaps:
             req = ConversionRequest(
                 direct_text="Hello",
                 voice="M1",
-                save_mode="custom_folder",
-                output_folder=Path(tmpdir),
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
                 silence_between_chapters=1.0,
             )
             plan = ConversionPlan(

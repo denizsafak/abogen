@@ -2,7 +2,8 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
-from abogen.domain.enums import Language
+from abogen.domain.config_types import PronunciationConfig, SubtitleConfig
+from abogen.domain.enums import Language, SubtitleMode
 from abogen.domain.normalization import prepare_text_for_tts, normalize_text_for_pipeline, build_tts_context, TTSContext
 
 
@@ -156,16 +157,16 @@ class TestBuildTtsContext:
         assert isinstance(ctx, TTSContext)
 
     def test_default_split_pattern(self):
-        ctx = build_tts_context(language=Language.EN_US, subtitle_mode="Disabled")
+        ctx = build_tts_context(language=Language.EN_US, subtitle="Disabled")
         assert isinstance(ctx.split_pattern, str)
         assert len(ctx.split_pattern) > 0
 
     def test_english_uses_newline_split(self):
-        ctx = build_tts_context(language=Language.EN_US, subtitle_mode="Disabled")
+        ctx = build_tts_context(language=Language.EN_US, subtitle="Disabled")
         assert ctx.split_pattern == "\n"
 
     def test_cjk_uses_punctuation_split(self):
-        ctx = build_tts_context(language=Language.JA, subtitle_mode="Disabled")
+        ctx = build_tts_context(language=Language.JA, subtitle="Disabled")
         assert r"\n" in ctx.split_pattern
 
     def test_pronunciation_overrides_compiled(self):
@@ -178,7 +179,7 @@ class TestBuildTtsContext:
         ]
         ctx = build_tts_context(
             language=Language.EN_US,
-            pronunciation_overrides=overrides,
+            pronunciation=PronunciationConfig(pronunciation_overrides=overrides),
         )
         assert ctx.pronunciation_rules is not None
         assert len(ctx.pronunciation_rules) >= 1
@@ -193,7 +194,7 @@ class TestBuildTtsContext:
         ]
         ctx = build_tts_context(
             language=Language.EN_US,
-            manual_overrides=overrides,
+            pronunciation=PronunciationConfig(manual_overrides=overrides),
         )
         assert ctx.pronunciation_rules is not None
         assert len(ctx.pronunciation_rules) >= 1
@@ -207,8 +208,10 @@ class TestBuildTtsContext:
         ]
         ctx = build_tts_context(
             language=Language.EN_US,
-            pronunciation_overrides=pronunciation,
-            manual_overrides=manual,
+            pronunciation=PronunciationConfig(
+                pronunciation_overrides=pronunciation,
+                manual_overrides=manual,
+            ),
         )
         found_right = any(
             r.get("replacement") == "RIGHT" for r in ctx.pronunciation_rules
@@ -229,7 +232,7 @@ class TestBuildTtsContext:
         ]
         ctx = build_tts_context(
             language=Language.EN_US,
-            heteronym_overrides=overrides,
+            pronunciation=PronunciationConfig(heteronym_overrides=overrides),
         )
         assert ctx.heteronym_rules is not None
 
@@ -244,7 +247,10 @@ class TestBuildTtsContext:
 
     def test_normalization_overrides_stored(self):
         overrides = {"normalization_numbers": False}
-        ctx = build_tts_context(language=Language.EN_US, normalization_overrides=overrides)
+        ctx = build_tts_context(
+            language=Language.EN_US,
+            pronunciation=PronunciationConfig(normalization_overrides=overrides),
+        )
         assert ctx.normalization_overrides is overrides
 
     def test_speakers_used_for_pronunciation(self):

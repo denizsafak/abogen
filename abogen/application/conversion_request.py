@@ -16,11 +16,15 @@ from typing import Any, Dict, List, Optional
 
 from abogen.application.conversion_config import (
     ChapterChunkConfig,
+    CoverConfig,
     Epub3ExportConfig,
+    PronunciationConfig,
+    SaveConfig,
+    SubtitleConfig,
     SubtitleInputConfig,
     WordSubstitutionConfig,
 )
-from abogen.domain.enums import Language, OutputFormat, SaveMode, SubtitleFormat, SubtitleMode
+from abogen.domain.enums import Language, OutputFormat
 
 
 class ConversionRequestError(ValueError):
@@ -29,7 +33,6 @@ class ConversionRequestError(ValueError):
 
 # Numeric field constraints: attr -> (min, max)
 _NUMERIC_CONSTRAINTS: dict[str, tuple[float, float | None]] = {
-    "max_subtitle_words": (1, 500),
     "speed": (0.5, 3.0),
     "supertonic_total_steps": (2, 15),
     "silence_between_chapters": (0.0, None),
@@ -44,11 +47,10 @@ class ConversionRequest:
     Only contains fields that describe the conversion task itself.
     UI-only fields (display, logging, user prompts) stay in adapters.
 
-    Feature toggles use config objects or boolean flags:
-    - word_substitution, subtitle_input, chapter_chunk = config objects (None = disabled)
-    - generate_epub3 = boolean flag
-
-    Pronunciation overrides are raw data (lists of dicts), compiled by app layer.
+    Feature toggles use config objects (None = disabled):
+    - word_substitution, subtitle_input, chapter_chunk, epub3_export
+    - pronunciation (raw data, compiled by app layer)
+    - subtitle, save, cover (grouped parameters)
 
     Validation runs on creation via __post_init__:
     - None values → replaced with field default (from declaration)
@@ -71,17 +73,6 @@ class ConversionRequest:
 
     # --- Output Format ---
     output_format: OutputFormat = OutputFormat.WAV
-    subtitle_mode: SubtitleMode = SubtitleMode.DISABLED
-    subtitle_format: SubtitleFormat = SubtitleFormat.SRT
-    max_subtitle_words: int = 50
-
-    # --- Save Options ---
-    save_mode: SaveMode = SaveMode.SAVE_NEXT_TO_INPUT
-    output_folder: Optional[Path] = None
-    save_chapters_separately: bool = False
-    merge_chapters_at_end: bool = True
-    separate_chapters_format: OutputFormat = OutputFormat.WAV
-    save_as_project: bool = False
 
     # --- Timing ---
     silence_between_chapters: float = 2.0
@@ -97,15 +88,11 @@ class ConversionRequest:
     # --- Metadata ---
     metadata_tags: Dict[str, Any] = field(default_factory=dict)
 
-    # --- Pronunciation overrides (raw data, compiled by app layer) ---
-    pronunciation_overrides: List[Dict[str, Any]] = field(default_factory=list)
-    manual_overrides: List[Dict[str, Any]] = field(default_factory=list)
-    heteronym_overrides: List[Dict[str, Any]] = field(default_factory=list)
-    normalization_overrides: Optional[Dict[str, Any]] = None
-
-    # --- Artifacts ---
-    cover_image_path: Optional[Path] = None
-    cover_image_mime: Optional[str] = None
+    # --- Grouped configs ---
+    subtitle: SubtitleConfig = field(default_factory=SubtitleConfig)
+    save: SaveConfig = field(default_factory=SaveConfig)
+    cover: CoverConfig = field(default_factory=CoverConfig)
+    pronunciation: PronunciationConfig = field(default_factory=PronunciationConfig)
 
     # --- Feature configs (None = disabled) ---
     epub3_export: Optional[Epub3ExportConfig] = None

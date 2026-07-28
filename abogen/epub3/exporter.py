@@ -516,9 +516,14 @@ def build_epub3_package(
     chunks: Iterable[Dict[str, Any]],
     audio_path: Path,
     speaker_mode: str = "single",
+    cover: "CoverConfig | None" = None,
     cover_image_path: Optional[Path] = None,
     cover_image_mime: Optional[str] = None,
 ) -> Path:
+    from abogen.domain.config_types import CoverConfig
+    if isinstance(cover, CoverConfig):
+        cover_image_path = cover.path
+        cover_image_mime = cover.mime
     builder = EPUB3PackageBuilder(
         output_path=output_path,
         book_id=book_id,
