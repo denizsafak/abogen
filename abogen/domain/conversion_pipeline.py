@@ -146,6 +146,7 @@ def tts_segments(
     speed: float,
     split_pattern: str,
     current_time: float = 0.0,
+    total_steps: Optional[int] = None,
 ) -> Iterator[SegmentResult]:
     """Invoke TTS backend on (already normalized) text and yield SegmentResults.
 
@@ -159,16 +160,20 @@ def tts_segments(
         speed: TTS speed multiplier.
         split_pattern: Regex pattern for sentence splitting.
         current_time: Current position in the audio timeline (seconds).
+        total_steps: Inference quality steps (Supertonic only, ignored by Kokoro).
 
     Yields:
         SegmentResult for each non-empty TTS segment.
     """
-    segment_iter = backend(
-        text,
+    kwargs: dict[str, Any] = dict(
         voice=voice,
         speed=speed,
         split_pattern=split_pattern,
     )
+    if total_steps is not None:
+        kwargs["total_steps"] = total_steps
+
+    segment_iter = backend(text, **kwargs)
 
     chunk_start = current_time
 
@@ -215,6 +220,7 @@ def emit_text_segments(
     speed: float,
     split_pattern: str,
     current_time: float = 0.0,
+    total_steps: Optional[int] = None,
     # normalization
     heteronym_rules: Any = None,
     pronunciation_rules: Any = None,
@@ -265,6 +271,7 @@ def emit_text_segments(
         speed=speed,
         split_pattern=split_pattern,
         current_time=current_time,
+        total_steps=total_steps,
     )
 
 

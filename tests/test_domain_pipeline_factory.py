@@ -33,7 +33,7 @@ class TestCreatePipelineForJob:
     def test_supertonic_provider(self, _reg, mock_create):
         mock_create.return_value = MagicMock()
         result = create_pipeline_for_job("supertonic", Language.EN_US, use_gpu=True)
-        mock_create.assert_called_once_with("supertonic")
+        mock_create.assert_called_once_with("supertonic", language=Language.EN_US)
         assert result is mock_create.return_value
 
     @patch("abogen.domain.pipeline_factory.create_pipeline")

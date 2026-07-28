@@ -58,7 +58,7 @@ class FakeBackend:
         self.segment_duration = segment_duration
         self.call_count = 0
 
-    def __call__(self, text: str, voice: Any, speed: float = 1.0, split_pattern: str = ""):
+    def __call__(self, text: str, voice: Any, speed: float = 1.0, split_pattern: str = "", **kwargs: Any):
         self.call_count += 1
         # Return fake segment objects with required attributes
         @dataclass

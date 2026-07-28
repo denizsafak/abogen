@@ -12,6 +12,7 @@ from typing import Any
 
 import numpy as np
 
+from abogen.domain.enums import Language
 from abogen.tts_plugin.capabilities import VoiceLister
 from abogen.tts_plugin.engine import Engine, EngineSession
 from abogen.tts_plugin.errors import EngineError
@@ -27,6 +28,61 @@ logger = logging.getLogger(__name__)
 
 # Sample rate for SuperTonic audio
 _SUPERTONIC_SAMPLE_RATE = 24000
+
+# Engine-internal language mapping: Language enum → Supertonic ISO 639-1 code.
+_SUPERTONIC_LANG_MAP: dict[Language, str] = {
+    Language.EN_US: "en",
+    Language.EN_GB: "en",
+    Language.AR: "ar",
+    Language.BG: "bg",
+    Language.CS: "cs",
+    Language.DA: "da",
+    Language.DE: "de",
+    Language.EL: "el",
+    Language.ES: "es",
+    Language.ET: "et",
+    Language.FI: "fi",
+    Language.FR: "fr",
+    Language.HI: "hi",
+    Language.HR: "hr",
+    Language.HU: "hu",
+    Language.ID: "id",
+    Language.IT: "it",
+    Language.JA: "ja",
+    Language.KO: "ko",
+    Language.LT: "lt",
+    Language.LV: "lv",
+    Language.NL: "nl",
+    Language.PL: "pl",
+    Language.PT_BR: "pt",
+    Language.RO: "ro",
+    Language.RU: "ru",
+    Language.SK: "sk",
+    Language.SL: "sl",
+    Language.SV: "sv",
+    Language.TR: "tr",
+    Language.UK: "uk",
+    Language.VI: "vi",
+}
+
+
+def supported_languages() -> list[Language]:
+    """Return the list of Language enum values this engine supports."""
+    return list(_SUPERTONIC_LANG_MAP.keys())
+
+
+def engine_language(lang: Language) -> str:
+    """Map a Language enum to the engine's internal ISO 639-1 code.
+
+    Raises ValueError for unsupported languages.
+    """
+    result = _SUPERTONIC_LANG_MAP.get(lang)
+    if result is None:
+        raise ValueError(
+            f"Supertonic does not support language: {lang!r}. "
+            f"Supported: {supported_languages()}"
+        )
+    return result
 
 
 class SuperTonicSession:

@@ -61,6 +61,7 @@ def run_tts_segment_loop(
     voice: Any,
     speed: float,
     split_pattern: str,
+    total_steps: Optional[int] = None,
     chapter_sink: Optional[AudioSink] = None,
     preview_callback: Optional[Callable[[str], None]] = None,
     on_segment: Optional[Callable[[SegmentInfo], None]] = None,
@@ -74,6 +75,7 @@ def run_tts_segment_loop(
         voice: Voice name/id for the backend.
         speed: Speech speed multiplier.
         split_pattern: Regex pattern used by the TTS engine for sentence splitting.
+        total_steps: Inference quality steps (Supertonic only, ignored by Kokoro).
         preview_callback: Called with a short preview string per segment.
         on_segment: Called with a SegmentInfo for each segment *before*
             audio is written.  Useful for callers that need per-segment
@@ -95,6 +97,7 @@ def run_tts_segment_loop(
         speed=speed,
         split_pattern=split_pattern,
         current_time=params.stats.current_time,
+        total_steps=total_steps,
     ):
         if params.check_cancel():
             break
@@ -212,6 +215,7 @@ def synthesize_text(
     backend: Any,
     voice: Any,
     speed: float,
+    total_steps: Optional[int] = None,
     chapter_sink: Optional[AudioSink] = None,
     preview_callback: Optional[Callable[[str], None]] = None,
     on_segment: Optional[Callable[[SegmentInfo], None]] = None,
@@ -229,6 +233,7 @@ def synthesize_text(
         backend=backend,
         voice=voice,
         speed=speed,
+        total_steps=total_steps,
         split_pattern=split_pattern_override or params.tts_context.split_pattern,
         chapter_sink=chapter_sink,
         preview_callback=preview_callback,

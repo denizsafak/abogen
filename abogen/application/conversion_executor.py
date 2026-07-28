@@ -277,6 +277,7 @@ def execute_conversion(
                 backend=intro_backend,
                 voice=intro_voice,
                 speed=intro_speed or request.speed,
+                total_steps=intro_steps,
                 chapter_sink=None,
                 preview_callback=lambda text: events.log(f"  {text[:80]}"),
             )
@@ -347,6 +348,7 @@ def execute_conversion(
                     backend=intro_backend,
                     voice=intro_voice,
                     speed=intro_speed or request.speed,
+                    total_steps=intro_steps,
                     chapter_sink=chapter_sink,
                     preview_callback=lambda text: events.log(f"  Intro: {text[:80]}"),
                 )
@@ -421,6 +423,7 @@ def execute_conversion(
                     seg_provider = chapter_provider
                     seg_voice = chapter_voice
                     seg_speed = chapter_speed
+                    seg_steps = chapter_steps
                     seg_backend = chapter_backend
 
                 # Track voice for chapter marker
@@ -452,6 +455,7 @@ def execute_conversion(
                         backend=seg_backend,
                         voice=seg_voice,
                         speed=seg_speed or request.speed,
+                        total_steps=seg_steps,
                         chapter_sink=chapter_sink,
                         preview_callback=lambda text: events.log(f"  {text[:80]}"),
                         split_pattern_override=active_split,
@@ -539,6 +543,7 @@ def execute_conversion(
                 backend=outro_backend,
                 voice=outro_voice,
                 speed=outro_speed or request.speed,
+                total_steps=outro_steps,
                 chapter_sink=None,
                 preview_callback=lambda text: events.log(f"  {text[:80]}"),
             )

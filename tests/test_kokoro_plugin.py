@@ -49,7 +49,7 @@ def _make_mock_engine() -> Any:
     from plugins.kokoro.engine import KokoroEngine
 
     class MockPipeline:
-        def __call__(self, text, voice, speed, split_pattern=None):
+        def __call__(self, text, voice, speed, split_pattern=None, **kwargs):
             class MockSegment:
                 def __init__(self):
                     self.audio = MockAudio()

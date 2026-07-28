@@ -158,6 +158,7 @@ class SupertonicPipeline:
     def __init__(
         self,
         *,
+        language: Any = None,
         sample_rate: int,
         auto_download: bool = True,
         total_steps: int = 5,
@@ -166,6 +167,13 @@ class SupertonicPipeline:
         self.sample_rate = int(sample_rate)
         self.total_steps = int(total_steps)
         self.max_chunk_length = int(max_chunk_length)
+
+        # Resolve language to ISO 639-1 code for Supertonic
+        if language is not None:
+            from plugins.supertonic.engine import engine_language
+            self._lang = engine_language(language)
+        else:
+            self._lang = "en"
 
         _configure_supertonic_gpu()
 
@@ -212,6 +220,7 @@ class SupertonicPipeline:
                         max_chunk_length=self.max_chunk_length,
                         silence_duration=0.0,
                         verbose=False,
+                        lang=self._lang,
                     )
                     break
                 except ValueError as exc:

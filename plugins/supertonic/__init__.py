@@ -32,11 +32,12 @@ from abogen.tts_plugin.types import EngineConfig
 from .engine import SuperTonicEngine
 
 
-def _load_supertonic_pipeline() -> Any:
+def _load_supertonic_pipeline(language: Any = None) -> Any:
     """Lazy-load SuperTonic dependencies and create pipeline."""
     from plugins.supertonic.pipeline import SupertonicPipeline
 
     return SupertonicPipeline(
+        language=language,
         sample_rate=24000,
         auto_download=True,
         total_steps=5,
@@ -128,7 +129,7 @@ def create_engine(
         EngineError: On failure. Cleans up partially created resources.
     """
     try:
-        pipeline = _load_supertonic_pipeline()
+        pipeline = _load_supertonic_pipeline(language=config.language)
         engine = SuperTonicEngine(pipeline)
         return engine
     except Exception as e:

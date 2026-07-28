@@ -116,7 +116,7 @@ def generate_preview_audio(
     if provider == "supertonic":
         from abogen.tts_plugin.utils import create_pipeline
 
-        pipeline = create_pipeline("supertonic")
+        pipeline = create_pipeline("supertonic", language=language)
         segments = pipeline(
             normalized_text,
             voice=voice_spec,

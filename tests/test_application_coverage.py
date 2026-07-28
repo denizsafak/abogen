@@ -54,7 +54,7 @@ class FakeBackend:
     def __init__(self):
         self.synthesized: List[str] = []
 
-    def __call__(self, text: str, *, voice: Any, speed: float = 1.0, split_pattern: str = "") -> List:
+    def __call__(self, text: str, *, voice: Any, speed: float = 1.0, split_pattern: str = "", **kwargs: Any) -> List:
         self.synthesized.append(text)
 
         class FakeSegment:

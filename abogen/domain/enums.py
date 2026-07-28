@@ -128,8 +128,8 @@ class InputFormat(str, Enum):
 class Language(str, Enum):
     """TTS language code (ISO 639-1 with region where needed).
 
-    Each engine (Kokoro, Supertonic) maps these to its own
-    internal language identifiers.
+    Each engine maps these to its own internal language identifiers.
+    Engines report which languages they support via ``supported_languages()``.
     """
     EN_US = "en-US"
     EN_GB = "en-GB"
@@ -140,6 +140,30 @@ class Language(str, Enum):
     JA = "ja"
     PT_BR = "pt-BR"
     ZH = "zh"
+    AR = "ar"
+    BG = "bg"
+    CS = "cs"
+    DA = "da"
+    DE = "de"
+    EL = "el"
+    ET = "et"
+    FI = "fi"
+    HR = "hr"
+    HU = "hu"
+    ID = "id"
+    KO = "ko"
+    LT = "lt"
+    LV = "lv"
+    NL = "nl"
+    PL = "pl"
+    RO = "ro"
+    RU = "ru"
+    SK = "sk"
+    SL = "sl"
+    SV = "sv"
+    TR = "tr"
+    UK = "uk"
+    VI = "vi"
 
     @property
     def display_name(self) -> str:
@@ -154,13 +178,37 @@ class Language(str, Enum):
             "ja": "Japanese",
             "pt-BR": "Brazilian Portuguese",
             "zh": "Mandarin Chinese",
+            "ar": "Arabic",
+            "bg": "Bulgarian",
+            "cs": "Czech",
+            "da": "Danish",
+            "de": "German",
+            "el": "Greek",
+            "et": "Estonian",
+            "fi": "Finnish",
+            "hr": "Croatian",
+            "hu": "Hungarian",
+            "id": "Indonesian",
+            "ko": "Korean",
+            "lt": "Lithuanian",
+            "lv": "Latvian",
+            "nl": "Dutch",
+            "pl": "Polish",
+            "ro": "Romanian",
+            "ru": "Russian",
+            "sk": "Slovak",
+            "sl": "Slovenian",
+            "sv": "Swedish",
+            "tr": "Turkish",
+            "uk": "Ukrainian",
+            "vi": "Vietnamese",
         }
         return _names[self.value]
 
     @property
     def is_cjk(self) -> bool:
-        """True for CJK languages (Chinese, Japanese)."""
-        return self in (self.ZH, self.JA)
+        """True for CJK languages (Chinese, Japanese, Korean)."""
+        return self in (self.ZH, self.JA, self.KO)
 
     @property
     def supports_subtitle_tokens(self) -> bool:
