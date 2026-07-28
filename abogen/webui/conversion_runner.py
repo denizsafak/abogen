@@ -15,7 +15,6 @@ Engine converts Language → its own format internally.
 
 from __future__ import annotations
 
-import gc
 from pathlib import Path
 from typing import Any
 
@@ -191,11 +190,3 @@ def run_conversion_job(job: Job) -> None:
         job.error = str(exc)
         job.status = JobStatus.FAILED
         job.add_log(f"Job failed: {exc}", level="error")
-    finally:
-        gc.collect()
-        try:
-            import torch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except ImportError:
-            pass

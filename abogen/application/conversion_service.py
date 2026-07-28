@@ -104,6 +104,9 @@ def run_conversion(
         raise
     finally:
         pool.dispose_all()
+        voice_cache.clear()
+        from abogen.application.cleanup import flush_cuda
+        flush_cuda()
 
 
 def _create_voice_resolver(

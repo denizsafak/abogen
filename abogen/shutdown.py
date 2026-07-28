@@ -1,8 +1,19 @@
-"""Graceful shutdown - single module, no over-engineering."""
+"""Graceful shutdown — process-level hooks and orchestration.
+
+Responsibilities:
+- Install atexit/signal/Qt hooks
+- Stop WebUI ConversionService (worker thread)
+- Restore sleep prevention
+- Terminate child processes (ffmpeg, etc.)
+- Delegate GPU/engine/UI cleanup to application.cleanup
+
+App-layer cleanup (GPU, engines, UI callbacks) lives in application/cleanup.py.
+Per-conversion cleanup lives in run_conversion() finally block.
+"""
+
 from __future__ import annotations
 
 import atexit
-import gc
 import signal
 import sys
 from typing import Callable
@@ -28,20 +39,11 @@ def _run_cleanups() -> None:
             pass
 
 
-# ---- Register built-in cleanup functions ----
+# ---- Process-level cleanup functions ----
 
-# 1. Restore sleep prevention
-def _restore_sleep() -> None:
-    try:
-        from abogen.utils import prevent_sleep_end
-        prevent_sleep_end()
-    except Exception:
-        pass
 
-register_cleanup(_restore_sleep)
-
-# 2. Shutdown web UI ConversionService
-def _shutdown_conversion_service() -> None:
+def _stop_conversion_service() -> None:
+    """Stop WebUI ConversionService worker thread."""
     try:
         from abogen.webui.service import get_service
         svc = get_service()
@@ -50,50 +52,18 @@ def _shutdown_conversion_service() -> None:
     except Exception:
         pass
 
-register_cleanup(_shutdown_conversion_service)
 
-# 3. Clear TTS pipelines and GPU memory
-def _cleanup_tts_pipelines() -> None:
-    # Clear web UI pipeline cache
+def _restore_sleep() -> None:
+    """Restore system sleep prevention (caffeinate/systemd-inhibit/Windows)."""
     try:
-        from abogen.webui.conversion_runner import _PIPELINES
-        _PIPELINES.clear()
+        from abogen.utils import prevent_sleep_end
+        prevent_sleep_end()
     except Exception:
         pass
 
-    # Clear PyQt conversion thread voice cache
-    try:
-        from abogen.pyqt.conversion import ConversionThread
-        if hasattr(ConversionThread, "voice_cache"):
-            ConversionThread.voice_cache.clear()
-    except Exception:
-        pass
 
-    gc.collect()
-
-    # Release CUDA cache
-    try:
-        import torch
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.ipc_collect()
-    except Exception:
-        pass
-
-register_cleanup(_cleanup_tts_pipelines)
-
-# 4. Clear global voice cache
-def _clear_voice_cache() -> None:
-    try:
-        from abogen.voice_cache import clear_voice_cache
-        clear_voice_cache()
-    except Exception:
-        pass
-
-register_cleanup(_clear_voice_cache)
-
-# 5. Terminate child processes (ffmpeg, etc.)
 def _terminate_subprocesses() -> None:
+    """Terminate all child processes (ffmpeg, etc.)."""
     try:
         import psutil
     except Exception:
@@ -115,6 +85,20 @@ def _terminate_subprocesses() -> None:
     except Exception:
         pass
 
+
+def _app_cleanup() -> None:
+    """Delegate to application-layer cleanup (engines, GPU, UI callbacks)."""
+    try:
+        from abogen.application.cleanup import cleanup
+        cleanup()
+    except Exception:
+        pass
+
+
+# Register in execution order
+register_cleanup(_stop_conversion_service)
+register_cleanup(_app_cleanup)
+register_cleanup(_restore_sleep)
 register_cleanup(_terminate_subprocesses)
 
 
@@ -133,7 +117,7 @@ def register_shutdown() -> None:
         except Exception:
             pass
 
-    # Qt hook
+    # Qt hook — connect AFTER QApplication is created
     try:
         from PyQt6.QtWidgets import QApplication
 
