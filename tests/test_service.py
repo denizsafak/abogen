@@ -7,8 +7,8 @@ from abogen.webui.service import (
     JobStatus,
     build_service,
     _JOB_LOGGER,
-    build_audiobookshelf_metadata,
 )
+from abogen.domain.metadata_helpers import build_audiobookshelf_metadata
 
 
 def test_service_processes_job(tmp_path):
@@ -233,7 +233,7 @@ def test_audiobookshelf_metadata_uses_book_number(tmp_path):
         },
     )
 
-    metadata = build_audiobookshelf_metadata(job)
+    metadata = build_audiobookshelf_metadata(job.metadata_tags)
 
     assert metadata["seriesName"] == "Example Saga"
     assert metadata["seriesSequence"] == "7"
@@ -264,7 +264,7 @@ def test_audiobookshelf_metadata_normalizes_sequence_value(tmp_path):
         },
     )
 
-    metadata = build_audiobookshelf_metadata(job)
+    metadata = build_audiobookshelf_metadata(job.metadata_tags)
 
     assert metadata["seriesName"] == "Example Saga"
     assert metadata["seriesSequence"] == "7"
@@ -295,6 +295,6 @@ def test_audiobookshelf_metadata_allows_decimal_sequence(tmp_path):
         },
     )
 
-    metadata = build_audiobookshelf_metadata(job)
+    metadata = build_audiobookshelf_metadata(job.metadata_tags)
 
     assert metadata["seriesSequence"] == "4.5"

@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Mapping
+from typing import Any, Callable, Dict, Mapping, Optional
 
 from abogen.constants import (
     KOKORO_CODE_LABELS,
@@ -578,3 +578,64 @@ def integration_defaults() -> Dict[str, Dict[str, Any]]:
             "timeout": 30.0,
         },
     }
+
+
+def stored_integration_config(name: str) -> Dict[str, Any]:
+    """Read raw integration config from config.json.
+
+    Reads ``config["integrations"][name]``.
+    """
+    from abogen.utils import load_config
+
+    cfg = load_config() or {}
+    integrations = cfg.get("integrations")
+    if isinstance(integrations, Mapping):
+        entry = integrations.get(name)
+        if isinstance(entry, Mapping):
+            return dict(entry)
+    return {}
+
+
+def load_audiobookshelf_config() -> Optional["AudiobookshelfConfig"]:
+    """Read Audiobookshelf settings from config.json and build typed config.
+
+    Returns ``None`` when the integration is not configured or required
+    fields are missing.
+    """
+    raw = stored_integration_config("audiobookshelf")
+    if not raw:
+        return None
+    return build_audiobookshelf_config(raw)
+
+
+def build_audiobookshelf_config(
+    settings: Mapping[str, Any],
+) -> Optional["AudiobookshelfConfig"]:
+    """Build :class:`AudiobookshelfConfig` from a settings dict.
+
+    Returns ``None`` when required fields (base_url, api_token, library_id)
+    are missing.
+    """
+    from abogen.integrations.audiobookshelf import AudiobookshelfConfig
+
+    base_url = str(settings.get("base_url") or "").strip()
+    api_token = str(settings.get("api_token") or "").strip()
+    library_id = str(settings.get("library_id") or "").strip()
+    if not (base_url and api_token and library_id):
+        return None
+    try:
+        timeout = float(settings.get("timeout", 3600.0))
+    except (TypeError, ValueError):
+        timeout = 3600.0
+    return AudiobookshelfConfig(
+        base_url=base_url,
+        api_token=api_token,
+        library_id=library_id,
+        collection_id=(str(settings.get("collection_id") or "").strip() or None),
+        folder_id=(str(settings.get("folder_id") or "").strip() or None),
+        verify_ssl=coerce_bool(settings.get("verify_ssl"), True),
+        send_cover=coerce_bool(settings.get("send_cover"), True),
+        send_chapters=coerce_bool(settings.get("send_chapters"), True),
+        send_subtitles=coerce_bool(settings.get("send_subtitles"), False),
+        timeout=timeout,
+    )

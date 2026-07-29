@@ -229,7 +229,7 @@ def execute_conversion(
         audio_sink: Optional[AudioSink] = None
         audio_path = None
         if merge_chapters:
-            audio_path = output_layout.audio_dir / f"{_base_name(request)}.{request.output_format}"
+            audio_path = output_layout.audio_dir / f"{_base_name(request)}{request.output_format.dot_ext}"
             meta = plan.metadata if plan.metadata else None
             audio_sink = stack.enter_context(
                 open_audio_sink(

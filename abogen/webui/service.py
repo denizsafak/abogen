@@ -15,24 +15,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Mapping
 
 from abogen.domain.enums import Language
-from abogen.utils import get_internal_cache_path, get_user_settings_dir, load_config
+from abogen.utils import get_internal_cache_path, get_user_settings_dir
 from abogen.voice_cache import bootstrap_voice_cache
-from abogen.integrations.audiobookshelf import (
-    AudiobookshelfClient,
-    AudiobookshelfConfig,
-    AudiobookshelfUploadError,
-)
-from abogen.domain.metadata_helpers import (
-    normalize_metadata_casefold as _normalize_metadata_casefold,
-    split_people_field as _split_people_field,
-    split_simple_list as _split_simple_list,
-    first_nonempty as _first_nonempty,
-    extract_year as _extract_year,
-    normalize_series_sequence as _normalize_series_sequence,
-    build_audiobookshelf_metadata as _build_abs_metadata,
-    load_audiobookshelf_chapters as _load_abs_chapters,
-    _SERIES_SEQUENCE_TAG_KEYS,
-)
 
 
 def _create_set_event() -> threading.Event:
@@ -264,23 +248,6 @@ class Job:
             "heteronym_overrides": [dict(entry) for entry in self.heteronym_overrides],
             "normalization_overrides": dict(self.normalization_overrides),
         }
-
-
-def build_audiobookshelf_metadata(job: Job) -> Dict[str, Any]:
-    filename = Path(job.original_filename or "").stem or job.original_filename or "Audiobook"
-    return _build_abs_metadata(
-        job.metadata_tags,
-        language=job.language or "",
-        filename=filename,
-    )
-
-
-def load_audiobookshelf_chapters(job: Job) -> Optional[List[Dict[str, Any]]]:
-    metadata_ref = job.result.artifacts.get("metadata")
-    if not metadata_ref:
-        return None
-    metadata_path = metadata_ref if isinstance(metadata_ref, Path) else Path(str(metadata_ref))
-    return _load_abs_chapters(metadata_path)
 
 
 def _existing_paths(paths: Iterable[Any]) -> List[Path]:
@@ -781,7 +748,6 @@ class ConversionService:
             elif job.status != JobStatus.FAILED:
                 job.status = JobStatus.COMPLETED
                 job.add_log("Job completed", level="success")
-                self._post_completion_hooks(job)
             job.finished_at = time.time()
         finally:
             job.pause_event.set()
@@ -801,105 +767,6 @@ class ConversionService:
         if job_id in self._queue:
             self._queue.remove(job_id)
         self._update_queue_positions_locked()
-
-    def _post_completion_hooks(self, job: Job) -> None:
-        try:
-            self._maybe_send_to_audiobookshelf(job)
-        except AudiobookshelfUploadError as exc:
-            job.add_log(f"Audiobookshelf upload failed: {exc}", level="error")
-        except Exception as exc:  # pragma: no cover - defensive guard
-            job.add_log(f"Audiobookshelf integration error: {exc}", level="error")
-
-    def _maybe_send_to_audiobookshelf(self, job: Job) -> None:
-        cfg = load_config() or {}
-        integration_cfg = cfg.get("audiobookshelf")
-        if not isinstance(integration_cfg, Mapping):
-            return
-        enabled = self._coerce_bool(integration_cfg.get("enabled"), False)
-        auto_send = self._coerce_bool(integration_cfg.get("auto_send"), False)
-        if not (enabled and auto_send):
-            return
-
-        base_url = str(integration_cfg.get("base_url") or "").strip()
-        api_token = str(integration_cfg.get("api_token") or "").strip()
-        library_id = str(integration_cfg.get("library_id") or "").strip()
-        folder_id = str(integration_cfg.get("folder_id") or "").strip()
-        if not base_url or not api_token or not library_id:
-            job.add_log(
-                "Audiobookshelf upload skipped: configure base URL, API token, and library ID first.",
-                level="warning",
-            )
-            return
-        if not folder_id:
-            job.add_log(
-                "Audiobookshelf upload skipped: enter the folder name or ID in the Audiobookshelf settings.",
-                level="warning",
-            )
-            return
-
-        audio_ref = job.result.audio_path
-        audio_path = audio_ref if isinstance(audio_ref, Path) else Path(str(audio_ref)) if audio_ref else None
-        if not audio_path or not audio_path.exists():
-            job.add_log("Audiobookshelf upload skipped: audio output not found.", level="warning")
-            return
-
-        timeout_raw = integration_cfg.get("timeout", 3600.0)
-        try:
-            timeout_value = float(timeout_raw)
-        except (TypeError, ValueError):
-            timeout_value = 3600.0
-
-        config = AudiobookshelfConfig(
-            base_url=base_url,
-            api_token=api_token,
-            library_id=library_id,
-            collection_id=(str(integration_cfg.get("collection_id") or "").strip() or None),
-            folder_id=folder_id,
-            verify_ssl=self._coerce_bool(integration_cfg.get("verify_ssl"), True),
-            send_cover=self._coerce_bool(integration_cfg.get("send_cover"), True),
-            send_chapters=self._coerce_bool(integration_cfg.get("send_chapters"), True),
-            send_subtitles=self._coerce_bool(integration_cfg.get("send_subtitles"), False),
-            timeout=timeout_value,
-        )
-
-        cover_ref = job.cover_image_path
-        cover_path = None
-        if config.send_cover and cover_ref:
-            cover_candidate = cover_ref if isinstance(cover_ref, Path) else Path(str(cover_ref))
-            if cover_candidate.exists():
-                cover_path = cover_candidate
-
-        subtitles = _existing_paths(job.result.subtitle_paths) if config.send_subtitles else None
-        chapters = load_audiobookshelf_chapters(job) if config.send_chapters else None
-        metadata = build_audiobookshelf_metadata(job)
-
-        client = AudiobookshelfClient(config)
-
-        display_title = metadata.get("title") or audio_path.stem
-        try:
-            existing_items = client.find_existing_items(display_title, folder_id=config.folder_id)
-        except AudiobookshelfUploadError as exc:
-            job.add_log(f"Audiobookshelf lookup failed: {exc}", level="error")
-            return
-
-        if existing_items:
-            job.add_log(
-                f"Removing existing Audiobookshelf item(s) for '{display_title}' before upload.",
-                level="info",
-            )
-            try:
-                client.delete_items(existing_items)
-            except Exception as exc:
-                job.add_log(f"Failed to remove existing item(s): {exc}", level="warning")
-
-        client.upload_audiobook(
-            audio_path,
-            metadata=metadata,
-            cover_path=cover_path,
-            chapters=chapters,
-            subtitles=subtitles,
-        )
-        job.add_log("Audiobookshelf upload queued.", level="info")
 
     # Persistence ------------------------------------------------------
     def _serialize_job(self, job: Job) -> Dict[str, Any]:

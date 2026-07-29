@@ -240,5 +240,11 @@ def _finalize(
         except Exception as exc:
             events.log(f"Failed to record override usage: {exc}", level="debug")
 
+    # Post-conversion hooks (Audiobookshelf, etc.)
+    from abogen.application.integration_hooks import PostConversionHooks
+
+    hooks = PostConversionHooks()
+    hooks.run(request, result, events)
+
 
 

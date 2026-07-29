@@ -16,16 +16,9 @@ from abogen.domain.metadata_helpers import (
     first_nonempty,
     extract_year,
     normalize_series_sequence,
-    build_audiobookshelf_metadata as _build_abs_metadata,
-    load_audiobookshelf_chapters as _load_abs_chapters,
     _SERIES_SEQUENCE_TAG_KEYS,
 )
 from abogen.epub3.exporter import build_epub3_package
-from abogen.integrations.audiobookshelf import (
-    AudiobookshelfClient,
-    AudiobookshelfConfig,
-    AudiobookshelfUploadError,
-)
 from abogen.utils import create_process
 
 logger = logging.getLogger(__name__)
@@ -320,132 +313,7 @@ class ExportService:
             cover_image_mime=cover_mime,
         )
     
-    # ----------------------------------------------------------------------
-    # Audiobookshelf Integration
-    # ----------------------------------------------------------------------
-    
-    def build_audiobookshelf_metadata(self, job: Any) -> Dict[str, Any]:
-        """Build Audiobookshelf metadata from job."""
-        filename = Path(getattr(job, "original_filename", "") or "").stem or "Audiobook"
-        return _build_abs_metadata(
-            getattr(job, "metadata_tags", {}),
-            language=getattr(job, "language", "") or "",
-            filename=filename,
-        )
 
-    def load_audiobookshelf_chapters(self, job: Any) -> Optional[List[Dict[str, Any]]]:
-        """Load chapters from job artifacts for Audiobookshelf."""
-        metadata_ref = job.result.artifacts.get("metadata") if getattr(job, "result", None) else None
-        if not metadata_ref:
-            return None
-        metadata_path = metadata_ref if isinstance(metadata_ref, Path) else Path(str(metadata_ref))
-        return _load_abs_chapters(metadata_path)
-    
-    def upload_audiobookshelf(
-        self,
-        job: Any,
-        audio_path: Path,
-        subtitle_paths: List[Path],
-        chapters: List[Dict[str, Any]],
-        metadata: Dict[str, Any],
-        cover_path: Optional[Path] = None,
-        config: Optional[AudiobookshelfConfig] = None,
-        log_callback: Optional[callable] = None,
-    ) -> None:
-        """Upload to Audiobookshelf."""
-        if config is None:
-            cfg = getattr(job, "_abs_config", None)
-            if cfg is None:
-                from abogen.utils import load_config
-                global_cfg = load_config() or {}
-                abs_cfg = global_cfg.get("audiobookshelf")
-                if isinstance(abs_cfg, Mapping):
-                    config = AudiobookshelfConfig(
-                        base_url=str(abs_cfg.get("base_url") or "").strip(),
-                        api_token=str(abs_cfg.get("api_token") or "").strip(),
-                        library_id=str(abs_cfg.get("library_id") or "").strip(),
-                        collection_id=(str(abs_cfg.get("collection_id") or "").strip() or None),
-                        folder_id=str(abs_cfg.get("folder_id") or "").strip(),
-                        verify_ssl=self._coerce_bool(abs_cfg.get("verify_ssl"), True),
-                        send_cover=self._coerce_bool(abs_cfg.get("send_cover"), True),
-                        send_chapters=self._coerce_bool(abs_cfg.get("send_chapters"), True),
-                        send_subtitles=self._coerce_bool(abs_cfg.get("send_subtitles"), False),
-                        timeout=float(abs_cfg.get("timeout", 3600.0)),
-                    )
-                else:
-                    if log_callback:
-                        log_callback("Audiobookshelf upload skipped: not configured", "warning")
-                    return
-
-        if not config.base_url or not config.api_token or not config.library_id:
-            if log_callback:
-                log_callback("Audiobookshelf upload skipped: configure base URL, API token, and library ID first", "warning")
-            return
-        if not config.folder_id:
-            if log_callback:
-                log_callback("Audiobookshelf upload skipped: enter folder name or ID in settings", "warning")
-            return
-
-        if not audio_path.exists():
-            if log_callback:
-                log_callback("Audiobookshelf upload skipped: audio output not found", "warning")
-            return
-        
-        existing_subtitles = [p for p in subtitle_paths if p.exists()] if config.send_subtitles else None
-        chapters_to_send = chapters if config.send_chapters else None
-        
-        client = AudiobookshelfClient(config)
-        
-        display_title = metadata.get("title") or audio_path.stem
-        try:
-            existing_items = client.find_existing_items(display_title, folder_id=config.folder_id)
-        except AudiobookshelfUploadError as exc:
-            if log_callback:
-                log_callback(f"Audiobookshelf lookup failed: {exc}", "error")
-            return
-        
-        if existing_items:
-            if log_callback:
-                log_callback(f"Removing existing Audiobookshelf item(s) for '{display_title}' before upload.", "info")
-            try:
-                client.delete_items(existing_items)
-            except Exception as exc:
-                if log_callback:
-                    log_callback(f"Failed to remove existing item(s): {exc}", "warning")
-        
-        cover_to_send = cover_path
-        if config.send_cover and cover_to_send:
-            if isinstance(cover_to_send, str):
-                cover_to_send = Path(cover_to_send)
-            if not cover_to_send.exists():
-                cover_to_send = None
-        
-        client.upload_audiobook(
-            audio_path,
-            metadata=metadata,
-            cover_path=cover_to_send,
-            chapters=chapters_to_send,
-            subtitles=existing_subtitles,
-        )
-        
-        if log_callback:
-            log_callback("Audiobookshelf upload queued.", "info")
-    
-    # ----------------------------------------------------------------------
-    # Helpers
-    # ----------------------------------------------------------------------
-    
-    @staticmethod
-    def _coerce_bool(value: Any, default: bool = True) -> bool:
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"true", "1", "yes", "on"}:
-                return True
-            if lowered in {"false", "0", "no", "off"}:
-                return False
-            return default
         if value is None:
             return default
         return bool(value)

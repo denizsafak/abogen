@@ -29,8 +29,8 @@ def apply_form_to_settings(current: dict, form: Mapping[str, Any]) -> dict:
         DEFAULT_ANALYSIS_THRESHOLD,
         _NORMALIZATION_BOOLEAN_KEYS,
         _NORMALIZATION_STRING_KEYS,
+        stored_integration_config,
     )
-    from abogen.webui.routes.utils.settings import stored_integration_config
     from abogen.webui.routes.utils.common import extract_checkbox
     from abogen.utils import load_config
     # General settings

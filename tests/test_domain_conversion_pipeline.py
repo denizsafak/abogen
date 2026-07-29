@@ -251,13 +251,15 @@ class TestSpacyPreTtsSegmentation:
         assert len(segments) == 1
 
     def test_returns_at_least_one_segment(self):
+        from unittest.mock import patch
         from abogen.domain.conversion_pipeline import spacy_pre_tts_segmentation
         from abogen.domain.enums import Language
 
-        segments, split = spacy_pre_tts_segmentation(
-            "",
-            Language.FR,
-            "Sentence",
-            use_spacy_segmentation=True,
-        )
+        with patch("abogen.spacy_utils.segment_sentences", return_value=None):
+            segments, split = spacy_pre_tts_segmentation(
+                "",
+                Language.FR,
+                "Sentence",
+                use_spacy_segmentation=True,
+            )
         assert len(segments) >= 1

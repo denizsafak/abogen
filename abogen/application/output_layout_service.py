@@ -98,7 +98,7 @@ def resolve_merged_path(
     base_name = sanitize_output_stem(
         request.original_filename or "output"
     )
-    return layout.audio_dir / f"{base_name}.{request.output_format}"
+    return layout.audio_dir / f"{base_name}{request.output_format.dot_ext}"
 
 
 def resolve_chapter_path(

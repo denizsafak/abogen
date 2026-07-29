@@ -2,7 +2,6 @@ import os
 from typing import Any, Dict, Mapping, Optional
 
 from abogen.integrations.calibre_opds import CalibreOPDSClient
-from abogen.integrations.audiobookshelf import AudiobookshelfConfig
 from abogen.utils import load_config, save_config
 from abogen.domain.settings_core import (
     CHUNK_LEVEL_OPTIONS,
@@ -11,6 +10,7 @@ from abogen.domain.settings_core import (
     SAVE_MODE_LABELS,
     _NORMALIZATION_BOOLEAN_KEYS,
     _NORMALIZATION_STRING_KEYS,
+    build_audiobookshelf_config,
     coerce_bool,
     coerce_float,
     coerce_int,
@@ -18,6 +18,7 @@ from abogen.domain.settings_core import (
     load_settings,
     llm_ready,
     settings_defaults,
+    stored_integration_config,
 )
 
 _NORMALIZATION_GROUPS = [
@@ -124,20 +125,8 @@ def load_integration_settings() -> Dict[str, Dict[str, Any]]:
     return integrations
 
 
-def stored_integration_config(name: str) -> Dict[str, Any]:
-    cfg = load_config() or {}
-    # Check under "integrations" first (new structure)
-    integrations = cfg.get("integrations")
-    if isinstance(integrations, Mapping):
-        entry = integrations.get(name)
-        if isinstance(entry, Mapping):
-            return dict(entry)
-    
-    # Fallback to top-level (legacy structure)
-    entry = cfg.get(name)
-    if isinstance(entry, Mapping):
-        return dict(entry)
-    return {}
+# stored_integration_config and build_audiobookshelf_config are imported from
+# abogen.domain.settings_core — single source of truth for integration config.
 
 
 def calibre_settings_from_payload(payload: Mapping[str, Any]) -> Dict[str, Any]:
@@ -303,30 +292,6 @@ def audiobookshelf_settings_from_payload(payload: Mapping[str, Any]) -> Dict[str
         "auto_send": auto_send,
         "timeout": timeout,
     }
-
-
-def build_audiobookshelf_config(settings: Mapping[str, Any]) -> Optional[AudiobookshelfConfig]:
-    base_url = str(settings.get("base_url") or "").strip()
-    api_token = str(settings.get("api_token") or "").strip()
-    library_id = str(settings.get("library_id") or "").strip()
-    if not (base_url and api_token and library_id):
-        return None
-    try:
-        timeout = float(settings.get("timeout", 3600.0))
-    except (TypeError, ValueError):
-        timeout = 3600.0
-    return AudiobookshelfConfig(
-        base_url=base_url,
-        api_token=api_token,
-        library_id=library_id,
-        collection_id=(str(settings.get("collection_id") or "").strip() or None),
-        folder_id=(str(settings.get("folder_id") or "").strip() or None),
-        verify_ssl=coerce_bool(settings.get("verify_ssl"), True),
-        send_cover=coerce_bool(settings.get("send_cover"), True),
-        send_chapters=coerce_bool(settings.get("send_chapters"), True),
-        send_subtitles=coerce_bool(settings.get("send_subtitles"), False),
-        timeout=timeout,
-    )
 
 
 def calibre_integration_enabled(

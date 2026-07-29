@@ -8,6 +8,8 @@ from flask.typing import ResponseReturnValue
 
 from abogen.webui.service import (
     JobStatus,
+)
+from abogen.domain.metadata_helpers import (
     build_audiobookshelf_metadata,
     load_audiobookshelf_chapters,
 )
@@ -19,9 +21,9 @@ from abogen.webui.routes.utils.epub import (
     locate_job_epub,
     locate_job_audio,
 )
-from abogen.webui.routes.utils.settings import (
-    stored_integration_config,
+from abogen.domain.settings_core import (
     build_audiobookshelf_config,
+    stored_integration_config,
 )
 from abogen.webui.routes.utils.common import existing_paths
 from abogen.infrastructure.exporters import ExportService
