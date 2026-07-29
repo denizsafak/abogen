@@ -7,6 +7,7 @@ import soundfile as sf
 from flask import current_app, send_file
 from flask.typing import ResponseReturnValue
 
+from abogen.domain.audio_helpers import to_float32
 from abogen.domain.device import select_device as _select_device
 from abogen.domain.enums import Language
 from abogen.domain.split_pattern import get_split_pattern
@@ -155,7 +156,7 @@ def generate_preview_audio(
         graphemes = getattr(segment, "graphemes", "").strip()
         if not graphemes:
             continue
-        audio = _to_float32(getattr(segment, "audio", None))
+        audio = to_float32(getattr(segment, "audio", None))
         if audio.size == 0:
             continue
         remaining = max_samples - accumulated

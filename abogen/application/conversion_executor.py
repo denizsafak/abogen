@@ -301,7 +301,7 @@ def execute_conversion(
 
             chapter_display = f"Chapter {chapter_idx}/{len(plan.chapters)}: {chapter.title}"
             events.log(f"Processing {chapter_display}")
-            logging.info("[executor] Chapter %d/%d start: title=%s", chapter_idx, len(plan.chapters), chapter.title)
+            logging.info("[executor] Chapter %d/%d: %s", chapter_idx, len(plan.chapters), chapter.title)
 
             # Resolve chapter voice
             chapter_provider, chapter_voice, chapter_speed, chapter_steps = _resolve_voice(
@@ -532,7 +532,7 @@ def execute_conversion(
             collector.on_chapter_end(stats.current_time)
             logging.info("[executor] Chapter %d/%d done: time=%.1fs", chapter_idx, len(plan.chapters), stats.current_time)
 
-        logging.info("[executor] All chapters processed, total time=%.1fs", stats.current_time)
+        logging.info("[executor] All chapters done: total=%.1fs", stats.current_time)
 
         # Process outro
         if plan.outro and plan.outro.enabled and merge_chapters:
