@@ -15,6 +15,7 @@ The service NEVER imports from PyQt or WebUI.
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from typing import Any, Dict
 
@@ -61,6 +62,10 @@ def run_conversion(
     try:
         # Stage 0: Create voice resolver
         events.log("Preparing conversion pipeline")
+        logging.info(
+            "[app] run_conversion: provider=%s language=%s voice=%s speed=%.2f",
+            request.tts_provider, request.language, request.voice, request.speed,
+        )
         resolver = _create_voice_resolver(request, pool, voice_cache)
 
         # Stage 1: Prepare TTS context
@@ -94,10 +99,12 @@ def run_conversion(
         _finalize(request, result, plan, events)
 
         events.log("Conversion complete")
+        logging.info("[app] run_conversion completed successfully")
         return result
 
     except Exception as e:
         events.log(f"Conversion failed: {e}", level="error")
+        logging.exception("[app] run_conversion failed: %s", e)
         raise
     finally:
         pool.dispose_all()

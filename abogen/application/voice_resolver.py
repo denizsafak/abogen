@@ -7,6 +7,7 @@ PyQtVoiceResolver) with a single app-layer implementation.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, Optional
 
 from abogen.application.conversion_ports import ResolvedVoice, VoiceResolver
@@ -49,6 +50,7 @@ class AppVoiceResolver:
         cache_key = f"{provider}:{resolved}" if resolved else provider
         cached = self._cache.get(cache_key)
         if cached is not None:
+            logging.info("[resolver] Cache hit: spec=%s -> provider=%s resolved=%s", voice_spec, provider, resolved)
             return ResolvedVoice(
                 provider=provider,
                 resolved_spec=resolved,
@@ -68,6 +70,8 @@ class AppVoiceResolver:
             loaded = resolved
 
         self._cache.set(cache_key, loaded)
+        logging.info("[resolver] Resolved: spec=%s -> provider=%s resolved=%s speed=%.2f steps=%s",
+                      voice_spec, provider, resolved, speed, steps)
         return ResolvedVoice(
             provider=provider,
             resolved_spec=resolved,

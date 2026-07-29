@@ -8,6 +8,7 @@ This is Stage 6 of the conversion flow unification plan.
 
 from __future__ import annotations
 
+import logging
 import time
 from contextlib import ExitStack
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
@@ -172,6 +173,14 @@ def execute_conversion(
     result = ConversionResult(metadata=plan.metadata)
     collector = MarkerCollector()
 
+    logging.info(
+        "[executor] Starting: chapters=%d intro=%s outro=%s merge=%s",
+        len(plan.chapters),
+        bool(plan.intro and plan.intro.enabled),
+        bool(plan.outro and plan.outro.enabled),
+        request.save.merge_chapters_at_end,
+    )
+
     # Determine cancellation checker
     if check_cancelled is None:
         check_cancelled = lambda: events.check_cancelled()
@@ -207,10 +216,12 @@ def execute_conversion(
 
     # Resolve voices
     base_voice_spec = request.voice or "M1"
+    logging.info("[executor] Resolving base voice: spec=%s", base_voice_spec)
     base_provider, base_voice_choice, base_speed, base_steps = _resolve_voice(
         voice_resolver, base_voice_spec, request,
         log_callback=lambda msg: events.log(msg, level="warning"),
     )
+    logging.info("[executor] Base voice resolved: provider=%s voice=%s speed=%.2f", base_provider, base_voice_choice, base_speed)
 
     # Use ExitStack for resource management
     with ExitStack() as stack:
@@ -290,12 +301,14 @@ def execute_conversion(
 
             chapter_display = f"Chapter {chapter_idx}/{len(plan.chapters)}: {chapter.title}"
             events.log(f"Processing {chapter_display}")
+            logging.info("[executor] Chapter %d/%d start: title=%s", chapter_idx, len(plan.chapters), chapter.title)
 
             # Resolve chapter voice
             chapter_provider, chapter_voice, chapter_speed, chapter_steps = _resolve_voice(
                 voice_resolver, chapter.voice_spec, request,
                 log_callback=lambda msg: events.log(msg, level="warning"),
             )
+            logging.info("[executor] Chapter %d voice: provider=%s voice=%s speed=%.2f", chapter_idx, chapter_provider, chapter_voice, chapter_speed)
             chapter_backend = pipeline_provider.get(chapter_provider, request.language, request.use_gpu)
 
             # Record chapter start for markers
@@ -517,6 +530,9 @@ def execute_conversion(
 
             # Record chapter end for markers
             collector.on_chapter_end(stats.current_time)
+            logging.info("[executor] Chapter %d/%d done: time=%.1fs", chapter_idx, len(plan.chapters), stats.current_time)
+
+        logging.info("[executor] All chapters processed, total time=%.1fs", stats.current_time)
 
         # Process outro
         if plan.outro and plan.outro.enabled and merge_chapters:

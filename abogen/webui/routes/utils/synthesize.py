@@ -1,4 +1,5 @@
 import io
+import logging
 import threading
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 import numpy as np
@@ -43,9 +44,11 @@ def _resolve_pipeline(language: Language, use_gpu: bool) -> Tuple[Any, bool]:
     last_error: Optional[Exception] = None
     for device in devices:
         try:
+            logging.info("[preview] Trying device=%s for language=%s", device, language)
             return get_preview_pipeline(language, device), device != "cpu"
         except Exception as exc:
             last_error = exc
+            logging.warning("[preview] Device %s failed: %s", device, exc)
 
     raise RuntimeError("Preview pipeline is unavailable") from last_error
 
@@ -55,9 +58,11 @@ def get_preview_pipeline(language: Language, device: str) -> Any:
     with _preview_pipeline_lock:
         pipeline = _preview_pipelines.get(key)
         if pipeline is not None:
+            logging.info("[preview] Using cached pipeline for %s/%s", language, device)
             return pipeline
         from abogen.tts_plugin.utils import create_pipeline
 
+        logging.info("[preview] Creating pipeline: provider=kokoro language=%s device=%s", language, device)
         pipeline = create_pipeline("kokoro", language=language, device=device)
         _preview_pipelines[key] = pipeline
         return pipeline

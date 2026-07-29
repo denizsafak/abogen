@@ -15,6 +15,7 @@ Engine converts Language → its own format internally.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,11 @@ from .service import Job, JobStatus
 def _build_request(job: Job) -> ConversionRequest:
     """Build a ConversionRequest from a WebUI Job."""
     source_path = Path(job.stored_path) if job.stored_path else None
+
+    logging.info(
+        "[runner] Building request: job=%s provider=%s language=%s voice=%s speed=%.2f gpu=%s",
+        job.id, job.tts_provider, job.language, job.voice, job.speed, job.use_gpu,
+    )
 
     return ConversionRequest(
         # Source
@@ -186,6 +192,7 @@ def run_conversion_job(job: Job) -> None:
     request = _build_request(job)
     events = WebUIEventsAdapter(job)
 
+    logging.info("[runner] Starting conversion: job=%s", job.id)
     try:
         result = run_conversion(request, events)
         _apply_result(job, result)
@@ -193,10 +200,14 @@ def run_conversion_job(job: Job) -> None:
         if job.status != JobStatus.CANCELLED:
             job.progress = 1.0
 
+        logging.info("[runner] Conversion completed: job=%s", job.id)
+
     except ConversionCancelled:
         job.status = JobStatus.CANCELLED
         job.add_log("Job cancelled", level="warning")
+        logging.info("[runner] Conversion cancelled: job=%s", job.id)
     except Exception as exc:
         job.error = str(exc)
         job.status = JobStatus.FAILED
         job.add_log(f"Job failed: {exc}", level="error")
+        logging.exception("[runner] Conversion failed: job=%s error=%s", job.id, exc)

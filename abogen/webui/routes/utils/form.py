@@ -1,3 +1,4 @@
+import logging
 import time
 import uuid
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, cast
@@ -793,6 +794,11 @@ def build_pending_job_from_extraction(
             normalization_overrides[key] = str(val)
         else:
             normalization_overrides[key] = default_val
+
+    logging.info(
+        "[form] Creating PendingJob: language=%s voice=%s speed=%.2f provider=%s",
+        language, voice, speed, settings.get("tts_provider", "kokoro"),
+    )
 
     pending = PendingJob(
         id=uuid.uuid4().hex,

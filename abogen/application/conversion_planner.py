@@ -8,6 +8,7 @@ This is Stage 2 of the conversion flow unification plan.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from abogen.application.conversion_models import (
@@ -64,6 +65,13 @@ def build_conversion_plan(request: ConversionRequest) -> ConversionPlan:
 
     # 7. Resolve output layout
     output_layout = resolve_output_layout(request)
+
+    logging.info(
+        "[planner] Plan built: chapters=%d intro=%s outro=%s",
+        len(chapters),
+        bool(intro and intro.enabled),
+        bool(outro and outro.enabled),
+    )
 
     return ConversionPlan(
         request=request,
