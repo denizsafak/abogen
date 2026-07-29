@@ -578,7 +578,7 @@ def template_options() -> Dict[str, Any]:
         )
     voice_catalog = build_voice_catalog()
     return {
-        "languages": LANGUAGE_DESCRIPTIONS,
+        "languages": {lang.value: label for lang, label in LANGUAGE_DESCRIPTIONS.items()},
         "voices": get_voices("kokoro"),
         "subtitle_formats": SUBTITLE_FORMATS,
         "supported_langs_for_subs": SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION,

@@ -4,6 +4,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, cast
 from flask import request, render_template, jsonify
 from flask.typing import ResponseReturnValue
 
+from abogen.domain.enums import Language
 from abogen.domain.chapter_classification import (
     supplement_score,
     should_preselect_chapter,
@@ -346,7 +347,10 @@ def apply_book_step_form(
     language_fallback = pending.language or settings.get("language", "en")
     raw_language = (form.get("language") or language_fallback or "en").strip()
     if raw_language:
-        pending.language = raw_language
+        try:
+            pending.language = Language.from_str(raw_language)
+        except (ValueError, AttributeError):
+            pending.language = Language.EN_US
 
     subtitle_mode = (form.get("subtitle_mode") or pending.subtitle_mode or "Disabled").strip()
     if subtitle_mode:
@@ -513,7 +517,10 @@ def apply_book_step_form(
     )
 
     if resolved_language:
-        pending.language = resolved_language
+        try:
+            pending.language = Language.from_str(str(resolved_language))
+        except (ValueError, AttributeError):
+            pass  # keep existing language
 
     if profile_selection == "__formula" and custom_formula_raw:
         pending.voice = custom_formula_raw
@@ -666,7 +673,11 @@ def build_pending_job_from_extraction(
 
     ensure_at_least_one_chapter_enabled(chapters_payload)
 
-    language = str(form.get("language") or "a").strip() or "a"
+    raw_language = str(form.get("language") or "a").strip() or "a"
+    try:
+        language = Language.from_str(raw_language)
+    except (ValueError, AttributeError):
+        language = Language.EN_US
     profiles_map = dict(profiles) if isinstance(profiles, Mapping) else dict(profiles or {})
     default_voice_setting = settings.get("default_voice") or ""
     resolved_default_voice, inferred_profile, inferred_language = resolve_voice_setting(

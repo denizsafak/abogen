@@ -184,6 +184,11 @@ def api_voice_profiles_preview() -> ResponseReturnValue:
     voice_spec = ""
     resolved_provider = provider or "kokoro"
 
+    current_app.logger.info(
+        "[preview] provider=%s language=%s speed=%.2f profile=%s formula=%s",
+        resolved_provider, language, speed, profile_name or "-", formula or "-",
+    )
+
     profiles = load_profiles()
     if resolved_provider == "supertonic" and not profile_name:
         voice_spec = str(payload.get("voice") or payload.get("supertonic_voice") or "M1").strip() or "M1"
@@ -214,7 +219,13 @@ def api_voice_profiles_preview() -> ResponseReturnValue:
         voice_spec = formula_from_profile(normalized_entry) or ""
         resolved_provider = "kokoro"
 
+    current_app.logger.info(
+        "[preview] resolved: provider=%s voice_spec=%s",
+        resolved_provider, voice_spec[:80] if voice_spec else "-",
+    )
+
     if not voice_spec:
+        current_app.logger.warning("[preview] empty voice_spec, returning 400")
         return jsonify({"error": "Unable to resolve preview voice"}), 400
 
     try:
@@ -229,6 +240,7 @@ def api_voice_profiles_preview() -> ResponseReturnValue:
             max_seconds=max_seconds,
         )
     except Exception as exc:
+        current_app.logger.exception("[preview] synthesis failed: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
 @api_bp.post("/speaker-preview")

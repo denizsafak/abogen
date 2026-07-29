@@ -452,6 +452,9 @@ const initDashboard = () => {
         return;
       }
       openUploadModal(dropzone);
+      if (sourceFileInput) {
+        sourceFileInput.click();
+      }
     });
 
     dropzone.addEventListener("keydown", (event) => {

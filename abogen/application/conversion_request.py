@@ -105,6 +105,7 @@ class ConversionRequest:
         _apply_none_defaults(self)
         if not self.tts_provider:
             self.tts_provider = "kokoro"
+        _coerce_enums(self)
         _clamp_numerics(self)
 
 
@@ -117,6 +118,25 @@ def _apply_none_defaults(obj: ConversionRequest) -> None:
             setattr(obj, f.name, f.default)
         elif f.default_factory is not dataclasses.MISSING:
             setattr(obj, f.name, f.default_factory())
+
+
+# Enum fields that accept string coercion: attr -> (enum_class, fallback)
+_ENUM_COERCIONS: dict[str, tuple[type, Any]] = {
+    "language": (Language, Language.EN_US),
+    "output_format": (OutputFormat, OutputFormat.WAV),
+}
+
+
+def _coerce_enums(obj: ConversionRequest) -> None:
+    """Coerce string values to their expected enum types."""
+    for attr, (enum_cls, fallback) in _ENUM_COERCIONS.items():
+        val = getattr(obj, attr)
+        if isinstance(val, enum_cls):
+            continue
+        try:
+            setattr(obj, attr, enum_cls.from_str(str(val)))
+        except (ValueError, AttributeError):
+            setattr(obj, attr, fallback)
 
 
 def _clamp_numerics(obj: ConversionRequest) -> None:

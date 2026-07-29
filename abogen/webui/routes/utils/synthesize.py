@@ -58,7 +58,7 @@ def get_preview_pipeline(language: Language, device: str) -> Any:
             return pipeline
         from abogen.tts_plugin.utils import create_pipeline
 
-        pipeline = create_pipeline("kokoro", language=lang, device=device)
+        pipeline = create_pipeline("kokoro", language=language, device=device)
         _preview_pipelines[key] = pipeline
         return pipeline
 
