@@ -26,10 +26,11 @@ from abogen.webui.routes.utils.settings import (
     audiobookshelf_manual_available,
 )
 from abogen.webui.routes.utils.voice import (
+    inject_recommended_voices,
     parse_voice_formula,
-    prepare_speaker_metadata,
     template_options,
 )
+from abogen.domain.speaker_metadata import prepare_speaker_metadata
 from abogen.domain.voice_resolution import (
     formula_from_profile,
     resolve_voice_setting,
@@ -782,6 +783,7 @@ def build_pending_job_from_extraction(
         run_analysis=initial_analysis,
         speaker_config=speaker_config_payload,
         apply_config=bool(speaker_config_payload),
+        inject_recommended=inject_recommended_voices,
     )
 
     normalization_overrides = {}
