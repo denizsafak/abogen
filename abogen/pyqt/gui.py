@@ -70,10 +70,8 @@ from abogen.utils import (
     LoadPipelineThread,
 )
 
-from abogen.subtitle_utils import (
-    clean_text,
-    calculate_text_length,
-)
+from abogen.subtitle_utils import clean_text
+from abogen.domain.text_utils import calculate_text_length
 
 from abogen.pyqt.conversion import ConversionThread, VoicePreviewThread, PlayAudioThread, ChapterOptionsDialog, TimestampDetectionDialog
 from abogen.pyqt.book_handler import HandlerDialog

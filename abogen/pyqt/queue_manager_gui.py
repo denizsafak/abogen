@@ -523,7 +523,7 @@ class QueueManager(QDialog):
         return attrs
 
     def add_files_from_paths(self, file_paths):
-        from abogen.subtitle_utils import calculate_text_length
+        from abogen.domain.text_utils import calculate_text_length
         from PyQt6.QtWidgets import QMessageBox
         import os
 

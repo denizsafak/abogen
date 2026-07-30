@@ -16,7 +16,8 @@ import markdown  # type: ignore[import]
 from bs4 import BeautifulSoup, NavigableString  # type: ignore[import]
 from ebooklib import epub  # type: ignore[import]
 
-from .utils import calculate_text_length, clean_text, detect_encoding
+from .utils import clean_text, detect_encoding
+from .domain.text_utils import calculate_text_length
 
 logger = logging.getLogger(__name__)
 

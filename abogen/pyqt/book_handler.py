@@ -36,10 +36,8 @@ from abogen.domain.metadata_extraction import (
     format_metadata_tags,
 )
 
-from abogen.subtitle_utils import (
-    clean_text,
-    calculate_text_length,
-)
+from abogen.subtitle_utils import clean_text
+from abogen.domain.text_utils import calculate_text_length
 
 import os
 import logging

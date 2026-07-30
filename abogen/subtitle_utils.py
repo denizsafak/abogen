@@ -34,17 +34,6 @@ def clean_subtitle_text(text):
     return text.strip()
 
 
-def calculate_text_length(text):
-    # Use pre-compiled patterns for better performance
-    # Ignore chapter markers, voice markers, and metadata patterns in a single pass
-    text = _CHAPTER_MARKER_PATTERN.sub("", text)
-    text = _VOICE_MARKER_PATTERN.sub("", text)
-    text = _METADATA_TAG_PATTERN.sub("", text)
-    # Ignore newlines and leading/trailing spaces
-    text = text.replace("\n", "").strip()
-    # Calculate character count
-    char_count = len(text)
-    return char_count
 
 
 def clean_text(text, *args, **kwargs):

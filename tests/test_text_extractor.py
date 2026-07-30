@@ -6,7 +6,7 @@ from pathlib import Path
 from ebooklib import epub
 
 from abogen.text_extractor import extract_from_path
-from abogen.utils import calculate_text_length
+from abogen.domain.text_utils import calculate_text_length
 
 
 @pytest.fixture

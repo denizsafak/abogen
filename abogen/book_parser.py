@@ -12,7 +12,8 @@ import fitz  # PyMuPDF
 import markdown
 
 from abogen.utils import detect_encoding
-from abogen.subtitle_utils import clean_text, calculate_text_length
+from abogen.subtitle_utils import clean_text
+from abogen.domain.text_utils import calculate_text_length
 
 # Pre-compile frequently used regex patterns
 _BRACKETED_NUMBERS_PATTERN = re.compile(r"\[\s*\d+\s*\]")

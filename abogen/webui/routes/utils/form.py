@@ -6,11 +6,7 @@ from flask import request, render_template, jsonify
 from flask.typing import ResponseReturnValue
 
 from abogen.domain.enums import Language
-from abogen.domain.chapter_classification import (
-    supplement_score,
-    should_preselect_chapter,
-    ensure_at_least_one_chapter_enabled,
-)
+from abogen.application.chapter_selection import build_chapter_payload
 from abogen.webui.service import PendingJob, JobStatus
 from abogen.webui.routes.utils.service import get_service
 from abogen.tts_plugin.utils import is_plugin_registered
@@ -40,7 +36,7 @@ from abogen.domain.voice_resolution import (
 from abogen.webui.routes.utils.entity import sync_pronunciation_overrides
 from abogen.webui.routes.utils.epub import job_download_flags
 from abogen.webui.routes.utils.common import split_profile_spec, extract_checkbox
-from abogen.utils import calculate_text_length
+from abogen.domain.text_utils import calculate_text_length
 from abogen.voice_profiles import serialize_profiles, normalize_profile_entry
 from abogen.chunking import ChunkLevel, build_chunks_for_chapters
 from abogen.tts_plugin.utils import get_default_voice
@@ -641,34 +637,7 @@ def build_pending_job_from_extraction(
         getattr(extraction, "combined_text", "")
     )
     chapters_source = getattr(extraction, "chapters", []) or []
-    total_chapter_count = len(chapters_source)
-    chapters_payload: List[Dict[str, Any]] = []
-    for index, chapter in enumerate(chapters_source):
-        enabled = should_preselect_chapter(chapter.title, chapter.text, index, total_chapter_count)
-        chapters_payload.append(
-            {
-                "id": f"{index:04d}",
-                "index": index,
-                "title": chapter.title,
-                "text": chapter.text,
-                "characters": calculate_text_length(chapter.text),
-                "enabled": enabled,
-            }
-        )
-
-    if not chapters_payload:
-        chapters_payload.append(
-            {
-                "id": "0000",
-                "index": 0,
-                "title": original_name,
-                "text": "",
-                "characters": 0,
-                "enabled": True,
-            }
-        )
-
-    ensure_at_least_one_chapter_enabled(chapters_payload)
+    chapters_payload = build_chapter_payload(chapters_source, source_name=original_name)
 
     raw_language = str(form.get("language") or "a").strip() or "a"
     try:

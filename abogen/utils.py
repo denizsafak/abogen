@@ -428,19 +428,6 @@ def save_config(config):
         pass
 
 
-def calculate_text_length(text):
-    # Ignore chapter markers
-    text = re.sub(r"<<CHAPTER_MARKER:.*?>>", "", text)
-    # Ignore metadata patterns
-    text = re.sub(r"<<METADATA_[^:]+:[^>]*>>", "", text)
-    # Ignore newlines
-    text = text.replace("\n", "")
-    # Ignore leading/trailing spaces
-    text = text.strip()
-    # Calculate character count
-    char_count = len(text)
-    return char_count
-
 
 def get_gpu_acceleration(enabled):
     try:
