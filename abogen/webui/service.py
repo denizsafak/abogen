@@ -18,7 +18,7 @@ from abogen.domain.metadata_helpers import normalize_metadata_map
 
 from abogen.domain.enums import Language
 from abogen.utils import get_internal_cache_path, get_user_settings_dir
-from abogen.voice_cache import bootstrap_voice_cache
+
 
 
 def _create_set_event() -> threading.Event:
@@ -337,7 +337,6 @@ class ConversionService:
         self._pending_jobs: Dict[str, PendingJob] = {}
         self._state_path = self._determine_state_path()
         self._ensure_directories()
-        self._bootstrap_voice_cache()
         self._load_state()
 
     # Public API ---------------------------------------------------------
@@ -666,23 +665,6 @@ class ConversionService:
         self._output_root.mkdir(parents=True, exist_ok=True)
         self._uploads_root.mkdir(parents=True, exist_ok=True)
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
-
-    def _bootstrap_voice_cache(self) -> None:
-        try:
-            downloaded, errors = bootstrap_voice_cache(
-                on_progress=lambda msg: _JOB_LOGGER.debug("[voice cache] %s", msg)
-            )
-        except RuntimeError as exc:
-            _JOB_LOGGER.warning("Voice cache bootstrap skipped: %s", exc)
-            return
-
-        if downloaded:
-            count = len(downloaded)
-            suffix = "s" if count != 1 else ""
-            _JOB_LOGGER.info("Voice cache ready: downloaded %d new asset%s.", count, suffix)
-        if errors:
-            for voice_id, message in errors.items():
-                _JOB_LOGGER.warning("Voice cache failed for %s: %s", voice_id, message)
 
     def _ensure_worker(self) -> None:
         with self._lock:
