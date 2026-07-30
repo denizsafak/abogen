@@ -137,9 +137,9 @@ def generate_preview_audio(
 
         voice_choice: Any = voice_spec
         if voice_spec and "*" in voice_spec:
-            from abogen.voice_formulas import get_new_voice
+            from abogen.domain.voice_loader import resolve_voice
 
-            voice_choice = get_new_voice(pipeline, voice_spec, pipeline_uses_gpu)
+            voice_choice = resolve_voice(voice_spec, pipeline, pipeline_uses_gpu)
 
         segments = pipeline(
             normalized_text,

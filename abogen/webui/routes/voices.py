@@ -5,9 +5,11 @@ from flask.typing import ResponseReturnValue
 from abogen.domain.enums import Language
 from abogen.webui.routes.utils.voice import (
     template_options,
+    parse_voice_formula,
+)
+from abogen.domain.voice_resolution import (
     resolve_voice_setting,
     resolve_voice_choice,
-    parse_voice_formula,
 )
 from abogen.webui.routes.utils.settings import load_settings, coerce_bool
 from abogen.webui.routes.utils.synthesize import synthesize_preview

@@ -3,7 +3,7 @@ from pathlib import Path
 from werkzeug.datastructures import MultiDict
 
 from abogen.webui.routes.utils.form import apply_prepare_form
-from abogen.webui.routes.utils.voice import resolve_voice_setting
+from abogen.domain.voice_resolution import resolve_voice_setting
 from abogen.webui.service import PendingJob
 
 

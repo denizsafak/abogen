@@ -3,7 +3,6 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, cast
 from abogen.speaker_configs import slugify_label
 from abogen.speaker_analysis import analyze_speakers
 from abogen.webui.routes.utils.settings import load_settings, settings_defaults, _DEFAULT_ANALYSIS_THRESHOLD, _CHUNK_LEVEL_OPTIONS, _APOSTROPHE_MODE_OPTIONS, _NORMALIZATION_GROUPS
-from abogen.webui.routes.utils.common import split_profile_spec
 from abogen.voice_profiles import (
     load_profiles,
     serialize_profiles,
@@ -18,6 +17,8 @@ from abogen.constants import (
 )
 from abogen.tts_plugin.utils import get_voices
 from abogen.speaker_configs import list_configs
+from abogen.domain.voice_resolution import formula_from_profile
+from abogen.domain.voice_catalog import build_voice_catalog, filter_voice_catalog
 
 
 def build_narrator_roster(
@@ -219,83 +220,6 @@ def apply_speaker_config_to_roster(
 
     new_config = new_config_payload if (persist_changes and config_changed) else None
     return updated_roster, allowed_languages, new_config
-
-
-def filter_voice_catalog(
-    catalog: Iterable[Mapping[str, Any]],
-    *,
-    gender: str,
-    allowed_languages: Optional[Iterable[str]] = None,
-) -> List[str]:
-    allowed_set = {code.lower() for code in (allowed_languages or []) if isinstance(code, str) and code}
-    gender_normalized = (gender or "unknown").lower()
-    gender_code = ""
-    if gender_normalized == "male":
-        gender_code = "m"
-    elif gender_normalized == "female":
-        gender_code = "f"
-
-    matches: List[str] = []
-    seen: set[str] = set()
-
-    def _consider(entry: Mapping[str, Any]) -> None:
-        voice_id = entry.get("id")
-        if not isinstance(voice_id, str) or not voice_id:
-            return
-        if voice_id in seen:
-            return
-        seen.add(voice_id)
-        matches.append(voice_id)
-
-    primary: List[Mapping[str, Any]] = []
-    fallback: List[Mapping[str, Any]] = []
-    for entry in catalog:
-        if not isinstance(entry, Mapping):
-            continue
-        voice_lang = str(entry.get("language", "")).lower()
-        voice_gender_code = str(entry.get("gender_code", "")).lower()
-        if allowed_set and voice_lang not in allowed_set:
-            continue
-        if gender_code and voice_gender_code != gender_code:
-            fallback.append(entry)
-            continue
-        primary.append(entry)
-
-    for entry in primary:
-        _consider(entry)
-
-    if not matches:
-        for entry in fallback:
-            _consider(entry)
-
-    if not matches:
-        for entry in catalog:
-            if isinstance(entry, Mapping):
-                _consider(entry)
-
-    return matches
-
-
-def build_voice_catalog() -> List[Dict[str, str]]:
-    from plugins.kokoro.engine import language_for_voice_id
-
-    catalog: List[Dict[str, str]] = []
-    gender_map = {"f": "Female", "m": "Male"}
-    for voice_id in get_voices("kokoro"):
-        prefix, _, rest = voice_id.partition("_")
-        gender_code = prefix[1] if len(prefix) > 1 else ""
-        lang = language_for_voice_id(voice_id)
-        catalog.append(
-            {
-                "id": voice_id,
-                "language": lang.value,
-                "language_label": LANGUAGE_DESCRIPTIONS.get(lang, lang.value.upper()),
-                "gender": gender_map.get(gender_code, "Unknown"),
-                "gender_code": gender_code,
-                "display_name": rest.replace("_", " ").title() if rest else voice_id,
-            }
-        )
-    return catalog
 
 
 def inject_recommended_voices(
@@ -549,15 +473,6 @@ def prepare_speaker_metadata(
     return chunk_list, roster, analysis_payload, applied_languages, updated_config
 
 
-def formula_from_profile(entry: Dict[str, Any]) -> Optional[str]:
-    from abogen.voice_formulas import pairs_to_formula
-
-    voices = entry.get("voices") or []
-    if not voices:
-        return None
-    return pairs_to_formula(voices)
-
-
 def template_options() -> Dict[str, Any]:
     current_settings = load_settings()
     profiles = serialize_profiles()
@@ -601,83 +516,6 @@ def template_options() -> Dict[str, Any]:
         "apostrophe_modes": _APOSTROPHE_MODE_OPTIONS,
         "normalization_groups": _NORMALIZATION_GROUPS,
     }
-
-
-def resolve_profile_voice(
-    profile_name: Optional[str],
-    *,
-    profiles: Optional[Mapping[str, Any]] = None,
-) -> tuple[str, Optional[str]]:
-    if not profile_name:
-        return "", None
-    source = profiles if isinstance(profiles, Mapping) else None
-    if source is None:
-        source = load_profiles()
-    entry = source.get(profile_name) if isinstance(source, Mapping) else None
-    if not isinstance(entry, Mapping):
-        return "", None
-    formula = formula_from_profile(dict(entry)) or ""
-    language = entry.get("language") if isinstance(entry.get("language"), str) else None
-    if isinstance(language, str):
-        language = language.strip().lower() or None
-    return formula, language
-
-
-def resolve_voice_setting(
-    value: Any,
-    *,
-    profiles: Optional[Mapping[str, Any]] = None,
-) -> tuple[str, Optional[str], Optional[str]]:
-    base_spec, profile_name = split_profile_spec(value)
-    if profile_name:
-        formula, language = resolve_profile_voice(profile_name, profiles=profiles)
-        return formula or "", profile_name, language
-    return base_spec, None, None
-
-
-def resolve_voice_choice(
-    language: str,
-    base_voice: str,
-    profile_name: str,
-    custom_formula: str,
-    profiles: Dict[str, Any],
-) -> tuple[str, str, Optional[str]]:
-    resolved_voice = base_voice
-    resolved_language = language
-    selected_profile = None
-
-    if profile_name:
-        from abogen.voice_profiles import normalize_profile_entry
-
-        entry_raw = profiles.get(profile_name)
-        entry = normalize_profile_entry(entry_raw)
-        provider = str((entry or {}).get("provider") or "").strip().lower()
-
-        # Provider-aware behavior:
-        # - Kokoro profiles typically represent mixes (formula strings).
-        # - SuperTonic profiles represent a discrete voice id + settings.
-        #   In that case, we return a speaker reference so downstream can
-        #   resolve provider per-speaker and allow mixed-provider casting.
-        if provider == "supertonic":
-            resolved_voice = f"speaker:{profile_name}"
-            selected_profile = profile_name
-            profile_language = (entry or {}).get("language")
-            if profile_language:
-                resolved_language = str(profile_language)
-        else:
-            formula = formula_from_profile(entry or {}) if entry else None
-            if formula:
-                resolved_voice = formula
-                selected_profile = profile_name
-                profile_language = (entry or {}).get("language")
-                if profile_language:
-                    resolved_language = profile_language
-
-    if custom_formula:
-        resolved_voice = custom_formula
-        selected_profile = None
-
-    return resolved_voice, resolved_language, selected_profile
 
 
 def parse_voice_formula(formula: str) -> List[tuple[str, float]]:

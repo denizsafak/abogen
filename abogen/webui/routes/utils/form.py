@@ -27,11 +27,13 @@ from abogen.webui.routes.utils.settings import (
 )
 from abogen.webui.routes.utils.voice import (
     parse_voice_formula,
+    prepare_speaker_metadata,
+    template_options,
+)
+from abogen.domain.voice_resolution import (
     formula_from_profile,
     resolve_voice_setting,
     resolve_voice_choice,
-    prepare_speaker_metadata,
-    template_options,
 )
 from abogen.webui.routes.utils.entity import sync_pronunciation_overrides
 from abogen.webui.routes.utils.epub import job_download_flags

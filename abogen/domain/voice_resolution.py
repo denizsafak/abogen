@@ -9,10 +9,10 @@ UI-specific objects. This keeps the domain layer UI-agnostic.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Mapping, Optional, Set, Tuple
 
 from abogen.tts_plugin.utils import get_voices, get_default_voice
-from abogen.voice_formulas import extract_voice_ids
+from abogen.voice_formulas import extract_voice_ids, pairs_to_formula
 from abogen.voice_cache import ensure_voice_assets
 
 
@@ -215,3 +215,141 @@ def resolve_fallback_voice_spec(
     if not spec:
         spec = get_default_voice(provider)
     return spec
+
+
+# ---------------------------------------------------------------------------
+# Voice choice resolution (shared by all UIs)
+# ---------------------------------------------------------------------------
+
+
+def formula_from_profile(entry: Dict[str, Any]) -> Optional[str]:
+    """Convert a voice profile entry to a voice formula string.
+
+    Handles both Kokoro (voices list) and SuperTonic (single voice) profiles.
+    Returns None if the entry has no usable voice data.
+    """
+    if not isinstance(entry, dict):
+        return None
+    voices = entry.get("voices") or []
+    if not voices:
+        return None
+    return pairs_to_formula(voices)
+
+
+def resolve_profile_voice(
+    profile_name: Optional[str],
+    *,
+    profiles: Optional[Mapping[str, Any]] = None,
+) -> Tuple[str, Optional[str]]:
+    """Resolve a profile name to (formula, language).
+
+    Args:
+        profile_name: Name of the profile to resolve.
+        profiles: Pre-loaded profiles dict. If None, loads from disk.
+
+    Returns:
+        (formula_string, language_code) or ("", None) if not found.
+    """
+    if not profile_name:
+        return "", None
+    source = profiles if isinstance(profiles, Mapping) else None
+    if source is None:
+        from abogen.voice_profiles import load_profiles
+        source = load_profiles()
+    entry = source.get(profile_name) if isinstance(source, Mapping) else None
+    if not isinstance(entry, Mapping):
+        return "", None
+    formula = formula_from_profile(dict(entry)) or ""
+    language = entry.get("language") if isinstance(entry.get("language"), str) else None
+    if isinstance(language, str):
+        language = language.strip().lower() or None
+    return formula, language
+
+
+def resolve_voice_setting(
+    value: Any,
+    *,
+    profiles: Optional[Mapping[str, Any]] = None,
+) -> Tuple[str, Optional[str], Optional[str]]:
+    """Resolve a raw voice setting value into (spec, profile_name, language).
+
+    Parses 'profile:name' or 'speaker:name' prefixes and resolves
+    the profile to a formula string.
+
+    Args:
+        value: Raw voice value from user input (e.g. "af_heart", "profile:MyMix").
+        profiles: Pre-loaded profiles dict. If None, loads from disk.
+
+    Returns:
+        (resolved_spec, profile_name, language) — profile_name and language
+        are None when the input is a plain voice spec.
+    """
+    from abogen.domain.settings_core import split_profile_spec
+
+    base_spec, profile_name = split_profile_spec(value)
+    if profile_name:
+        formula, language = resolve_profile_voice(profile_name, profiles=profiles)
+        return formula or "", profile_name, language
+    return base_spec, None, None
+
+
+def resolve_voice_choice(
+    language: str,
+    base_voice: str,
+    profile_name: str,
+    custom_formula: str,
+    profiles: Dict[str, Any],
+) -> Tuple[str, str, Optional[str]]:
+    """Resolve a user's voice selection into (resolved_voice, resolved_language, selected_profile).
+
+    Handles three input modes:
+    1. Profile selection → resolves to formula (Kokoro) or speaker reference (SuperTonic)
+    2. Custom formula → used directly
+    3. Plain voice spec → passed through
+
+    Args:
+        language: Current language code (e.g. "a", "e").
+        base_voice: Base voice spec (voice ID or formula).
+        profile_name: Selected profile name (empty string if none).
+        custom_formula: Custom formula string (empty string if none).
+        profiles: Dict of all available profiles.
+
+    Returns:
+        (resolved_voice, resolved_language, selected_profile)
+    """
+    from abogen.voice_profiles import normalize_profile_entry
+
+    resolved_voice = base_voice
+    resolved_language = language
+    selected_profile = None
+
+    if profile_name:
+        entry_raw = profiles.get(profile_name)
+        entry = normalize_profile_entry(entry_raw)
+        provider = str((entry or {}).get("provider") or "").strip().lower()
+
+        # Provider-aware behavior:
+        # - Kokoro profiles typically represent mixes (formula strings).
+        # - SuperTonic profiles represent a discrete voice id + settings.
+        #   In that case, we return a speaker reference so downstream can
+        #   resolve provider per-speaker and allow mixed-provider casting.
+        if provider == "supertonic":
+            resolved_voice = f"speaker:{profile_name}"
+            selected_profile = profile_name
+            profile_language = (entry or {}).get("language")
+            if profile_language:
+                resolved_language = str(profile_language)
+        else:
+            formula = formula_from_profile(entry or {}) if entry else None
+            if formula:
+                resolved_voice = formula
+                selected_profile = profile_name
+                profile_language = (entry or {}).get("language")
+                if profile_language:
+                    resolved_language = profile_language
+
+    if custom_formula:
+        resolved_voice = custom_formula
+        selected_profile = None
+
+    return resolved_voice, resolved_language, selected_profile
