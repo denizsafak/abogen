@@ -14,6 +14,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Mapping
 
+from abogen.domain.metadata_helpers import normalize_metadata_map
+
 from abogen.domain.enums import Language
 from abogen.utils import get_internal_cache_path, get_user_settings_dir
 from abogen.voice_cache import bootstrap_voice_cache
@@ -396,7 +398,7 @@ class ConversionService:
         normalization_overrides: Optional[Mapping[str, Any]] = None,
     ) -> Job:
         job_id = uuid.uuid4().hex
-        normalized_metadata = self._normalize_metadata_tags(metadata_tags)
+        normalized_metadata = normalize_metadata_map(metadata_tags)
         normalized_chapters = self._normalize_chapters(chapters)
         normalized_chunks = self._normalize_chunks(chunks)
         if total_characters <= 0 and normalized_chapters:
@@ -1053,20 +1055,6 @@ class ConversionService:
         except (TypeError, ValueError):
             return None
 
-    @staticmethod
-    def _normalize_metadata_tags(values: Optional[Mapping[str, Any]]) -> Dict[str, str]:
-        if not values:
-            return {}
-        normalized: Dict[str, str] = {}
-        for key, raw_value in values.items():
-            if raw_value is None:
-                continue
-            key_str = str(key).strip()
-            if not key_str:
-                continue
-            normalized[key_str] = str(raw_value)
-        return normalized
-
     @classmethod
     def _normalize_chapters(cls, chapters: Optional[Iterable[Any]]) -> List[Dict[str, Any]]:
         if not chapters:
@@ -1143,7 +1131,7 @@ class ConversionService:
             entry["enabled"] = enabled
 
             metadata_payload = raw_dict.get("metadata") or raw_dict.get("metadata_tags")
-            normalized_metadata = cls._normalize_metadata_tags(metadata_payload)
+            normalized_metadata = normalize_metadata_map(metadata_payload)
             if normalized_metadata:
                 entry["metadata"] = normalized_metadata
 

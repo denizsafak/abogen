@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from abogen.domain.metadata_helpers import (
     normalize_metadata_map,
+    expand_metadata_aliases,
     format_author_sentence,
     ensure_sentence,
     normalize_series_number,
@@ -185,3 +186,114 @@ class TestBuildMetadataPayload:
         result = build_metadata_payload(speakers=original)
         result["speakers"]["narrator"] = "M2"
         assert original["narrator"] == "M1"
+
+
+class TestExpandMetadataAliases:
+    def test_empty(self):
+        assert expand_metadata_aliases({}) == {}
+
+    def test_none(self):
+        assert expand_metadata_aliases(None) == {}  # type: ignore
+
+    def test_series_expansion(self):
+        result = expand_metadata_aliases({"series": "My Series"})
+        assert result["series"] == "My Series"
+        assert result["series_name"] == "My Series"
+        assert result["seriesname"] == "My Series"
+        assert result["series_title"] == "My Series"
+        assert result["seriestitle"] == "My Series"
+
+    def test_series_name_variant(self):
+        result = expand_metadata_aliases({"series_name": "Test"})
+        assert result["series"] == "Test"
+        assert result["series_name"] == "Test"
+        assert result["series_title"] == "Test"
+
+    def test_series_index_expansion(self):
+        result = expand_metadata_aliases({"series_index": "3"})
+        assert result["series_index"] == "3"
+        assert result["series_sequence"] == "3"
+        assert result["series_position"] == "3"
+        assert result["book_number"] == "3"
+
+    def test_series_index_variant(self):
+        result = expand_metadata_aliases({"series_sequence": "5"})
+        assert result["series_index"] == "5"
+        assert result["series_sequence"] == "5"
+
+    def test_author_expansion(self):
+        result = expand_metadata_aliases({"author": "John"})
+        assert result["author"] == "John"
+        assert result["authors"] == "John"
+
+    def test_authors_variant(self):
+        result = expand_metadata_aliases({"authors": "Jane"})
+        assert result["author"] == "Jane"
+        assert result["authors"] == "Jane"
+
+    def test_description_expansion(self):
+        result = expand_metadata_aliases({"description": "A book"})
+        assert result["description"] == "A book"
+        assert result["summary"] == "A book"
+
+    def test_summary_variant(self):
+        result = expand_metadata_aliases({"summary": "Summary text"})
+        assert result["description"] == "Summary text"
+        assert result["summary"] == "Summary text"
+
+    def test_tags_expansion(self):
+        result = expand_metadata_aliases({"tags": "sci-fi"})
+        assert result["tags"] == "sci-fi"
+        assert result["keywords"] == "sci-fi"
+        assert result["genre"] == "sci-fi"
+
+    def test_keywords_variant(self):
+        result = expand_metadata_aliases({"keywords": "fantasy"})
+        assert result["tags"] == "fantasy"
+        assert result["keywords"] == "fantasy"
+        assert result["genre"] == "fantasy"
+
+    def test_passthrough_non_alias_keys(self):
+        result = expand_metadata_aliases({"title": "My Book", "publisher": "Pub"})
+        assert result["title"] == "My Book"
+        assert result["publisher"] == "Pub"
+
+    def test_mixed_concepts(self):
+        result = expand_metadata_aliases({
+            "series": "My Series",
+            "series_index": "3",
+            "author": "John",
+            "title": "Book",
+        })
+        assert result["series"] == "My Series"
+        assert result["series_name"] == "My Series"
+        assert result["series_index"] == "3"
+        assert result["series_sequence"] == "3"
+        assert result["author"] == "John"
+        assert result["authors"] == "John"
+        assert result["title"] == "Book"
+
+    def test_skips_none_values(self):
+        result = expand_metadata_aliases({"series": None, "author": "John"})
+        assert "series" not in result
+        assert result["author"] == "John"
+
+    def test_skips_empty_values(self):
+        result = expand_metadata_aliases({"series": "", "author": "John"})
+        assert "series" not in result
+        assert result["author"] == "John"
+
+    def test_none_key_converted_to_string(self):
+        result = expand_metadata_aliases({None: "value"})
+        assert result["none"] == "value"
+
+    def test_case_insensitive_keys(self):
+        result = expand_metadata_aliases({"Series": "Test", "AUTHOR": "John"})
+        assert result["series"] == "Test"
+        assert result["author"] == "John"
+
+    def test_list_value_preserved(self):
+        result = expand_metadata_aliases({"tags": ["a", "b"]})
+        assert result["tags"] == ["a", "b"]
+        assert result["keywords"] == ["a", "b"]
+        assert result["genre"] == ["a", "b"]

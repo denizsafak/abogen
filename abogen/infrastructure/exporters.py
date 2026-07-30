@@ -10,7 +10,6 @@ from typing import Any, Dict, List, Optional, Mapping, Sequence
 import static_ffmpeg
 
 from abogen.domain.metadata_helpers import (
-    normalize_metadata_casefold,
     split_people_field,
     split_simple_list,
     first_nonempty,

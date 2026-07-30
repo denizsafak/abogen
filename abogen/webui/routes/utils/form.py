@@ -31,6 +31,7 @@ from abogen.webui.routes.utils.voice import (
     template_options,
 )
 from abogen.domain.speaker_metadata import prepare_speaker_metadata
+from abogen.domain.metadata_helpers import expand_metadata_aliases
 from abogen.domain.voice_resolution import (
     formula_from_profile,
     resolve_voice_setting,
@@ -546,34 +547,26 @@ def apply_book_step_form(
     if "meta_subtitle" in form:
         pending.metadata_tags["subtitle"] = str(form.get("meta_subtitle", "")).strip()
 
+    # Collect user-editable metadata fields that have concept aliases
+    user_metadata: Dict[str, str] = {}
     if "meta_author" in form:
-        authors = str(form.get("meta_author", "")).strip()
-        pending.metadata_tags["authors"] = authors
-        pending.metadata_tags["author"] = authors
-
+        user_metadata["author"] = str(form.get("meta_author", "")).strip()
     if "meta_series" in form:
-        series = str(form.get("meta_series", "")).strip()
-        pending.metadata_tags["series"] = series
-        pending.metadata_tags["series_name"] = series
-        pending.metadata_tags["seriesname"] = series
-        pending.metadata_tags["series_title"] = series
-        pending.metadata_tags["seriestitle"] = series
-        # If user manually edits series, update opds_series too so it persists
-        if "opds_series" in pending.metadata_tags:
-            pending.metadata_tags["opds_series"] = series
-
+        user_metadata["series"] = str(form.get("meta_series", "")).strip()
     if "meta_series_index" in form:
-        idx = str(form.get("meta_series_index", "")).strip()
-        pending.metadata_tags["series_index"] = idx
-        pending.metadata_tags["series_sequence"] = idx
+        user_metadata["series_index"] = str(form.get("meta_series_index", "")).strip()
+    if "meta_description" in form:
+        user_metadata["description"] = str(form.get("meta_description", "")).strip()
+
+    if user_metadata:
+        expanded = expand_metadata_aliases(user_metadata)
+        pending.metadata_tags.update(expanded)
+        # If user manually edits series, update opds_series too so it persists
+        if "meta_series" in form and "opds_series" in pending.metadata_tags:
+            pending.metadata_tags["opds_series"] = expanded.get("series", "")
 
     if "meta_publisher" in form:
         pending.metadata_tags["publisher"] = str(form.get("meta_publisher", "")).strip()
-
-    if "meta_description" in form:
-        desc = str(form.get("meta_description", "")).strip()
-        pending.metadata_tags["description"] = desc
-        pending.metadata_tags["summary"] = desc
 
     if coerce_bool(form.get("remove_cover"), False):
         pending.cover_image_path = None

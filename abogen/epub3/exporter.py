@@ -12,6 +12,7 @@ from typing import Any, Dict, Iterable, List, Optional, Pattern, Sequence, Tuple
 import zipfile
 
 from abogen.text_extractor import ExtractedChapter, ExtractionResult
+from abogen.domain.metadata_helpers import normalize_metadata_map
 
 
 @dataclass(slots=True)
@@ -59,7 +60,7 @@ class EPUB3PackageBuilder:
         self.output_path = output_path
         self.book_id = book_id or str(uuid.uuid4())
         self.extraction = extraction
-        self.metadata_tags = _normalize_metadata(metadata_tags)
+        self.metadata_tags = normalize_metadata_map(metadata_tags)
         self.chapter_markers = list(chapter_markers or [])
         self.chunk_markers = list(chunk_markers or [])
         self.chunks = list(chunks or [])
@@ -548,15 +549,6 @@ def build_epub3_package(
 class ChunkLookup:
     by_id: Dict[str, Dict[str, Any]]
     by_chapter: Dict[int, List[Dict[str, Any]]]
-
-
-def _normalize_metadata(metadata: Optional[Dict[str, Any]]) -> Dict[str, str]:
-    normalized: Dict[str, str] = {}
-    for key, value in (metadata or {}).items():
-        if value is None:
-            continue
-        normalized[str(key).lower()] = str(value)
-    return normalized
 
 
 def _combine_metadata(*sources: Dict[str, Any]) -> Dict[str, str]:

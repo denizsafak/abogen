@@ -21,6 +21,60 @@ _SERIES_NUMBER_KEYS = (
 )
 _SERIES_NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
 
+_SERIES_NAME_ALIASES = ("series", "series_name", "seriesname", "series_title", "seriestitle")
+_SERIES_INDEX_ALIASES = ("series_index", "series_sequence", "series_position", "book_number")
+_AUTHOR_ALIASES = ("author", "authors")
+_DESCRIPTION_ALIASES = ("description", "summary")
+_TAGS_ALIASES = ("tags", "keywords", "genre")
+
+
+def expand_metadata_aliases(tags: Mapping[str, Any]) -> Dict[str, Any]:
+    """Expand concept aliases so each concept has all canonical keys set.
+
+    One input concept fans out to multiple keys so that downstream consumers
+    can look up any variant and find the value.
+
+    Expanded concepts:
+        series     -> series, series_name, seriesname, series_title, seriestitle
+        series_index -> series_index, series_sequence, series_position, book_number
+        author     -> author, authors
+        description -> description, summary
+        tags       -> tags, keywords, genre
+    """
+    if not tags:
+        return {}
+
+    result: Dict[str, Any] = {}
+    for key, value in tags.items():
+        if value is None:
+            continue
+        text = str(value).strip() if not isinstance(value, (list, tuple, set)) else value
+        if not text:
+            continue
+        key_lower = str(key).strip().lower()
+        if not key_lower:
+            continue
+
+        if key_lower in _SERIES_NAME_ALIASES:
+            for alias in _SERIES_NAME_ALIASES:
+                result[alias] = text
+        elif key_lower in _SERIES_INDEX_ALIASES:
+            for alias in _SERIES_INDEX_ALIASES:
+                result[alias] = text
+        elif key_lower in _AUTHOR_ALIASES:
+            for alias in _AUTHOR_ALIASES:
+                result[alias] = text
+        elif key_lower in _DESCRIPTION_ALIASES:
+            for alias in _DESCRIPTION_ALIASES:
+                result[alias] = text
+        elif key_lower in _TAGS_ALIASES:
+            for alias in _TAGS_ALIASES:
+                result[alias] = text
+        else:
+            result[key_lower] = text
+
+    return result
+
 
 def normalize_metadata_map(values: Optional[Mapping[str, Any]]) -> Dict[str, str]:
     normalized: Dict[str, str] = {}
