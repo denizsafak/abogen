@@ -721,7 +721,7 @@ This project is available under the MIT License - see the [LICENSE](https://gith
 [Kokoro](https://github.com/hexgrad/kokoro) is licensed under [Apache-2.0](https://github.com/hexgrad/kokoro/blob/main/LICENSE) which allows commercial use, modification, distribution, and private use.
 
 ## `Star History`
-[![Star History Chart](https://api.star-history.com/svg?repos=denizsafak/abogen&type=Date)](https://www.star-history.com/#denizsafak/abogen&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=denizsafak/abogen&type=Date)](https://star-history.dera.page/#denizsafak/abogen&Date)
 
 > [!NOTE]
 > Abogen supports subtitle generation for all languages. However, word-level subtitle modes (e.g., "1 word", "2 words", "3 words", etc.) are only available for English because [Kokoro provides timestamp tokens only for English text](https://github.com/hexgrad/kokoro/blob/6d87f4ae7abc2d14dbc4b3ef2e5f19852e861ac2/kokoro/pipeline.py#L383). For non-English languages, Abogen uses a duration-based fallback that supports sentence-level and comma-based subtitle modes ("Line", "Sentence", "Sentence + Comma"). If you need word-level subtitles for other languages, please request that feature in the [Kokoro project](https://github.com/hexgrad/kokoro).
