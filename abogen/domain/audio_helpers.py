@@ -33,7 +33,7 @@ def build_ffmpeg_command(path: Path, fmt: str, metadata: Optional[Dict[str, str]
     if fmt == "mp3":
         base += ["-c:a", "libmp3lame", "-qscale:a", "2"]
     elif fmt == "opus":
-        base += ["-c:a", "libopus", "-b:a", "24000"]
+        base += ["-c:a", "libopus", "-b:a", "128000"]
     elif fmt == "m4b":
         base += ["-c:a", "aac", "-q:a", "2", "-movflags", "+faststart+use_metadata_tags"]
     else:
