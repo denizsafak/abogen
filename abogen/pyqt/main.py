@@ -164,6 +164,9 @@ def main():
     with timed_log("QApplication creation", logger=_log):
         app = QApplication(sys.argv)
 
+    # Qt shutdown hook must be connected AFTER QApplication exists
+    shutdown.install_qt_hook()
+
     # Set application icon using get_resource_path from utils
     icon_path = get_resource_path("abogen.assets", "icon.ico")
     if icon_path:
@@ -181,7 +184,11 @@ def main():
     with timed_log("window show", logger=_log):
         ex.show()
     _log.info("App startup complete. Showing window.")
-    sys.exit(app.exec())
+    rc = app.exec()
+    # Restore the default Qt message handler BEFORE interpreter shutdown.
+    # A Python message handler invoked during Qt teardown segfaults (SIGSEGV).
+    qInstallMessageHandler(None)
+    sys.exit(rc)
 
 
 if __name__ == "__main__":

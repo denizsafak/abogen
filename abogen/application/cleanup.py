@@ -11,6 +11,7 @@ Called by shutdown.py at process exit and by run_conversion() per-conversion.
 from __future__ import annotations
 
 import gc
+import sys
 from typing import Callable
 
 _UI_CLEANUPS: list[Callable[[], None]] = []
@@ -19,8 +20,12 @@ _UI_CLEANUPS: list[Callable[[], None]] = []
 def flush_cuda() -> None:
     """Run GC and release CUDA cache. Safe to call multiple times."""
     gc.collect()
+    # Skip entirely if torch was never imported — importing it here just to
+    # check would add several seconds to shutdown with nothing to flush.
+    if "torch" not in sys.modules:
+        return
     try:
-        import torch
+        torch = sys.modules["torch"]
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()

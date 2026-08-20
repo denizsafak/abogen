@@ -5,8 +5,11 @@ import tempfile
 import platform
 import base64
 import re
+import logging
 from abogen.pyqt.queue_manager_gui import QueueManager
 from abogen.pyqt.queued_item import QueuedItem
+
+_log = logging.getLogger("abogen.gui")
 
 import abogen.hf_tracker as hf_tracker
 import hashlib  # Added for cache path generation
@@ -3169,14 +3172,25 @@ class abogen(QWidget):
             save_config(self.config)
 
     def cleanup_conversion_thread(self):
-        # Stop conversion thread
+        # Stop conversion thread (bounded wait so closing never hangs)
         if (
             hasattr(self, "conversion_thread")
             and self.conversion_thread is not None
             and self.conversion_thread.isRunning()
         ):
+            _log.info("Close: stopping conversion thread")
+            start = time.perf_counter()
             self.conversion_thread.cancel()
-            self.conversion_thread.wait()
+            if not self.conversion_thread.wait(2000):
+                _log.warning("Close: conversion thread did not stop in 2s, terminating")
+                self.conversion_thread.terminate()
+                self.conversion_thread.wait(1000)
+            _log.info(
+                "Close: conversion thread stopped in %.2fs",
+                time.perf_counter() - start,
+            )
+        else:
+            _log.info("Close: no running conversion thread")
 
     def cleanup_preview_threads(self):
         # Stop preview generation thread
@@ -3185,8 +3199,13 @@ class abogen(QWidget):
             and self.preview_thread is not None
             and self.preview_thread.isRunning()
         ):
+            _log.info("Close: terminating preview thread")
+            start = time.perf_counter()
             self.preview_thread.terminate()
-            self.preview_thread.wait()
+            self.preview_thread.wait(1000)
+            _log.info(
+                "Close: preview thread stopped in %.2fs", time.perf_counter() - start
+            )
 
         # Stop audio playback thread
         if (
@@ -3194,8 +3213,13 @@ class abogen(QWidget):
             and self.play_audio_thread is not None
             and self.play_audio_thread.isRunning()
         ):
+            _log.info("Close: stopping audio playback thread")
+            start = time.perf_counter()
             self.play_audio_thread.stop()
-            self.play_audio_thread.wait()
+            self.play_audio_thread.wait(1000)
+            _log.info(
+                "Close: audio thread stopped in %.2fs", time.perf_counter() - start
+            )
 
         # Cleanup pygame mixer if initialized
         try:
@@ -3206,6 +3230,7 @@ class abogen(QWidget):
             pass
 
     def closeEvent(self, event):
+        _log.info("Close: window close requested (converting=%s)", self.is_converting)
         if self.is_converting:
             box = QMessageBox(self)
             box.setIcon(QMessageBox.Icon.Warning)
@@ -3218,16 +3243,14 @@ class abogen(QWidget):
             )
             box.setDefaultButton(QMessageBox.StandardButton.No)
             if box.exec() == QMessageBox.StandardButton.Yes:
-                from abogen import shutdown
-                shutdown.request_shutdown()
+                _log.info("Close: user confirmed exit during conversion")
                 self.cleanup_conversion_thread()
                 self.cleanup_preview_threads()
                 event.accept()
             else:
+                _log.info("Close: user cancelled exit")
                 event.ignore()
         else:
-            from abogen import shutdown
-            shutdown.request_shutdown()
             self.cleanup_conversion_thread()
             self.cleanup_preview_threads()
             event.accept()
