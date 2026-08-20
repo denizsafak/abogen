@@ -6,10 +6,9 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Dict, Optional, Tuple
 
-try:  # pragma: no cover - optional dependency
-    import spacy
-except Exception:  # pragma: no cover - spaCy unavailable at runtime
-    spacy = None
+# spaCy is intentionally NOT imported at module level: importing it pulls in
+# thinc -> torch, which costs seconds of startup time. It is imported lazily
+# inside _load_spacy_model below.
 
 # Lazy spaCy type hints to avoid a hard dependency at import time.
 Language = Any  # type: ignore[assignment]
@@ -37,7 +36,9 @@ _DEFAULT_MODEL = os.environ.get("ABOGEN_SPACY_MODEL", "en_core_web_sm")
 
 @lru_cache(maxsize=1)
 def _load_spacy_model(model: str = _DEFAULT_MODEL) -> Optional[Language]:
-    if spacy is None:
+    try:  # pragma: no cover - optional dependency
+        import spacy
+    except Exception:  # pragma: no cover - spaCy unavailable at runtime
         logger.debug("spaCy is not installed; skipping contraction disambiguation")
         return None
 

@@ -45,9 +45,9 @@ import urllib.parse
 import textwrap
 
 # Setup logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+from abogen.utils import setup_console_logging
+
+setup_console_logging()
 
 _HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 _LEADING_DASH_PATTERN = re.compile(r"^\s*[-–—]\s*")

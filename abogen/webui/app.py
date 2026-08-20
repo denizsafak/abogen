@@ -9,10 +9,18 @@ from flask import Flask
 
 from abogen import shutdown  # noqa: F401
 shutdown.register_shutdown()
-from abogen.utils import get_user_cache_path, get_user_output_path, get_user_settings_dir
+from abogen.utils import (
+    get_user_cache_path,
+    get_user_output_path,
+    get_user_settings_dir,
+    setup_console_logging,
+    timed_log,
+)
 
 from .conversion_runner import run_conversion_job
 from .service import build_service
+
+_logger = logging.getLogger("abogen.startup")
 
 
 class _SuppressSuccessfulAccessFilter(logging.Filter):
@@ -79,53 +87,57 @@ def _get_secret_key() -> str:
 
 
 def create_app(config: Optional[dict[str, Any]] = None) -> Flask:
-    uploads_dir, outputs_dir = _default_dirs()
+    with timed_log("default directories", logger=_logger):
+        uploads_dir, outputs_dir = _default_dirs()
 
-    app = Flask(
-        __name__,
-        static_folder="static",
-        template_folder="templates",
-    )
-    base_config = {
-        "SECRET_KEY": _get_secret_key(),
-        "UPLOAD_FOLDER": str(uploads_dir),
-        "OUTPUT_FOLDER": str(outputs_dir),
-        "MAX_CONTENT_LENGTH": 1024 * 1024 * 400,  # 400 MB uploads
-        # Large books can submit four form fields per chapter. Werkzeug's
-        # defaults reject those requests before the wizard route can process
-        # them, even though the encoded payload is much smaller than the upload
-        # limit above.
-        "MAX_FORM_MEMORY_SIZE": 10 * 1024 * 1024,
-        "MAX_FORM_PARTS": 10_000,
-    }
-    if config:
-        base_config.update(config)
-    app.config.update(base_config)
+    with timed_log("Flask app creation + config", logger=_logger):
+        app = Flask(
+            __name__,
+            static_folder="static",
+            template_folder="templates",
+        )
+        base_config = {
+            "SECRET_KEY": _get_secret_key(),
+            "UPLOAD_FOLDER": str(uploads_dir),
+            "OUTPUT_FOLDER": str(outputs_dir),
+            "MAX_CONTENT_LENGTH": 1024 * 1024 * 400,  # 400 MB uploads
+            # Large books can submit four form fields per chapter. Werkzeug's
+            # defaults reject those requests before the wizard route can process
+            # them, even though the encoded payload is much smaller than the upload
+            # limit above.
+            "MAX_FORM_MEMORY_SIZE": 10 * 1024 * 1024,
+            "MAX_FORM_PARTS": 10_000,
+        }
+        if config:
+            base_config.update(config)
+        app.config.update(base_config)
 
-    service = build_service(
-        runner=run_conversion_job,
-        output_root=Path(app.config["OUTPUT_FOLDER"]),
-        uploads_root=Path(app.config["UPLOAD_FOLDER"]),
-    )
+    with timed_log("conversion service (incl. queue state load)", logger=_logger):
+        service = build_service(
+            runner=run_conversion_job,
+            output_root=Path(app.config["OUTPUT_FOLDER"]),
+            uploads_root=Path(app.config["UPLOAD_FOLDER"]),
+        )
     app.extensions["conversion_service"] = service
 
-    from abogen.webui.routes import (
-        main_bp,
-        jobs_bp,
-        settings_bp,
-        voices_bp,
-        entities_bp,
-        books_bp,
-        api_bp,
-    )
+    with timed_log("blueprint registration", logger=_logger):
+        from abogen.webui.routes import (
+            main_bp,
+            jobs_bp,
+            settings_bp,
+            voices_bp,
+            entities_bp,
+            books_bp,
+            api_bp,
+        )
 
-    app.register_blueprint(main_bp)
-    app.register_blueprint(jobs_bp, url_prefix="/jobs")
-    app.register_blueprint(settings_bp, url_prefix="/settings")
-    app.register_blueprint(voices_bp, url_prefix="/voices")
-    app.register_blueprint(entities_bp, url_prefix="/overrides")
-    app.register_blueprint(books_bp, url_prefix="/find-books")
-    app.register_blueprint(api_bp, url_prefix="/api")
+        app.register_blueprint(main_bp)
+        app.register_blueprint(jobs_bp, url_prefix="/jobs")
+        app.register_blueprint(settings_bp, url_prefix="/settings")
+        app.register_blueprint(voices_bp, url_prefix="/voices")
+        app.register_blueprint(entities_bp, url_prefix="/overrides")
+        app.register_blueprint(books_bp, url_prefix="/find-books")
+        app.register_blueprint(api_bp, url_prefix="/api")
 
     global _access_log_filter_attached
     if not _access_log_filter_attached:
@@ -137,6 +149,16 @@ def create_app(config: Optional[dict[str, Any]] = None) -> Flask:
 
 
 def main() -> None:
+    setup_console_logging()
+    # Route Flask's dev-server banner through our logger instead of click.echo.
+    import flask.cli as flask_cli
+
+    def _show_server_banner(debug, app_import_path):
+        _logger.info(" * Serving Flask app %r", app_import_path)
+        _logger.info(" * Debug mode: %s", "on" if debug else "off")
+
+    flask_cli.show_server_banner = _show_server_banner
+
     app = create_app()
     host = os.environ.get("ABOGEN_HOST", "0.0.0.0")
     port = int(os.environ.get("ABOGEN_PORT", "8808"))

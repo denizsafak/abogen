@@ -4,6 +4,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 
+_real_routes = sys.modules.get("abogen.webui.routes")
+# Import routes.utils.form without executing routes/__init__.py (which imports
+# every blueprint). Use a temporary namespace package, then restore the real
+# module so later tests can still `from abogen.webui.routes import ...`.
 routes_package = types.ModuleType("abogen.webui.routes")
 routes_package.__path__ = [
     str(Path(__file__).parents[1] / "abogen" / "webui" / "routes")
@@ -14,6 +18,11 @@ from abogen.webui.routes.utils.form import (  # noqa: E402
     build_pending_job_from_extraction,
     load_settings,
 )
+
+if _real_routes is not None:
+    sys.modules["abogen.webui.routes"] = _real_routes
+else:
+    del sys.modules["abogen.webui.routes"]
 
 
 def test_user_metadata_overrides_extraction_fallback(tmp_path: Path) -> None:

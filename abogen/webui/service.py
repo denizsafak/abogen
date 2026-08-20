@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Mapping
 from abogen.domain.metadata_helpers import normalize_metadata_map
 
 from abogen.domain.enums import Language
-from abogen.utils import get_internal_cache_path, get_user_settings_dir
+from abogen.utils import console_handler, get_internal_cache_path, get_user_settings_dir
 
 
 
@@ -32,9 +32,7 @@ STATE_VERSION = 8
 
 _JOB_LOGGER = logging.getLogger("abogen.jobs")
 if not _JOB_LOGGER.handlers:
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S"))
-    _JOB_LOGGER.addHandler(handler)
+    _JOB_LOGGER.addHandler(console_handler())
     _JOB_LOGGER.propagate = False
 _JOB_LOGGER.setLevel(logging.DEBUG)
 

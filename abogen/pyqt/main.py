@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import platform
@@ -6,103 +7,113 @@ import platform
 from abogen import shutdown  # noqa: F401
 shutdown.register_shutdown()
 
+from abogen.utils import get_resource_path, setup_console_logging, timed_log  # noqa: E402
+
+_log = logging.getLogger("abogen.startup")
+setup_console_logging()
+
 # Fix PyTorch DLL loading issue ([WinError 1114]) on Windows before importing PyQt6
 if platform.system() == "Windows":
-    import ctypes
-    from importlib.util import find_spec
+    with timed_log("PyTorch DLLs (Windows)", logger=_log):
+        import ctypes
+        from importlib.util import find_spec
 
-    try:
-        if (
-            (spec := find_spec("torch"))
-            and spec.origin
-            and os.path.exists(
-                dll_path := os.path.join(os.path.dirname(spec.origin), "lib", "c10.dll")
-            )
-        ):
-            ctypes.CDLL(os.path.normpath(dll_path))
-    except Exception:
-        pass
+        try:
+            if (
+                (spec := find_spec("torch"))
+                and spec.origin
+                and os.path.exists(
+                    dll_path := os.path.join(os.path.dirname(spec.origin), "lib", "c10.dll")
+                )
+            ):
+                ctypes.CDLL(os.path.normpath(dll_path))
+        except Exception:
+            pass
 
 
 # Qt platform plugin detection (fixes #59)
-try:
-    from PyQt6.QtCore import QLibraryInfo
+with timed_log("Qt platform plugin detection", logger=_log):
+    try:
+        from PyQt6.QtCore import QLibraryInfo
 
-    # Get the path to the plugins directory
-    plugins = QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath)
+        # Get the path to the plugins directory
+        plugins = QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath)
 
-    # Normalize path to use the OS-native separators and absolute path
-    platform_dir = os.path.normpath(os.path.join(plugins, "platforms"))
+        # Normalize path to use the OS-native separators and absolute path
+        platform_dir = os.path.normpath(os.path.join(plugins, "platforms"))
 
-    # Ensure we work with an absolute path for clarity
-    platform_dir = os.path.abspath(platform_dir)
+        # Ensure we work with an absolute path for clarity
+        platform_dir = os.path.abspath(platform_dir)
 
-    if os.path.isdir(platform_dir):
-        os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = platform_dir
-        print("QT_QPA_PLATFORM_PLUGIN_PATH set to:", platform_dir)
-    else:
-        print("PyQt6 platform plugins not found at", platform_dir)
-except ImportError:
-    print("PyQt6 not installed.")
+        if os.path.isdir(platform_dir):
+            os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = platform_dir
+            _log.info("QT_QPA_PLATFORM_PLUGIN_PATH set to: %s", platform_dir)
+        else:
+            _log.warning("PyQt6 platform plugins not found at %s", platform_dir)
+    except ImportError:
+        _log.warning("PyQt6 not installed.")
 
-
-from abogen.utils import get_resource_path
 
 # Pre-load "libxcb-cursor" on Linux (fixes #101)
 if platform.system() == "Linux":
-    arch = platform.machine().lower()
-    lib_filename = {"x86_64": "libxcb-cursor-amd64.so.0", "amd64": "libxcb-cursor-amd64.so.0", "aarch64": "libxcb-cursor-arm64.so.0", "arm64": "libxcb-cursor-arm64.so.0"}.get(arch)
-    if lib_filename:
-        import ctypes
-        try:
-            # Try to load the system libxcb-cursor.so.0 first
-            ctypes.CDLL('libxcb-cursor.so.0', mode=ctypes.RTLD_GLOBAL)
-        except OSError:
-            # System lib not available, load the bundled version
-            lib_path = get_resource_path('abogen.libs', lib_filename)
-            if lib_path:
-                try:
-                    ctypes.CDLL(lib_path, mode=ctypes.RTLD_GLOBAL)
-                except OSError:
-                    # If it fails (e.g. wrong glibc version on very old systems),
-                    # we simply ignore it and hope the system has the library.
-                    pass
+    with timed_log("libxcb-cursor preload (Linux)", logger=_log):
+        arch = platform.machine().lower()
+        lib_filename = {"x86_64": "libxcb-cursor-amd64.so.0", "amd64": "libxcb-cursor-amd64.so.0", "aarch64": "libxcb-cursor-arm64.so.0", "arm64": "libxcb-cursor-arm64.so.0"}.get(arch)
+        if lib_filename:
+            import ctypes
+            try:
+                # Try to load the system libxcb-cursor.so.0 first
+                ctypes.CDLL('libxcb-cursor.so.0', mode=ctypes.RTLD_GLOBAL)
+            except OSError:
+                # System lib not available, load the bundled version
+                lib_path = get_resource_path('abogen.libs', lib_filename)
+                if lib_path:
+                    try:
+                        ctypes.CDLL(lib_path, mode=ctypes.RTLD_GLOBAL)
+                    except OSError:
+                        # If it fails (e.g. wrong glibc version on very old systems),
+                        # we simply ignore it and hope the system has the library.
+                        pass
 
 
 # Set application ID for Windows taskbar icon
 if platform.system() == "Windows":
-    try:
-        from abogen.constants import PROGRAM_NAME, VERSION
-        import ctypes
+    with timed_log("Windows AppUserModelID", logger=_log):
+        try:
+            from abogen.constants import PROGRAM_NAME, VERSION
+            import ctypes
 
-        app_id = f"{PROGRAM_NAME}.{VERSION}"
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
-    except Exception as e:
-        print("Warning: failed to set AppUserModelID:", e)
+            app_id = f"{PROGRAM_NAME}.{VERSION}"
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+        except Exception as e:
+            _log.warning("Failed to set AppUserModelID: %s", e)
 
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtGui import QIcon
-from PyQt6.QtCore import (
-    QLibraryInfo,
-    qInstallMessageHandler,
-    QtMsgType,
-)
+with timed_log("PyQt6 imports", logger=_log):
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtGui import QIcon
+    from PyQt6.QtCore import (
+        QLibraryInfo,
+        qInstallMessageHandler,
+        QtMsgType,
+    )
 
 # Add the directory to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
 # Set Hugging Face Hub environment variables
-os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"  # Disable Hugging Face telemetry
-os.environ["HF_HUB_ETAG_TIMEOUT"] = "10"  # Metadata request timeout (seconds)
-os.environ["HF_HUB_DOWNLOAD_TIMEOUT"] = "10"  # File download timeout (seconds)
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"  # Disable symlinks warning
-from abogen.utils import load_config
-if load_config().get("disable_kokoro_internet", False):
-    print("INFO: Kokoro's internet access is disabled.")
-    os.environ["HF_HUB_OFFLINE"] = "1"  # Disable Hugging Face Hub internet access
+with timed_log("config load + HF env setup", logger=_log):
+    os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"  # Disable Hugging Face telemetry
+    os.environ["HF_HUB_ETAG_TIMEOUT"] = "10"  # Metadata request timeout (seconds)
+    os.environ["HF_HUB_DOWNLOAD_TIMEOUT"] = "10"  # File download timeout (seconds)
+    os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"  # Disable symlinks warning
+    from abogen.utils import load_config
+    if load_config().get("disable_kokoro_internet", False):
+        _log.info("Kokoro's internet access is disabled.")
+        os.environ["HF_HUB_OFFLINE"] = "1"  # Disable Hugging Face Hub internet access
 
-from abogen.pyqt.gui import abogen
-from abogen.constants import PROGRAM_NAME, VERSION
+with timed_log("GUI module import (abogen.pyqt.gui)", logger=_log):
+    from abogen.pyqt.gui import abogen
+    from abogen.constants import PROGRAM_NAME, VERSION
 
 # Set environment variables for AMD ROCm
 os.environ["MIOPEN_FIND_MODE"] = "FAST"
@@ -150,7 +161,8 @@ if platform.system() == "Linux":
 
 def main():
     """Main entry point for console usage."""
-    app = QApplication(sys.argv)
+    with timed_log("QApplication creation", logger=_log):
+        app = QApplication(sys.argv)
 
     # Set application icon using get_resource_path from utils
     icon_path = get_resource_path("abogen.assets", "icon.ico")
@@ -164,8 +176,11 @@ def main():
         except AttributeError:
             pass
 
-    ex = abogen()
-    ex.show()
+    with timed_log("main window construction", logger=_log):
+        ex = abogen()
+    with timed_log("window show", logger=_log):
+        ex.show()
+    _log.info("App startup complete. Showing window.")
     sys.exit(app.exec())
 
 

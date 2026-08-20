@@ -47,10 +47,17 @@ def _resolve_voice_setting(value: str) -> tuple[str, Optional[str], Optional[str
 
 
 def _load_pipeline(language: Language, use_gpu: bool) -> Any:
-    device = "cpu"
-    if use_gpu:
-        device = _select_device()
-    return create_pipeline("kokoro", language=language, device=device)
+    import logging
+    from abogen.utils import timed_log
+
+    with timed_log(
+        f"TTS pipeline (lang={language}, gpu={use_gpu})",
+        logger=logging.getLogger("abogen.startup"),
+    ):
+        device = "cpu"
+        if use_gpu:
+            device = _select_device()
+        return create_pipeline("kokoro", language=language, device=device)
 
 
 def _extract_cases_from_text(text: str) -> List[Tuple[str, str]]:

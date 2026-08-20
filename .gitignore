@@ -40,3 +40,6 @@ test_assets/
 dev_notes/
 .claude/
 .coverage
+
+# CodeGraph index (local, machine-specific)
+.codegraph/

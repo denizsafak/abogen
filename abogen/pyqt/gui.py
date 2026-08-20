@@ -988,7 +988,12 @@ class abogen(QWidget):
         self.queued_items = []
         self.current_queue_index = 0
 
-        self.initUI()
+        from abogen.utils import timed_log
+        import logging
+        _startup_log = logging.getLogger("abogen.startup")
+
+        with timed_log("GUI initUI (widget building)", logger=_startup_log):
+            self.initUI()
         self.speed_slider.setValue(int(self.config.get("speed", _d["speed"]) * 100))
         self.update_speed_label()
         # Set initial selection: prefer profile, else voice
@@ -1003,7 +1008,8 @@ class abogen(QWidget):
             if self.selected_profile_name:
                 from abogen.voice_profiles import load_profiles
 
-                entry = load_profiles().get(self.selected_profile_name, {})
+                with timed_log("voice profile load", logger=_startup_log):
+                    entry = load_profiles().get(self.selected_profile_name, {})
                 if isinstance(entry, dict):
                     self.mixed_voice_state = entry.get("voices", [])
                     self.selected_lang = entry.get("language")

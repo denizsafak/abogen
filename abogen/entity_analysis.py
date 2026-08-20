@@ -9,14 +9,25 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
-try:  # pragma: no cover - fallback when spaCy not available during tests
-    import spacy  # type: ignore[import-not-found]
-except Exception:  # pragma: no cover - spaCy optional during runtime bootstrap
-    spacy = None
-
 _Language = Any  # type: ignore[misc,assignment]
 Doc = Any  # type: ignore[misc,assignment]
 Span = Any  # type: ignore[misc,assignment]
+
+_SPACY: Any = None
+_SPACY_LOADED = False
+
+
+def _get_spacy() -> Any:
+    """Import spaCy lazily (it pulls in torch/thinc, ~2s at startup)."""
+    global _SPACY, _SPACY_LOADED
+    if not _SPACY_LOADED:
+        _SPACY_LOADED = True
+        try:  # pragma: no cover - fallback when spaCy not available during tests
+            import spacy  # type: ignore[import-not-found]
+        except Exception:  # pragma: no cover - spaCy optional during runtime bootstrap
+            spacy = None
+        _SPACY = spacy
+    return _SPACY
 
 
 _TITLE_PREFIXES = (
@@ -167,6 +178,7 @@ def _resolve_model_name(language: str) -> str:
 
 
 def _load_model(language: str) -> Any:
+    spacy = _get_spacy()
     if spacy is None:
         raise EntityModelError(
             "spaCy is not available. Install spaCy to enable entity extraction."
