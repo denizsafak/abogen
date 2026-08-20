@@ -2,6 +2,7 @@ import json
 import os
 from typing import Any, Dict, Iterable, List, Tuple
 
+from abogen.domain.enums import Language
 from abogen.tts_plugin.utils import get_voices, is_plugin_registered
 from abogen.utils import get_user_config_path
 
@@ -176,11 +177,33 @@ def save_profile(name: str, *, language: str, voices: Iterable) -> None:
         raise ValueError("At least one voice with a weight above zero is required")
 
     if not language:
-        language = "a"
+        language = Language.EN_US
 
     profiles = load_profiles()
     profiles[name] = {"provider": "kokoro", "language": language, "voices": normalized}
     save_profiles(profiles)
+
+
+def resolve_profile_language(entry: Any) -> Language:
+    """Resolve a profile's stored language to a Language enum.
+
+    New profiles store ISO codes (Language enum values); legacy profiles may
+    store kokoro letter codes ("a", "b", ...). Unparseable values fall back
+    to EN_US.
+    """
+
+    raw = entry.get("language") if isinstance(entry, dict) else None
+    if isinstance(raw, Language):
+        return raw
+    text = str(raw or "").strip()
+    if not text:
+        return Language.EN_US
+    try:
+        return Language.from_str(text)
+    except ValueError:
+        from plugins.kokoro.engine import language_for_code
+
+        return language_for_code(text)
 
 
 def remove_profile(name: str) -> None:

@@ -112,12 +112,10 @@ def spacy_pre_tts_segmentation(
 
 
 def _to_language_enum(lang_code: Any) -> Language:
-    """Convert lang_code to Language enum."""
-    if isinstance(lang_code, Language):
-        return lang_code
+    """Convert lang_code to Language enum (ISO code or Language enum)."""
     try:
         return Language.from_str(str(lang_code))
-    except (ValueError, AttributeError):
+    except ValueError:
         return Language.EN_US
 
 

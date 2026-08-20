@@ -16,7 +16,7 @@ def get_split_pattern(language: Language, subtitle_mode: str) -> str:
     """Get the appropriate split pattern based on language and subtitle mode.
 
     Args:
-        language: Language enum value.
+        language: Language enum value, ISO code, or kokoro letter code.
         subtitle_mode: Subtitle mode ("Sentence", "Sentence + Comma", "Line", etc.)
 
     Returns:

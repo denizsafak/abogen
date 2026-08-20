@@ -70,11 +70,12 @@ SUPPORTED_INPUT_FORMATS = [
     "vtt",
 ]
 
-# Supported languages for subtitle generation
-# Currently, only English (EN_US, EN_GB) are supported for subtitle generation.
-# This is because tokens that contain timestamps are not generated for other languages in the Kokoro pipeline.
-# Please refer to: https://github.com/hexgrad/kokoro/blob/6d87f4ae7abc2d14dbc4b3ef2e5f19852e861ac2/kokoro/pipeline.py
-SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION = [Language.EN_US, Language.EN_GB]
+# Supported languages for subtitle generation.
+# All languages are supported: only English emits per-word timestamped tokens
+# in the Kokoro pipeline, but other languages fall back to segment-level fake
+# tokens (see abogen.domain.tokens.FakeToken), so subtitles are still
+# generated at segment granularity.
+SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION = list(Language)
 
 # Voice and sample text mapping
 SAMPLE_VOICE_TEXTS = {

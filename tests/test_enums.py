@@ -119,7 +119,7 @@ class TestLanguage:
     def test_supports_subtitle_tokens(self):
         assert Language.EN_US.supports_subtitle_tokens is True
         assert Language.EN_GB.supports_subtitle_tokens is True
-        assert Language.ZH.supports_subtitle_tokens is False
+        assert Language.ZH.supports_subtitle_tokens is True
 
     def test_from_str_case_insensitive(self):
         assert Language.from_str("EN-US") == Language.EN_US
@@ -129,3 +129,8 @@ class TestLanguage:
     def test_from_str_invalid(self):
         with pytest.raises(ValueError, match="Invalid Language"):
             Language.from_str("en")
+
+    def test_kokoro_letter_codes_not_accepted_by_domain(self):
+        # Letter codes are kokoro-engine internals, not domain API.
+        with pytest.raises(ValueError):
+            Language.from_str("a")

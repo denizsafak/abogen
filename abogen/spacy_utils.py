@@ -57,7 +57,9 @@ def get_spacy_model(language: Language, log_callback=None):
             print(msg)
 
     if not isinstance(language, Language):
-        raise TypeError(f"language must be Language enum, got {type(language).__name__}: {language!r}")
+        raise TypeError(
+            f"language must be Language enum, got {type(language).__name__}: {language!r}"
+        )
 
     if language in _nlp_cache:
         return _nlp_cache[language]

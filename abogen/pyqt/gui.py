@@ -75,6 +75,7 @@ from abogen.domain.text_utils import calculate_text_length
 
 from abogen.pyqt.conversion import ConversionThread, VoicePreviewThread, PlayAudioThread, ChapterOptionsDialog, TimestampDetectionDialog
 from abogen.pyqt.book_handler import HandlerDialog
+from abogen.domain.enums import Language
 from abogen.constants import (
     PROGRAM_NAME,
     VERSION,
@@ -88,8 +89,9 @@ from abogen.constants import (
 from abogen.tts_plugin.utils import get_voices
 import threading
 from abogen.pyqt.voice_formula_gui import VoiceFormulaDialog
-from abogen.voice_profiles import load_profiles
+from abogen.voice_profiles import load_profiles, resolve_profile_language
 from abogen.domain.settings_core import all_settings_defaults
+from plugins.kokoro.engine import language_for_code, language_for_voice_id
 
 # Module-level default cache for use outside __init__
 _DEFAULTS = all_settings_defaults()
@@ -397,11 +399,7 @@ class InputBox(QLabel):
         # Re-enable subtitle and replace newlines controls when cleared
         window = self.window()
         if hasattr(window, "subtitle_combo"):
-            # Only enable if language supports it
-            current_lang = getattr(window, "selected_lang", "a")
-            window.subtitle_combo.setEnabled(
-                current_lang in SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION
-            )
+            window.subtitle_combo.setEnabled(True)
         if hasattr(window, "replace_newlines_combo"):
             window.replace_newlines_combo.setEnabled(True)
 
@@ -941,7 +939,7 @@ class abogen(QWidget):
             self.selected_lang = None
         else:
             self.selected_voice = self.config.get("selected_voice", _d["selected_voice"])
-            self.selected_lang = self.selected_voice[0] if self.selected_voice else None
+            self.selected_lang = language_for_voice_id(self.selected_voice)
         self.is_converting = False
         self.subtitle_mode = self.config.get("subtitle_mode", _d["subtitle_mode"])
         self.max_subtitle_words = self.config.get("max_subtitle_words", _d["max_subtitle_words"])
@@ -1012,10 +1010,12 @@ class abogen(QWidget):
                     entry = load_profiles().get(self.selected_profile_name, {})
                 if isinstance(entry, dict):
                     self.mixed_voice_state = entry.get("voices", [])
-                    self.selected_lang = entry.get("language")
+                    self.selected_lang = resolve_profile_language(entry)
                 else:
                     self.mixed_voice_state = entry
-                    self.selected_lang = entry[0][0] if entry and entry[0] else None
+                    self.selected_lang = (
+                        language_for_voice_id(entry[0]) if entry and entry[0] else Language.EN_US
+                    )
         if self.save_option == "Choose output folder" and self.selected_output_folder:
             self.save_path_label.setText(self.selected_output_folder)
             self.save_path_row_widget.show()
@@ -1181,6 +1181,7 @@ class abogen(QWidget):
             "Sentence + Comma: Subtitles will be generated for each sentence and comma.\n"
             "Sentence + Highlighting: Subtitles with word-by-word karaoke highlighting.\n"
             "1+ word: Subtitles will be generated for each word(s).\n\n"
+            "Word-count and highlighting modes are only available for English.\n"
             "Supported languages for subtitle generation:\n"
             + "\n".join(
                 f'"{lang}" => {LANGUAGE_DESCRIPTIONS.get(lang, lang)}'
@@ -1759,8 +1760,9 @@ class abogen(QWidget):
 
     def update_subtitle_options_availability(self):
         """
-        Update the enabled state of subtitle options based on the selected language.
-        For non-English languages, only sentence-based and line-based modes are supported.
+        Update the enabled state of subtitle options based on the selected
+        language and input type. Subtitle generation works for every language,
+        but word-count and highlighting modes are only available for English.
         """
         # Check if current file is a subtitle file
         is_subtitle_input = False
@@ -1769,16 +1771,14 @@ class abogen(QWidget):
         ):
             is_subtitle_input = True
 
-        if self.selected_lang not in SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION:
-            self.subtitle_combo.setEnabled(False)
-            self.subtitle_format_combo.setEnabled(False)
-            return
-
         # Only enable subtitle_combo if it's NOT a subtitle input
         self.subtitle_combo.setEnabled(not is_subtitle_input)
         self.subtitle_format_combo.setEnabled(True)
 
-        is_english = self.selected_lang in ["a", "b"]
+        is_english = self.selected_lang in (
+            Language.EN_US,
+            Language.EN_GB,
+        )
 
         # Items to keep enabled for non-English
         allowed_modes = ["Disabled", "Line", "Sentence", "Sentence + Comma"]
@@ -1793,10 +1793,7 @@ class abogen(QWidget):
             if is_english:
                 item.setEnabled(True)
             else:
-                if text in allowed_modes:
-                    item.setEnabled(True)
-                else:
-                    item.setEnabled(False)
+                item.setEnabled(text in allowed_modes)
 
         # If current selection is disabled, switch to a valid one
         current_text = self.subtitle_combo.currentText()
@@ -1815,7 +1812,7 @@ class abogen(QWidget):
 
     def on_voice_changed(self, index):
         voice = self.voice_combo.itemData(index)
-        self.selected_voice, self.selected_lang = voice, voice[0]
+        self.selected_voice, self.selected_lang = voice, language_for_voice_id(voice)
         self.config["selected_voice"] = voice
         save_config(self.config)
         # Enable/disable subtitle options based on language
@@ -1832,10 +1829,12 @@ class abogen(QWidget):
             # set mixed voices and language
             if isinstance(entry, dict):
                 self.mixed_voice_state = entry.get("voices", [])
-                self.selected_lang = entry.get("language")
+                self.selected_lang = resolve_profile_language(entry)
             else:
                 self.mixed_voice_state = entry
-                self.selected_lang = entry[0][0] if entry and entry[0] else None
+                self.selected_lang = (
+                    language_for_voice_id(entry[0]) if entry and entry[0] else Language.EN_US
+                )
             self.selected_voice = None
             self.config["selected_profile_name"] = pname
             self.config.pop("selected_voice", None)
@@ -1845,7 +1844,7 @@ class abogen(QWidget):
         else:
             self.mixed_voice_state = None
             self.selected_profile_name = None
-            self.selected_voice, self.selected_lang = data, data[0]
+            self.selected_voice, self.selected_lang = data, language_for_voice_id(data)
             self.config["selected_voice"] = data
             if "selected_profile_name" in self.config:
                 del self.config["selected_profile_name"]
@@ -1856,8 +1855,9 @@ class abogen(QWidget):
         from abogen.voice_profiles import load_profiles
 
         entry = load_profiles().get(profile_name, {})
-        lang = entry.get("language") if isinstance(entry, dict) else None
-        enable = lang in SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION
+        enable = (
+            resolve_profile_language(entry) in SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION
+        )
         self.subtitle_combo.setEnabled(enable)
         self.subtitle_format_combo.setEnabled(enable)
 
@@ -2239,18 +2239,18 @@ class abogen(QWidget):
         else:
             return self.selected_voice
 
-    def get_selected_lang(self, voice_formula) -> str:
+    def get_selected_lang(self, voice_formula) -> Language:
         if self.selected_profile_name:
             from abogen.voice_profiles import load_profiles
 
             entry = load_profiles().get(self.selected_profile_name, {})
-            selected_lang = entry.get("language")
+            selected_lang = resolve_profile_language(entry)
         else:
-            selected_lang = self.selected_voice[0] if self.selected_voice else None
+            selected_lang = language_for_voice_id(self.selected_voice)
         # fallback: extract from formula if missing
         if not selected_lang:
             m = re.search(r"\b([a-z])", voice_formula)
-            selected_lang = m.group(1) if m else None
+            selected_lang = language_for_code(m.group(1)) if m else Language.EN_US
         return selected_lang
 
     def get_actual_subtitle_mode(self) -> str:
@@ -2426,7 +2426,7 @@ class abogen(QWidget):
             self.update_log((gpu_msg, gpu_ok))
             self.update_log("Loading modules...")
 
-            lang_code = self.selected_lang or "a"
+            lang_code = self.selected_lang or Language.EN_US
             load_thread = LoadPipelineThread(
                 pipeline_loaded_callback, lang_code=lang_code, use_gpu=gpu_ok
             )
@@ -2757,12 +2757,12 @@ class abogen(QWidget):
                 from abogen.voice_profiles import load_profiles
 
                 entry = load_profiles().get(self.selected_profile_name, {})
-                lang_to_cache = entry.get("language")
+                lang_to_cache = resolve_profile_language(entry)
             else:
                 lang_to_cache = self.selected_lang
             if not lang_to_cache and self.mixed_voice_state:
                 lang_to_cache = (
-                    self.mixed_voice_state[0][0][0]
+                    language_for_voice_id(self.mixed_voice_state[0][0])
                     if self.mixed_voice_state and self.mixed_voice_state[0][0]
                     else None
                 )
@@ -2866,7 +2866,7 @@ class abogen(QWidget):
             )
             self.loading_movie.start()
 
-        lang = self.selected_lang or "a"
+        lang = self.selected_lang or Language.EN_US
         load_thread = LoadPipelineThread(
             self._on_pipeline_loaded_for_preview, lang_code=lang, use_gpu=self.gpu_ok
         )
@@ -2898,17 +2898,17 @@ class abogen(QWidget):
                 from abogen.voice_profiles import load_profiles
 
                 entry = load_profiles().get(self.selected_profile_name, {})
-                lang = entry.get("language")
+                lang = resolve_profile_language(entry)
             else:
                 lang = self.selected_lang
             if not lang and self.mixed_voice_state:
                 lang = (
-                    self.mixed_voice_state[0][0][0]
+                    language_for_voice_id(self.mixed_voice_state[0][0])
                     if self.mixed_voice_state and self.mixed_voice_state[0][0]
                     else None
                 )
         else:
-            lang = self.selected_voice[0]
+            lang = language_for_voice_id(self.selected_voice)
             voice = self.selected_voice
 
         # use same gpu/cpu logic as in conversion
@@ -3954,7 +3954,9 @@ Categories=AudioVideo;Audio;Utility;
                     initial_state = entry.get("voices", [])
                 else:
                     initial_state = entry
-                    self.selected_lang = entry[0][0] if entry and entry[0] else None
+                    self.selected_lang = (
+                        language_for_voice_id(entry[0]) if entry and entry[0] else Language.EN_US
+                    )
         dialog = VoiceFormulaDialog(
             self, initial_state=initial_state, selected_profile=selected_profile
         )

@@ -196,3 +196,42 @@ class TestKokoroVoiceLister:
             assert isinstance(voice.tags, tuple)
             assert len(voice.tags) > 0
         engine.dispose()
+
+
+# ──────────────────────────────────────────────────────────────
+# Language mapping helpers
+# ──────────────────────────────────────────────────────────────
+
+class TestKokoroLanguageMapping:
+    """Language resolution helpers: the letter codes live in the engine only."""
+
+    def test_language_for_code(self) -> None:
+        from abogen.domain.enums import Language
+        from plugins.kokoro.engine import language_for_code
+
+        assert language_for_code("a") == Language.EN_US
+        assert language_for_code("b") == Language.EN_GB
+        assert language_for_code("e") == Language.ES
+        assert language_for_code("f") == Language.FR
+        assert language_for_code("h") == Language.HI
+        assert language_for_code("i") == Language.IT
+        assert language_for_code("j") == Language.JA
+        assert language_for_code("p") == Language.PT_BR
+        assert language_for_code("z") == Language.ZH
+
+    def test_language_for_code_fallbacks(self) -> None:
+        from abogen.domain.enums import Language
+        from plugins.kokoro.engine import language_for_code
+
+        assert language_for_code("x") == Language.EN_US
+        assert language_for_code("") == Language.EN_US
+
+    def test_language_for_voice_id(self) -> None:
+        from abogen.domain.enums import Language
+        from plugins.kokoro.engine import language_for_voice_id
+
+        assert language_for_voice_id("af_heart") == Language.EN_US
+        assert language_for_voice_id("bf_emma") == Language.EN_GB
+        assert language_for_voice_id("ef_dora") == Language.ES
+        assert language_for_voice_id("zf_xiaobei") == Language.ZH
+        assert language_for_voice_id("") == Language.EN_US

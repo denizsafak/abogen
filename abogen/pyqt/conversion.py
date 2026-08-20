@@ -22,6 +22,7 @@ from abogen.constants import (
 )
 from abogen.infrastructure.subtitle_writer import make_subtitle_writer, resolve_subtitle_format
 from abogen.domain.split_pattern import get_split_pattern
+from abogen.domain.enums import Language
 from abogen.domain.subtitle_processor import (
     parse_subtitle_file,
     process_subtitle_entries,
@@ -872,12 +873,12 @@ class ConversionThread(QThread):
                     )
                     spacy_sentences = None
                     active_split_pattern = self.split_pattern
-                    spacing_pattern = r"\s*" if self.lang_code in ["z", "j"] else r"\s+"
+                    spacing_pattern = r"\s*" if self.lang_code in (Language.JA, Language.ZH) else r"\s+"
 
                     # Pre-load spaCy model for English if it will be needed for subtitle generation
                     if (
                         use_spacy
-                        and self.lang_code in ["a", "b"]
+                        and self.lang_code in (Language.EN_US, Language.EN_GB)
                         and self.subtitle_mode in ["Sentence", "Sentence + Comma"]
                     ):
                         from abogen.spacy_utils import get_spacy_model
@@ -894,7 +895,7 @@ class ConversionThread(QThread):
                                 )
                             )
 
-                    if use_spacy and self.lang_code not in ["a", "b"]:
+                    if use_spacy and self.lang_code not in (Language.EN_US, Language.EN_GB):
                         # Non-English: use spaCy for pre-TTS segmentation
                         self.log_updated.emit(
                             ("\nUsing spaCy for sentence segmentation (pre-TTS)...", "grey")
@@ -1011,7 +1012,7 @@ class ConversionThread(QThread):
                             audio_sink=merged_sink if merge_chapters_at_end else None,
                             subtitle_mode=self.subtitle_mode,
                             max_subtitle_words=self.max_subtitle_words,
-                            lang_code=self.lang_code,
+                            language=self.lang_code,
                             use_spacy_segmentation=getattr(self, "use_spacy_segmentation", False),
                         )
 

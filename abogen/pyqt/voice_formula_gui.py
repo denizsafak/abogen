@@ -28,7 +28,6 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QPoint, QRect, QSize
 from PyQt6.QtGui import QPixmap, QIcon, QAction
 from abogen.constants import (
-    SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION,
     LANGUAGE_DESCRIPTIONS,
     COLORS,
 )
@@ -949,7 +948,9 @@ class VoiceFormulaDialog(QDialog):
         lang = state.get("language") if isinstance(state, dict) else None
         # apply language selection
         if lang:
-            i = self.language_combo.findData(lang)
+            from abogen.voice_profiles import resolve_profile_language
+
+            i = self.language_combo.findData(resolve_profile_language(state))
             if i >= 0:
                 self.language_combo.blockSignals(True)
                 self.language_combo.setCurrentIndex(i)
@@ -1571,9 +1572,10 @@ class VoiceFormulaDialog(QDialog):
             parent.selected_profile_name = None
             lang = self.language_combo.currentData()
             parent.selected_lang = lang
-            parent.subtitle_combo.setEnabled(
-                lang in SUPPORTED_LANGUAGES_FOR_SUBTITLE_GENERATION
-            )
+            if hasattr(parent, "update_subtitle_options_availability"):
+                parent.update_subtitle_options_availability()
+            else:
+                parent.subtitle_combo.setEnabled(True)
             # Reset start flag and trigger preview
             self._started = False
             parent.preview_voice()

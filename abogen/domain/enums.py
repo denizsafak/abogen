@@ -212,8 +212,12 @@ class Language(str, Enum):
 
     @property
     def supports_subtitle_tokens(self) -> bool:
-        """True if this language generates timestamped tokens for subtitles."""
-        return self in (self.EN_US, self.EN_GB)
+        """True if this language supports subtitle generation.
+
+        All languages are supported: languages without per-word timestamped
+        tokens fall back to segment-level fake tokens in the pipeline.
+        """
+        return True
 
     @classmethod
     def from_str(cls, value: str) -> Language:

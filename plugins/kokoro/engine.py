@@ -73,17 +73,27 @@ def engine_language(lang: Language) -> str:
     return _KOKORO_LANG_MAP.get(lang, "a")
 
 
-def language_for_voice_id(voice_id: str) -> Language:
+def language_for_code(code: str | None) -> Language:
+    """Map a kokoro engine language code (single letter) to a Language enum.
+
+    Used to resolve legacy data such as old profile files that stored
+    kokoro letter codes. This is kokoro-specific knowledge that stays
+    inside the engine. Unparseable values fall back to EN_US.
+    """
+    letter = str(code or "").strip()[:1].lower()
+    if letter in _CODE_TO_LANGUAGE:
+        return _CODE_TO_LANGUAGE[letter]
+    return Language.EN_US
+
+
+def language_for_voice_id(voice_id: str | None) -> Language:
     """Determine which Language a voice belongs to from its voice ID.
 
     Kokoro voice IDs encode language as a prefix (e.g. "af_heart" → "a" → EN_US).
     This is kokoro-specific knowledge that stays inside the engine.
     Callers pass a voice ID string; the engine returns a Language enum.
     """
-    prefix = str(voice_id or "").strip()[:1].lower()
-    if prefix in _CODE_TO_LANGUAGE:
-        return _CODE_TO_LANGUAGE[prefix]
-    return Language.EN_US
+    return language_for_code(voice_id)
 
 
 class KokoroSession:
