@@ -220,8 +220,10 @@ class AssWriter(SubtitleWriter):
         
         style = "Default"
         if self.config.mode == SubtitleMode.SENTENCE_HIGHLIGHT:
-            # Add karaoke tags for highlighting
-            text = self._add_karaoke_tags(text)
+            # Entries from process_subtitle_tokens already carry per-word
+            # {\kf...} timing; only synthesize simplified tags when absent.
+            if "{\\k" not in text:
+                text = self._add_karaoke_tags(text)
             style = "Highlight"
         
         alignment_tag = r"{\an5}" if self._is_centered else ""
@@ -248,6 +250,19 @@ class AssWriter(SubtitleWriter):
         return f"{hours}:{minutes:02d}:{secs:05.2f}"
 
 
+def _coerce_mode(mode: str) -> SubtitleMode:
+    """Parse a subtitle mode, tolerating word-count strings like "5 words".
+
+    Word-count modes are grouped upstream (subtitle_generation) and the writer
+    only branches on SubtitleMode.SENTENCE_HIGHLIGHT, so any non-highlight
+    fallback is behaviorally equivalent for the writers.
+    """
+    try:
+        return SubtitleMode(mode)
+    except ValueError:
+        return SubtitleMode.SENTENCE
+
+
 def create_subtitle_writer(
     path: Path,
     format: str,
@@ -257,7 +272,7 @@ def create_subtitle_writer(
 ) -> SubtitleWriter:
     """Factory function to create subtitle writer."""
     fmt = SubtitleFormat(format.lower())
-    mode = SubtitleMode(mode)
+    mode = _coerce_mode(mode)
     align = SubtitleAlignment(alignment.lower())
 
     config = SubtitleConfig(

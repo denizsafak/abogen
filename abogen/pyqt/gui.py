@@ -1019,6 +1019,7 @@ class abogen(QWidget):
                     self.selected_lang = (
                         language_for_voice_id(entry[0]) if entry and entry[0] else Language.EN_US
                     )
+        self.update_subtitle_options_availability()
         if self.save_option == "Choose output folder" and self.selected_output_folder:
             self.save_path_label.setText(self.selected_output_folder)
             self.save_path_row_widget.show()

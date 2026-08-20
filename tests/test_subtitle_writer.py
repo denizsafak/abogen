@@ -177,6 +177,19 @@ class TestAssWriter:
         assert "Highlight" in content
         assert r"{\k100}" in content
 
+    def test_highlight_mode_preserves_existing_karaoke_tags(self, tmp_path):
+        path = tmp_path / "test.ass"
+        config = SubtitleConfig(
+            format=SubtitleFormat.ASS,
+            mode=SubtitleMode.SENTENCE_HIGHLIGHT,
+        )
+        writer = AssWriter(path, config)
+        writer.write_entry(start=0.0, end=1.0, text=r"{\kf20}Hello {\kf20}world.")
+        writer.close()
+        content = path.read_text()
+        assert r"{\kf20}Hello {\kf20}world." in content
+        assert r"{\k100}" not in content
+
     def test_centered_alignment(self, tmp_path):
         path = tmp_path / "test.ass"
         config = SubtitleConfig(
@@ -242,6 +255,12 @@ class TestCreateSubtitleWriter:
         path = tmp_path / "test.xyz"
         with pytest.raises(ValueError):
             create_subtitle_writer(path, "xyz", "Line")
+
+    def test_word_count_mode(self, tmp_path):
+        path = tmp_path / "test.srt"
+        writer = create_subtitle_writer(path, "srt", "5 words", max_words=5)
+        assert isinstance(writer, SrtWriter)
+        writer.close()
 
 
 # ===================================================================
