@@ -80,6 +80,44 @@ class SynthesisRequest:
 
 
 @dataclass(frozen=True)
+class TokenTiming:
+    """Per-token timing within a synthesized segment.
+
+    Attributes:
+        text: Token text.
+        whitespace: Whitespace following the token ("" if none).
+        start: Start time in seconds (relative to segment start).
+        end: End time in seconds (relative to segment start).
+    """
+
+    text: str
+    whitespace: str = ""
+    start: float = 0.0
+    end: float = 0.0
+
+
+@dataclass(frozen=True)
+class AudioSegment:
+    """One contiguous synthesized segment (sentence-level chunk).
+
+    Engines that split the input text (via ``split_pattern``) expose each
+    chunk as its own AudioSegment so hosts can report per-sentence progress
+    and build subtitles from per-token timings.
+
+    Attributes:
+        graphemes: The text this segment was synthesized from.
+        audio: Raw float32 PCM audio bytes for this segment.
+        sample_rate: Sample rate of ``audio``.
+        tokens: Per-token timing details, when the engine provides them.
+    """
+
+    graphemes: str
+    audio: bytes
+    sample_rate: int
+    tokens: tuple[TokenTiming, ...] = ()
+
+
+@dataclass(frozen=True)
 class SynthesizedAudio:
     """Immutable value object for synthesized audio result.
 
@@ -87,11 +125,15 @@ class SynthesizedAudio:
         data: Raw audio bytes.
         format: Audio format of the result.
         duration: Duration of the audio.
+        segments: Per-segment details when the engine split the text into
+            sentence-level chunks (empty for engines that only produce a
+            single merged result).
     """
 
     data: bytes
     format: AudioFormat
     duration: Duration
+    segments: tuple[AudioSegment, ...] = ()
 
 
 @dataclass(frozen=True)

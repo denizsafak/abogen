@@ -1,5 +1,6 @@
 import os
 import time
+import logging
 import hashlib  # For generating unique cache filenames
 from pathlib import Path
 from platformdirs import user_desktop_dir
@@ -50,6 +51,8 @@ import abogen.hf_tracker as hf_tracker
 import static_ffmpeg
 import threading  # for efficient waiting
 
+logger = logging.getLogger(__name__)
+
 
 
 # Configuration constants
@@ -64,7 +67,6 @@ from abogen.subtitle_utils import (
     sanitize_name_for_os,
     split_text_by_voice_markers
 )
-from abogen.domain.split_pattern import PUNCTUATION_COMMAS
 
 class CountdownDialog(QDialog):
     """Base dialog with auto-accept countdown functionality"""
@@ -348,7 +350,7 @@ class ConversionThread(QThread):
         return samples_processed
 
     def run(self):
-        print(
+        logger.info(
             f"\nVoice: {self.voice}\nLanguage: {self.lang_code}\nSpeed: {self.speed}\nGPU: {self.use_gpu}\nFile: {self.file_name}\nSubtitle mode: {self.subtitle_mode}\nOutput format: {self.output_format}\nSave option: {self.save_option}\n"
         )
         try:
@@ -873,7 +875,6 @@ class ConversionThread(QThread):
                     )
                     spacy_sentences = None
                     active_split_pattern = self.split_pattern
-                    spacing_pattern = r"\s*" if self.lang_code in (Language.JA, Language.ZH) else r"\s+"
 
                     # Pre-load spaCy model for English if it will be needed for subtitle generation
                     if (
@@ -914,15 +915,11 @@ class ConversionThread(QThread):
                                     "grey",
                                 )
                             )
-                            # For Sentence + Comma mode, still split on commas within spaCy sentences
-                            if self.subtitle_mode == "Sentence + Comma":
-                                active_split_pattern = r"(?<=[{}]){}|\n+".format(
-                                    PUNCTUATION_COMMAS, spacing_pattern
-                                )
-                            else:
-                                active_split_pattern = (
-                                    "\n"  # Use newline splitting for Sentence mode
-                                )
+                            # spaCy already split at sentence boundaries; the
+                            # engine only splits on newlines. Commas are never
+                            # used in the engine split pattern (Sentence +
+                            # Comma splits at commas only at subtitle time).
+                            active_split_pattern = "\n"
                         else:
                             self.log_updated.emit(
                                 ("\nspaCy: Fallback to default segmentation...", "grey")
@@ -933,10 +930,10 @@ class ConversionThread(QThread):
 
                     # Print active split pattern used by the TTS engine once for this batch
                     try:
-                        print(f"Using split pattern: {active_split_pattern!r}")
+                        logger.info(f"Using split pattern: {active_split_pattern!r}")
                     except Exception:
-                        # Print must never break processing
-                        print("Using split pattern: (unprintable)")
+                        # Logging must never break processing
+                        logger.warning("Using split pattern: (unprintable)")
 
                     for text_segment in text_segments:
                         def _qt_check_cancel() -> bool:
@@ -1445,7 +1442,7 @@ class VoicePreviewThread(QThread):
         return os.path.join(self.cache_dir, filename)
 
     def run(self):
-        print(
+        logger.info(
             f"\nVoice: {self.voice}\nLanguage: {self.lang_code}\nSpeed: {self.speed}\nGPU: {self.use_gpu}\n"
         )
 

@@ -19,6 +19,7 @@ from abogen.tts_plugin.errors import EngineError
 from abogen.tts_plugin.manifest import VoiceManifest
 from abogen.tts_plugin.types import (
     AudioFormat,
+    AudioSegment,
     Duration,
     SynthesisRequest,
     SynthesizedAudio,
@@ -113,6 +114,7 @@ class SuperTonicSession:
                 total_steps = int(total_steps)
 
             audio_parts: list[np.ndarray] = []
+            segments: list[AudioSegment] = []
             for segment in self._pipeline(
                 request.text,
                 voice=voice,
@@ -120,7 +122,17 @@ class SuperTonicSession:
                 split_pattern=split_pattern,
                 total_steps=total_steps,
             ):
-                audio_parts.append(segment.audio)
+                audio = np.asarray(segment.audio, dtype="float32")
+                if audio.size == 0:
+                    continue
+                audio_parts.append(audio)
+                segments.append(
+                    AudioSegment(
+                        graphemes=str(getattr(segment, "graphemes", "") or ""),
+                        audio=audio.tobytes(),
+                        sample_rate=self._pipeline.sample_rate,
+                    )
+                )
 
             if not audio_parts:
                 return SynthesizedAudio(
@@ -139,6 +151,7 @@ class SuperTonicSession:
                 data=audio_bytes,
                 format=AudioFormat(mime="audio/wav", extension="wav"),
                 duration=Duration(seconds=duration_seconds),
+                segments=tuple(segments),
             )
         except EngineError:
             raise

@@ -169,15 +169,38 @@ class Pipeline:
         )
 
         result = session.synthesize(request)
-        audio_array = np.frombuffer(result.data, dtype=np.float32)
 
-        from dataclasses import dataclass
+        from dataclasses import dataclass, field
+
+        @dataclass
+        class Token:
+            text: str
+            whitespace: str = ""
+            start_ts: float = 0.0
+            end_ts: float = 0.0
 
         @dataclass
         class Segment:
             graphemes: str
             audio: np.ndarray
+            tokens: list[Any] = field(default_factory=list)
 
+        if result.segments:
+            for seg in result.segments:
+                audio_array = np.frombuffer(seg.audio, dtype=np.float32)
+                tokens = [
+                    Token(
+                        text=tok.text,
+                        whitespace=tok.whitespace,
+                        start_ts=tok.start,
+                        end_ts=tok.end,
+                    )
+                    for tok in seg.tokens
+                ]
+                yield Segment(graphemes=seg.graphemes, audio=audio_array, tokens=tokens)
+            return
+
+        audio_array = np.frombuffer(result.data, dtype=np.float32)
         yield Segment(graphemes=text, audio=audio_array)
 
     def load_single_voice(self, voice_name: str) -> Any:

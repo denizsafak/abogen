@@ -22,9 +22,11 @@ from abogen.tts_plugin.errors import EngineError
 from abogen.tts_plugin.manifest import VoiceManifest
 from abogen.tts_plugin.types import (
     AudioFormat,
+    AudioSegment,
     Duration,
     SynthesisRequest,
     SynthesizedAudio,
+    TokenTiming,
 )
 
 logger = logging.getLogger(__name__)
@@ -117,7 +119,9 @@ class KokoroSession:
             speed = request.parameters.values.get("speed", 1.0)
             split_pattern = request.parameters.values.get("split_pattern", None)
 
+            sample_rate = _KOKORO_SAMPLE_RATE
             audio_parts: list[np.ndarray] = []
+            segments: list[AudioSegment] = []
             for segment in self._pipeline(
                 request.text,
                 voice=voice,
@@ -127,7 +131,28 @@ class KokoroSession:
                 audio = segment.audio
                 if hasattr(audio, "numpy"):
                     audio = audio.numpy()
-                audio_parts.append(np.asarray(audio, dtype="float32"))
+                audio = np.asarray(audio, dtype="float32")
+                if audio.size == 0:
+                    continue
+                audio_parts.append(audio)
+
+                tokens = tuple(
+                    TokenTiming(
+                        text=str(tok.text),
+                        whitespace=str(tok.whitespace or ""),
+                        start=float(tok.start_ts or 0.0),
+                        end=float(tok.end_ts or 0.0),
+                    )
+                    for tok in (getattr(segment, "tokens", None) or [])
+                )
+                segments.append(
+                    AudioSegment(
+                        graphemes=str(getattr(segment, "graphemes", "") or ""),
+                        audio=audio.tobytes(),
+                        sample_rate=sample_rate,
+                        tokens=tokens,
+                    )
+                )
 
             if not audio_parts:
                 return SynthesizedAudio(
@@ -138,12 +163,13 @@ class KokoroSession:
 
             combined = np.concatenate(audio_parts).astype("float32", copy=False)
             audio_bytes = combined.tobytes()
-            duration_seconds = len(combined) / _KOKORO_SAMPLE_RATE
+            duration_seconds = len(combined) / sample_rate
 
             return SynthesizedAudio(
                 data=audio_bytes,
                 format=AudioFormat(mime="audio/wav", extension="wav"),
                 duration=Duration(seconds=duration_seconds),
+                segments=tuple(segments),
             )
         except EngineError:
             raise

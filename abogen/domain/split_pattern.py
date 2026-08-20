@@ -27,9 +27,18 @@ def get_split_pattern(language: Language, subtitle_mode: str) -> str:
     except ValueError:
         mode = SubtitleMode.DISABLED
 
-    # For English, always use newline splitting only
+    # English: spaCy is NOT used for pre-TTS segmentation (it is only used
+    # for post-TTS subtitle boundaries), so sentence boundaries for English
+    # are applied at subtitle time, not in the TTS engine. Disabled, Line,
+    # Sentence, and Sentence + Comma all keep newline-only engine splitting.
     if language in (Language.EN_US, Language.EN_GB):
-        return "\n"
+        if mode in (
+            SubtitleMode.DISABLED,
+            SubtitleMode.LINE,
+            SubtitleMode.SENTENCE,
+            SubtitleMode.SENTENCE_COMMA,
+        ):
+            return "\n"
 
     # Determine spacing pattern based on language
     spacing = r"\s*" if language.is_cjk else r"\s+"

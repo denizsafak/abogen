@@ -60,7 +60,7 @@ def spacy_pre_tts_segmentation(
         text_segments is a list of sentences (always at least one element).
         active_split_pattern is the regex to use for TTS backend splitting.
     """
-    from abogen.domain.split_pattern import PUNCTUATION_COMMAS, get_split_pattern
+    from abogen.domain.split_pattern import get_split_pattern
 
     def _log(msg: str) -> None:
         if log_callback:
@@ -99,20 +99,19 @@ def spacy_pre_tts_segmentation(
 
     _log(f"spaCy: Text segmented into {len(spacy_sentences)} sentences...")
 
-    # Compute split_pattern override based on subtitle mode
-    spacing_pattern = r"\s*" if lang_enum in _CJK_LANGS else r"\s+"
-
-    if subtitle_mode_str == "Sentence + Comma":
-        active_split = r"(?<=[{}]){}|\n+".format(PUNCTUATION_COMMAS, spacing_pattern)
-    else:
-        # Sentence mode: spaCy already split, only split on newlines
-        active_split = "\n"
+    # spaCy already split at sentence boundaries; the engine only needs to
+    # split on newlines. Commas are never used in the engine split pattern
+    # for non-English (Sentence + Comma splits at commas only at subtitle
+    # time, like English).
+    active_split = "\n"
 
     return spacy_sentences, active_split
 
 
 def _to_language_enum(lang_code: Any) -> Language:
     """Convert lang_code to Language enum (ISO code or Language enum)."""
+    if isinstance(lang_code, Language):
+        return lang_code
     try:
         return Language.from_str(str(lang_code))
     except ValueError:
@@ -174,6 +173,8 @@ def tts_segments(
     segment_iter = backend(text, **kwargs)
 
     chunk_start = current_time
+    prev_tokens: Optional[List[Dict[str, Any]]] = None
+    prev_was_fallback = True
 
     for segment in segment_iter:
         graphemes_raw = getattr(segment, "graphemes", "") or ""
@@ -186,8 +187,10 @@ def tts_segments(
         duration = len(audio) / SAMPLE_RATE
 
         tokens_list = getattr(segment, "tokens", [])
+        was_fallback = False
         if not tokens_list and graphemes:
             tokens_list = [FakeToken(graphemes, 0, duration)]
+            was_fallback = True
 
         tokens = [
             {
@@ -199,6 +202,18 @@ def tts_segments(
             for tok in tokens_list
         ]
 
+        # When the engine splits text on a punctuation pattern, the
+        # whitespace between segments is consumed by the split. Restore a
+        # trailing space on the boundary token of the previous segment so
+        # subtitle processing sees the original spacing (only for real
+        # per-word tokens; FakeToken fallbacks split via their own logic).
+        if (
+            not prev_was_fallback
+            and prev_tokens
+            and not prev_tokens[-1].get("whitespace")
+        ):
+            prev_tokens[-1]["whitespace"] = " "
+
         yield SegmentResult(
             graphemes=graphemes,
             audio=audio,
@@ -207,6 +222,8 @@ def tts_segments(
             tokens=tokens,
         )
 
+        prev_tokens = tokens
+        prev_was_fallback = was_fallback
         chunk_start += duration
 
 

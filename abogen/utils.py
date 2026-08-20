@@ -16,6 +16,8 @@ from functools import lru_cache
 
 from dotenv import load_dotenv, find_dotenv
 
+logger = logging.getLogger(__name__)
+
 
 def _load_environment() -> None:
     explicit_path = os.environ.get("ABOGEN_ENV_FILE")
@@ -441,10 +443,6 @@ default_encoding = sys.getfilesystemencoding()
 
 
 def create_process(cmd, stdin=None, text=True, capture_output=False):
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     # Configure root logger to output to console if not already configured
     root = logging.getLogger()
     if not root.handlers:
@@ -493,8 +491,8 @@ def create_process(cmd, stdin=None, text=True, capture_output=False):
             }
         )
 
-    # Print the command being executed
-    print(f"Executing: {cmd if isinstance(cmd, str) else ' '.join(cmd)}")
+    # Log the command being executed
+    logger.info(f"Executing: {cmd if isinstance(cmd, str) else ' '.join(cmd)}")
 
     proc = subprocess.Popen(cmd, **kwargs)
 
@@ -615,7 +613,7 @@ def prevent_sleep_start():
             )
         else:
             # Non-systemd distro or systemd tools not installed: skip inhibition rather than crash
-            print(
+            logger.warning(
                 "systemd-inhibit not found: skipping sleep inhibition on this Linux system."
             )
 

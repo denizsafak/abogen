@@ -9,7 +9,7 @@ from abogen.domain.enums import Language
 from abogen.domain.split_pattern import get_split_pattern
 
 
-# --- English always returns \n ---
+# --- English: newline-only for Disabled/Line, punctuation-based for sentence modes ---
 
 class TestEnglish:
     def test_english_sentence(self):
