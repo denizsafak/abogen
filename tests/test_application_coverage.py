@@ -379,6 +379,29 @@ class TestOutputLayoutService:
             assert path.name == "book.wav"
             assert path.parent == Path(tmpdir)
 
+    def test_resolve_merged_path_avoids_overwriting_existing_output(self):
+        """Repeat conversions get a unique merged path instead of overwriting."""
+        from abogen.application.output_layout_service import (
+            resolve_merged_path,
+            resolve_output_layout,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            existing = Path(tmpdir) / "book.wav"
+            existing.write_bytes(b"previous output")
+            req = ConversionRequest(
+                direct_text="Hello",
+                voice="M1",
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
+                original_filename="book.wav",
+                output_format="wav",
+            )
+            layout = resolve_output_layout(req)
+            path = resolve_merged_path(layout, req)
+
+            assert path == Path(tmpdir) / "book_2.wav"
+            assert layout.merged_path == path
+
     def test_resolve_chapter_path(self):
         """Resolve chapter output path."""
         from abogen.application.output_layout_service import resolve_chapter_path

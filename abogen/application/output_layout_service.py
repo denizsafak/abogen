@@ -54,12 +54,6 @@ def resolve_output_layout(request: ConversionRequest) -> OutputLayout:
     else:
         base_name = "output"
 
-    # Find unique output path
-    allowed_exts = {request.output_format, SubtitleFormat.SRT, SubtitleFormat.ASS, "vtt", "mp4", OutputFormat.M4B}
-    unique_base = resolve_unique_path(
-        parent_dir, base_name, "", allowed_extensions=allowed_exts
-    )
-
     # Resolve project layout
     project_root = None
     audio_dir = parent_dir
@@ -73,8 +67,15 @@ def resolve_output_layout(request: ConversionRequest) -> OutputLayout:
             base_dir=parent_dir,
         )
 
+    # Find unique output path so repeat conversions don't overwrite prior outputs
+    allowed_exts = {request.output_format, SubtitleFormat.SRT, SubtitleFormat.ASS, "vtt", "mp4", OutputFormat.M4B}
+    unique_base = resolve_unique_path(
+        audio_dir, base_name, "", allowed_extensions=allowed_exts
+    )
+
     return OutputLayout(
         parent_dir=parent_dir,
+        merged_path=Path(f"{unique_base}{request.output_format.dot_ext}"),
         project_root=project_root,
         audio_dir=audio_dir,
         subtitle_dir=subtitle_dir,
@@ -95,6 +96,8 @@ def resolve_merged_path(
     Returns:
         Path to the merged output file
     """
+    if layout.merged_path is not None:
+        return layout.merged_path
     base_name = sanitize_output_stem(
         request.original_filename or "output"
     )

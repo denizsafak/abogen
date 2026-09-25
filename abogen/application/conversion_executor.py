@@ -24,6 +24,7 @@ from abogen.application.conversion_ports import (
     VoiceResolver,
 )
 from abogen.application.conversion_result import ConversionResult
+from abogen.application.output_layout_service import resolve_merged_path
 from abogen.domain.audio_sink import open_audio_sink
 from abogen.domain.conversion_engine import (
     SegmentStats,
@@ -229,7 +230,7 @@ def execute_conversion(
         audio_sink: Optional[AudioSink] = None
         audio_path = None
         if merge_chapters:
-            audio_path = output_layout.audio_dir / f"{_base_name(request)}{request.output_format.dot_ext}"
+            audio_path = resolve_merged_path(output_layout, request)
             meta = plan.metadata if plan.metadata else None
             audio_sink = stack.enter_context(
                 open_audio_sink(
@@ -620,15 +621,6 @@ def _resolve_voice(
             resolved.speed,
             resolved.supertonic_steps,
         )
-
-
-def _base_name(request: Any) -> str:
-    """Get base name for output file."""
-    from abogen.domain.output_paths import sanitize_output_stem
-
-    if request.original_filename:
-        return sanitize_output_stem(request.original_filename)
-    return "output"
 
 
 def _format_heading(title: str, index: int, request: Any) -> str:
