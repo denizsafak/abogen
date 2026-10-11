@@ -4,6 +4,10 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
 from abogen.infrastructure.exporters import ExportService
 
 
@@ -161,3 +165,60 @@ class TestWriteFfmetadataFile:
         audio.touch()
         result = self.svc.write_ffmetadata_file(audio, None, None)
         assert result is None
+
+
+class TestApplyM4bChaptersMutagen:
+    """_apply_m4b_chapters_mutagen log behavior (see denizsafak/abogen#195).
+
+    Current mutagen releases expose no writable MP4 chapter API
+    (mutagen.mp4.MP4Chapter does not exist), so the import inside this
+    method can never succeed. The method must therefore return False and
+    log an *accurate* message: a warning only when mutagen is genuinely
+    missing, and a debug note (not a scary warning) when mutagen is
+    installed but lacks the writable API.
+    """
+
+    def setup_method(self):
+        self.svc = ExportService()
+
+    def test_empty_chapters_returns_false_without_logging(self, tmp_path):
+        logs = []
+        result = self.svc._apply_m4b_chapters_mutagen(
+            tmp_path / "out.m4b", [], lambda msg, lvl: logs.append((lvl, msg))
+        )
+        assert result is False
+        assert logs == []
+
+    def test_mutagen_installed_without_writable_api_logs_debug_not_warning(self, tmp_path):
+        """mutagen IS installed (the normal case) -> accurate debug, no warning.
+
+        This is the regression #195 reported: the old code always logged
+        'mutagen is not installed' (a warning), which was misleading.
+        """
+        import mutagen  # noqa: F401  (present in the test env; CI installs it)
+
+        logs = []
+        chapters = [{"start": 0.0, "end": 1.0, "title": "Ch 1"}]
+        result = self.svc._apply_m4b_chapters_mutagen(
+            tmp_path / "out.m4b", chapters, lambda msg, lvl: logs.append((lvl, msg))
+        )
+        assert result is False
+        # No misleading warning in the expected case.
+        assert not any(lvl == "warning" for lvl, _ in logs), logs
+        # An accurate, non-alarming note instead.
+        assert any(
+            lvl == "debug" and "writable MP4 chapter API" in msg for lvl, msg in logs
+        ), logs
+
+    def test_mutagen_genuinely_missing_still_warns(self, tmp_path):
+        """mutagen truly absent -> keep the original warning (backward-compat)."""
+        with patch.dict("sys.modules", {"mutagen": None, "mutagen.mp4": None}):
+            logs = []
+            chapters = [{"start": 0.0, "end": 1.0, "title": "Ch 1"}]
+            result = self.svc._apply_m4b_chapters_mutagen(
+                tmp_path / "out.m4b", chapters, lambda msg, lvl: logs.append((lvl, msg))
+            )
+        assert result is False
+        assert any(
+            lvl == "warning" and "mutagen is not installed" in msg for lvl, msg in logs
+        ), logs
