@@ -187,3 +187,55 @@ class TestOpenAudioSinkCompressed:
         meta = {"title": "Test", "artist": "Author"}
         open_audio_sink(tmp_path / "meta.opus", "opus", metadata=meta)
         mock_build.assert_called_once_with(tmp_path / "meta.opus", "opus", metadata=meta)
+
+    @patch("abogen.domain.audio_sink._ensure_ffmpeg")
+    @patch("abogen.domain.audio_sink.build_ffmpeg_command")
+    @patch("abogen.domain.audio_sink.subprocess.Popen")
+    def test_failed_ffmpeg_encode_raises_instead_of_silently_closing(
+        self, mock_popen, mock_build, mock_ensure, tmp_path: Path
+    ):
+        """A non-zero ffmpeg exit must raise, not silently close (which left a
+        truncated file that then broke the metadata-embed step downstream)."""
+        mock_build.return_value = ["ffmpeg", "-y", "-i", "pipe:0", "out.mp3"]
+        proc = MagicMock()
+        proc.stdin = MagicMock()
+        proc.stdin.closed = False
+        proc.wait.return_value = 1  # ffmpeg failed
+        mock_popen.return_value = proc
+
+        out = tmp_path / "fail.mp3"
+        sink = open_audio_sink(out, "mp3")
+        sink.write(np.zeros(100, dtype="float32"))
+
+        try:
+            sink.close()
+            raised = False
+        except RuntimeError as exc:
+            raised = True
+            assert "exit 1" in str(exc)
+        assert raised, "close() should raise when ffmpeg exits non-zero"
+
+    @patch("abogen.domain.audio_sink._ensure_ffmpeg")
+    @patch("abogen.domain.audio_sink.build_ffmpeg_command")
+    @patch("abogen.domain.audio_sink.subprocess.Popen")
+    def test_ffmpeg_stderr_captured_to_log_file(
+        self, mock_popen, mock_build, mock_ensure, tmp_path: Path
+    ):
+        """ffmpeg stderr is redirected to <out>.ffmpeg.log (no longer DEVNULL)
+        so a failed encode is diagnosable after the fact."""
+        mock_build.return_value = ["ffmpeg", "-y", "-i", "pipe:0", "out.mp3"]
+        proc = MagicMock()
+        proc.stdin = MagicMock()
+        proc.stdin.closed = False
+        proc.wait.return_value = 0
+        mock_popen.return_value = proc
+
+        out = tmp_path / "log.mp3"
+        sink = open_audio_sink(out, "mp3")
+        sink.write(np.zeros(100, dtype="float32"))
+        sink.close()
+
+        # Popen must have been given a real stderr file handle (not DEVNULL).
+        stderr_arg = mock_popen.call_args.kwargs.get("stderr")
+        assert stderr_arg is not None
+        assert stderr_arg is not subprocess.DEVNULL
