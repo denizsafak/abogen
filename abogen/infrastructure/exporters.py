@@ -226,8 +226,31 @@ class ExportService:
             from fractions import Fraction
             from mutagen.mp4 import MP4, MP4Chapter
         except ImportError:
-            if log_callback:
-                log_callback("Unable to write MP4 chapter atoms because mutagen is not installed.", "warning")
+            # Distinguish a genuinely missing mutagen from a present mutagen
+            # that simply lacks a writable MP4 chapter API. The latter is the
+            # expected case: current mutagen releases (>=1.47) only expose a
+            # read-only Chapter/MP4Chapters API and have no MP4Chapter symbol,
+            # so this import can never succeed. That is not a real error -
+            # ffmpeg has already written the chpl/chap chapter atoms (and a
+            # timed-text chapter track) earlier in embed_m4b_metadata, so the
+            # output is fully chaptered either way.
+            try:
+                import mutagen  # noqa: F401
+            except ImportError:
+                if log_callback:
+                    log_callback(
+                        "Unable to write MP4 chapter atoms because mutagen is not installed.",
+                        "warning",
+                    )
+            else:
+                if log_callback:
+                    log_callback(
+                        "Skipping the mutagen chapter pass: installed mutagen "
+                        f"({getattr(mutagen, 'version_string', 'unknown')}) exposes no "
+                        "writable MP4 chapter API. Chapters were already written by "
+                        "ffmpeg, so the output is fully chaptered.",
+                        "debug",
+                    )
             return False
         
         try:
