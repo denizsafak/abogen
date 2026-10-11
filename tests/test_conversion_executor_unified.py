@@ -505,6 +505,101 @@ class TestExecuteConversion:
             assert result.metadata["author"] == "Author"
 
 
+class TestRepeatConversionOutputPath:
+    """Repeat conversions must not overwrite an existing merged output."""
+
+    @staticmethod
+    def _run(req: ConversionRequest):
+        from abogen.application.conversion_planner import build_conversion_plan
+
+        plan = build_conversion_plan(req)
+        return execute_conversion(
+            plan,
+            FakeEvents(),
+            FakePipelineProvider(),
+            FakeVoiceResolver(),
+            TTSContext(),
+        )
+
+    @staticmethod
+    def _request(output_dir: Path, **save_kwargs: Any) -> ConversionRequest:
+        return ConversionRequest(
+            direct_text="Hello world",
+            voice="M1",
+            save=SaveConfig(
+                mode="custom_folder", output_folder=output_dir, **save_kwargs
+            ),
+            original_filename="book.txt",
+            output_format="wav",
+        )
+
+    def test_existing_output_is_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            existing = Path(tmpdir) / "book.wav"
+            existing.write_bytes(b"previous output")
+
+            result = self._run(self._request(Path(tmpdir)))
+
+            assert result.audio_path == Path(tmpdir) / "book_2.wav"
+            assert result.audio_path.exists()
+            assert existing.read_bytes() == b"previous output"
+
+    def test_third_conversion_gets_suffix_3(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            first = Path(tmpdir) / "book.wav"
+            second = Path(tmpdir) / "book_2.wav"
+            first.write_bytes(b"first output")
+            second.write_bytes(b"second output")
+
+            result = self._run(self._request(Path(tmpdir)))
+
+            assert result.audio_path == Path(tmpdir) / "book_3.wav"
+            assert first.read_bytes() == b"first output"
+            assert second.read_bytes() == b"second output"
+
+    def test_project_mode_checks_audio_subfolder(self, monkeypatch):
+        import functools
+
+        from abogen.application import output_layout_service
+        from abogen.domain.output_paths import resolve_project_layout
+
+        # Pin the project folder timestamp so both runs share one project folder.
+        monkeypatch.setattr(
+            output_layout_service,
+            "resolve_project_layout",
+            functools.partial(
+                resolve_project_layout, timestamp_fn=lambda: "20260101_000000"
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req = self._request(Path(tmpdir), save_as_project=True)
+
+            first = self._run(req)
+            first_bytes = first.audio_path.read_bytes()
+            second = self._run(req)
+
+            assert first.audio_path.parent.name == "audio"
+            assert first.audio_path.name == "book.wav"
+            assert second.audio_path == first.audio_path.with_name("book_2.wav")
+            assert first.audio_path.read_bytes() == first_bytes
+
+    def test_fallback_name_uses_source_stem(self):
+        """Without original_filename the merged file is named after the source."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "my_novel.txt"
+            source.write_text("Hello world", encoding="utf-8")
+            req = ConversionRequest(
+                source_path=source,
+                voice="M1",
+                save=SaveConfig(mode="save_next_to_input"),
+                output_format="wav",
+            )
+
+            result = self._run(req)
+
+            assert result.audio_path == Path(tmpdir) / "my_novel.wav"
+
+
 class TestHeadingDedup:
     """Tests for heading dedup in executor."""
 

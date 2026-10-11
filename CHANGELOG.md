@@ -1,3 +1,7 @@
+# Unreleased
+- Fixed repeat conversions overwriting the previous audiobook and its subtitles. The merged output now gets a `_2`, `_3`, ... suffix when a file with the same name already exists, issue mentioned in [#203](https://github.com/denizsafak/abogen/issues/203).
+- When no original filename is set, the merged output is now named after the source file (e.g. `my_novel.wav`) instead of `output.wav`.
+
 # 1.3.0
 - Special thanks to [@jeremiahsb](https://github.com/jeremiahsb) for his [massive contribution](https://github.com/denizsafak/abogen/pull/120) (>55k lines!) that brought the Web UI, EPUB 3 pipeline, and core architectural improvements to life.
 - Added an EPUB 3 packaging pipeline that builds media-overlay EPUBs from generated audio and chunk metadata.
