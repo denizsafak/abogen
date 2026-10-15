@@ -179,6 +179,35 @@ def test_caps_quote_normalization_respects_override() -> None:
     assert '"KEEP SHOUTING."' in cleaned
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # Unmatched opening marks: the tail has no closing mark to delimit a
+        # passage, so it must be emitted once, verbatim (#196).
+        ("“Hello.", "“Hello."),
+        ("«Bonjour.", "«Bonjour."),
+        ("He said “hi”. Then “bye.", "He said “hi”. Then “bye."),
+        # `_cleanup_spacing` drops the space after the mark; the tail still
+        # must appear exactly once.
+        ("A stray “ mark, and words.", "A stray “mark, and words."),
+    ],
+)
+def test_unclosed_quote_tail_is_not_duplicated(text: str, expected: str) -> None:
+    # Regression test for #196: an unclosed quote used to duplicate the whole
+    # remainder of the text, and the duplicate was synthesized into the
+    # audiobook and written into the caption cues.
+    assert _normalize_text(text) == expected
+
+
+def test_balanced_quote_before_unclosed_tail_is_still_normalized() -> None:
+    # A closed pair earlier in the text keeps its caps normalization, while
+    # the unclosed remainder after it is emitted once.
+    normalized = _normalize_text("“THE NASA TEAM ARRIVED.” Then “THE CREW waited.")
+    assert normalized == (
+        "“The NASA team arrived.” Then “THE CREW waited."
+    )
+
+
 def test_recent_years_split_twenty_style() -> None:
     normalized = _normalize_text("In 2025 we planned ahead")
     folded = normalized.lower().replace("-", " ")

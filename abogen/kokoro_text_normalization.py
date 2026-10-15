@@ -1180,7 +1180,12 @@ def _normalize_all_caps_quotes(text: str) -> str:
             cursor += 1
 
         if cursor >= length:
+            # Unmatched opening mark: the remainder has no closing mark to
+            # delimit a passage, so emit it verbatim and consume it. Not
+            # advancing `index` here would make the tail block below append
+            # the same remainder a second time (#196).
             builder.append(text[index:])
+            index = length
             break
 
         body = text[index + 1 : cursor]
