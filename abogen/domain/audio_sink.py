@@ -114,8 +114,14 @@ def open_audio_sink(
         if extra_ffmpeg_args:
             cmd[2:2] = extra_ffmpeg_args
 
+    # Capture ffmpeg's stderr (previously DEVNULL) so a failed encode is
+    # diagnosable instead of silently producing a truncated file. The log path
+    # lives next to the output so it can be inspected after the fact.
+    stderr_path = path.with_suffix(path.suffix + ".ffmpeg.log")
+    stderr_file = open(stderr_path, "wb")
+
     process = subprocess.Popen(
-        cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=stderr_file
     )
 
     def _write_compressed(data: np.ndarray) -> None:
@@ -126,6 +132,24 @@ def open_audio_sink(
     def _close_compressed() -> None:
         if process.stdin and not process.stdin.closed:
             process.stdin.close()
-        process.wait()
+        returncode = process.wait()
+        stderr_file.close()
+        if returncode != 0:
+            # Surface the real ffmpeg failure instead of letting a truncated
+            # file cascade into the metadata-embed step with a misleading error.
+            tail = ""
+            try:
+                with open(stderr_path, "r", errors="replace") as fh:
+                    tail = "".join(fh.readlines()[-25:])
+            except OSError:
+                pass
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise RuntimeError(
+                f"audio-sink ffmpeg failed (exit {returncode}) for {path}. "
+                f"stderr tail:\n{tail}"
+            )
 
     return AudioSink(write=_write_compressed, close=_close_compressed)
