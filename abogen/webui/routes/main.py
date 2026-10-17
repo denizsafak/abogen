@@ -204,7 +204,7 @@ def wizard_upload():
 @main_bp.route("/wizard/text", methods=["POST"])
 def wizard_text():
     text = request.form.get("text", "").strip()
-    title = request.form.get("title", "").strip() or "Pasted Text"
+    form_title = request.form.get("title", "").strip() or request.form.get("meta_title", "").strip()
     
     if not text:
         if wants_wizard_json():
@@ -221,8 +221,28 @@ def wizard_text():
 
     try:
         extraction = extract_from_path(file_path)
-        # Override title since text extraction might not find one
+        placeholder = file_path.stem
+
+        extracted_title = extraction.metadata.get("title")
+        if form_title:
+            title = form_title
+        elif extracted_title and extracted_title != placeholder:
+            title = extracted_title
+        else:
+            title = "Pasted Text"
+
         extraction.metadata["title"] = title
+
+        # Pasted text is stored as a randomly named temp file, and plain-text
+        # extraction falls back to the file stem whenever it finds no headings.
+        # That leaves the random id as the chapter title and album name, where
+        # it gets narrated aloud and written into the m4b tags.
+        if extraction.metadata.get("album") == placeholder:
+            extraction.metadata["album"] = title
+
+        for chapter in extraction.chapters:
+            if chapter.title == placeholder:
+                chapter.title = title
         
         result = build_pending_job_from_extraction(
             stored_path=file_path,
