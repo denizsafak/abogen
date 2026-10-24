@@ -1,3 +1,4 @@
+import itertools
 import os
 import re
 import logging
@@ -475,19 +476,26 @@ class EpubParser(BaseBookParser):
         return metadata
 
     def _find_doc_key(self, base_href, doc_order, doc_order_decoded):
-        candidates = [
-            base_href,
-            urllib.parse.unquote(base_href),
-        ]
-        base_name = os.path.basename(base_href).lower()
-        for k in list(doc_order.keys()) + list(doc_order_decoded.keys()):
-            if os.path.basename(k).lower() == base_name:
-                candidates.append(k)
-        for candidate in candidates:
+        for candidate in (base_href, urllib.parse.unquote(base_href)):
             if candidate in doc_order:
                 return candidate, doc_order[candidate]
-            elif candidate in doc_order_decoded:
+            if candidate in doc_order_decoded:
                 return candidate, doc_order_decoded[candidate]
+
+        # Fall back to a basename match, using a lookup built once per
+        # doc_order mapping instead of scanning every document per call.
+        cache = getattr(self, "_basename_cache", None)
+        if cache is None or cache[0] is not doc_order or cache[1] is not doc_order_decoded:
+            by_name = {}
+            for k in itertools.chain(doc_order, doc_order_decoded):
+                by_name.setdefault(os.path.basename(k).lower(), k)
+            cache = (doc_order, doc_order_decoded, by_name)
+            self._basename_cache = cache
+        key = cache[2].get(os.path.basename(base_href).lower())
+        if key is not None:
+            if key in doc_order:
+                return key, doc_order[key]
+            return key, doc_order_decoded[key]
         return None, None
 
     def _find_position_robust(self, doc_href, fragment_id):
@@ -796,6 +804,10 @@ class EpubParser(BaseBookParser):
             if item:
                 spine_docs.append(item.get_name())
         doc_order = {href: i for i, href in enumerate(spine_docs)}
+        # First-occurrence position per doc, equivalent to list.index() in O(1).
+        spine_pos = {}
+        for i, href in enumerate(spine_docs):
+            spine_pos.setdefault(href, i)
         doc_order_decoded = {
             urllib.parse.unquote(href): i for href, i in doc_order.items()
         }
@@ -881,8 +893,8 @@ class EpubParser(BaseBookParser):
                     slice_html = current_doc_html[start_slice_pos:]
                     docs_between = []
                     try:
-                        idx_current = spine_docs.index(current_doc)
-                        idx_next = spine_docs.index(next_doc)
+                        idx_current = spine_pos[current_doc]
+                        idx_next = spine_pos[next_doc]
                         if idx_current < idx_next:
                             docs_between = [
                                 spine_docs[k] for k in range(idx_current + 1, idx_next)
@@ -895,7 +907,7 @@ class EpubParser(BaseBookParser):
                             docs_between.extend(
                                 [spine_docs[k] for k in range(0, idx_next)]
                             )
-                    except ValueError:
+                    except KeyError:
                         pass
 
                     for doc_href in docs_between:
@@ -905,10 +917,10 @@ class EpubParser(BaseBookParser):
             else:
                 slice_html = current_doc_html[start_slice_pos:]
                 try:
-                    idx_current = spine_docs.index(current_doc)
+                    idx_current = spine_pos[current_doc]
                     for doc_idx in range(idx_current + 1, len(spine_docs)):
                         slice_html += self.doc_content.get(spine_docs[doc_idx], "")
-                except ValueError:
+                except KeyError:
                     pass
 
             if not slice_html.strip() and current_doc_html:
@@ -997,9 +1009,10 @@ class EpubParser(BaseBookParser):
             else:
                 logging.warning(f"Spine item with id '{item_id}' not found.")
 
+        spine_set = set(spine_docs)
         for item in self.book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
             href = item.get_name()
-            if href in spine_docs:
+            if href in spine_set:
                 try:
                     html_content = item.get_content().decode("utf-8", errors="ignore")
                     self.doc_content[href] = html_content
