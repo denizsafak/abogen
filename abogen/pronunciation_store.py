@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
-import shutil
+import tempfile
 import threading
 import time
 import uuid
@@ -101,11 +102,20 @@ def _load_db() -> Dict[str, Any]:
 
 def _save_db(data: Dict[str, Any]) -> None:
     path = _store_path()
-    # Atomic write
-    temp_path = path.with_suffix(".tmp")
-    with open(temp_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    shutil.move(str(temp_path), str(path))
+    temp_path = None
+    try:
+        # Keep the replacement on the same filesystem and close it before
+        # replacing the live file, including on Windows.
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+        ) as f:
+            temp_path = Path(f.name)
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(temp_path, path)
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
 
 
 def load_overrides(language: str, tokens: Iterable[str]) -> Dict[str, Dict[str, Any]]:
