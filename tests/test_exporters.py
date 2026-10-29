@@ -1,5 +1,7 @@
 """Tests for ExportService FFmpeg metadata methods."""
 import os
+import shutil
+import subprocess
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -222,3 +224,253 @@ class TestApplyM4bChaptersMutagen:
         assert any(
             lvl == "warning" and "mutagen is not installed" in msg for lvl, msg in logs
         ), logs
+
+
+class TestEmbedM4bCoverInputIndex:
+    """embed_m4b_metadata must map the cover from its real FFmpeg input index.
+
+    Inputs are: 0 = audio, then the optional ffmetadata file, then the
+    optional cover. The cover is input 2 when chapter/metadata ffmetadata is
+    present and input 1 when it is not. Hardcoding ``1:v:0`` made FFmpeg look
+    for a video stream in the ffmetadata input and fail (exit 234).
+    """
+
+    CHAPTERS = [
+        {"title": "Opening", "start": 0.0, "end": 0.5},
+        {"title": "Closing", "start": 0.5, "end": 1.0},
+    ]
+
+    def _run(self, tmp_path, *, with_ffmetadata, with_cover, cover_exists=True):
+        audio = tmp_path / "book.m4b"
+        audio.write_bytes(b"audio")
+        cover = tmp_path / "cover.png"
+        if with_cover and cover_exists:
+            cover.write_bytes(b"png")
+        captured = {}
+
+        class _Proc:
+            def wait(self):
+                return 0
+
+        def fake_create_process(cmd, text=True):
+            captured["cmd"] = list(cmd)
+            Path(cmd[-1]).write_bytes(b"muxed")
+            return _Proc()
+
+        metadata = {"title": "Book"} if with_ffmetadata else {}
+        chapters = self.CHAPTERS if with_ffmetadata else []
+        with patch("abogen.infrastructure.exporters.create_process", fake_create_process), \
+                patch.object(ExportService, "_apply_m4b_chapters_mutagen"), \
+                patch.object(ExportService, "_write_m4b_freeform_tags"):
+            ExportService().embed_m4b_metadata(
+                audio, metadata, chapters,
+                cover_path=cover if with_cover else None,
+                cover_mime="image/png" if with_cover else None,
+            )
+        return captured["cmd"]
+
+    @staticmethod
+    def _inputs(cmd):
+        return [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "-i"]
+
+    @staticmethod
+    def _maps(cmd):
+        return [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "-map"]
+
+    def test_cover_with_ffmetadata_maps_input_2(self, tmp_path):
+        cmd = self._run(tmp_path, with_ffmetadata=True, with_cover=True)
+        inputs = self._inputs(cmd)
+        assert len(inputs) == 3
+        assert inputs[1].endswith(".ffmeta")
+        assert inputs[2].endswith("cover.png")
+        assert self._maps(cmd) == ["0:a", "2:v:0"]
+        assert cmd[cmd.index("-map_metadata") + 1] == "1"
+        assert cmd[cmd.index("-map_chapters") + 1] == "1"
+        assert cmd[cmd.index("-disposition:v:0") + 1] == "attached_pic"
+        # use_metadata_tags makes the mp4 muxer drop the attached picture.
+        assert cmd[cmd.index("-movflags") + 1] == "+faststart"
+
+    def test_cover_without_ffmetadata_maps_input_1(self, tmp_path):
+        cmd = self._run(tmp_path, with_ffmetadata=False, with_cover=True)
+        inputs = self._inputs(cmd)
+        assert len(inputs) == 2
+        assert inputs[1].endswith("cover.png")
+        assert self._maps(cmd) == ["0:a", "1:v:0"]
+        assert cmd[cmd.index("-map_metadata") + 1] == "0"
+        assert "-map_chapters" not in cmd
+        assert cmd[cmd.index("-movflags") + 1] == "+faststart"
+
+    def test_ffmetadata_without_cover_maps_audio_only(self, tmp_path):
+        cmd = self._run(tmp_path, with_ffmetadata=True, with_cover=False)
+        assert len(self._inputs(cmd)) == 2
+        assert self._maps(cmd) == ["0:a"]
+        assert cmd[cmd.index("-map_metadata") + 1] == "1"
+        assert cmd[cmd.index("-map_chapters") + 1] == "1"
+        assert "-disposition:v:0" not in cmd
+        assert cmd[cmd.index("-movflags") + 1] == "+faststart+use_metadata_tags"
+
+    def test_no_ffmetadata_no_cover_maps_audio_only(self, tmp_path):
+        cmd = self._run(tmp_path, with_ffmetadata=False, with_cover=False)
+        assert len(self._inputs(cmd)) == 1
+        assert self._maps(cmd) == ["0:a"]
+        assert cmd[cmd.index("-map_metadata") + 1] == "0"
+
+    def test_nonexistent_cover_is_skipped(self, tmp_path):
+        cmd = self._run(tmp_path, with_ffmetadata=True, with_cover=True, cover_exists=False)
+        assert len(self._inputs(cmd)) == 2
+        assert self._maps(cmd) == ["0:a"]
+        assert "-disposition:v:0" not in cmd
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="real ffmpeg not on PATH")
+class TestEmbedM4bCoverRealFfmpeg:
+    """Real FFmpeg mux through ExportService.embed_m4b_metadata (no argv mocks).
+
+    Only static_ffmpeg.add_paths is stubbed (tests/__init__.py and below) so
+    the already-installed ffmpeg on PATH is used and nothing is downloaded.
+    """
+
+    CHAPTERS = TestEmbedM4bCoverInputIndex.CHAPTERS
+
+    @staticmethod
+    def _ffmpeg(*args):
+        return subprocess.run(["ffmpeg", "-v", "error", "-y", *args], capture_output=True, text=True)
+
+    def _fixture(self, tmp_path):
+        audio = tmp_path / "book.m4b"
+        cover = tmp_path / "cover.png"
+        made = self._ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+                            "-c:a", "aac", "-b:a", "64k", "-f", "mp4", str(audio))
+        assert made.returncode == 0, made.stderr
+        made = self._ffmpeg("-f", "lavfi", "-i", "color=c=red:s=32x32", "-frames:v", "1", str(cover))
+        assert made.returncode == 0, made.stderr
+        return audio, cover
+
+    def test_cover_and_chapters_mux_into_playable_m4b(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("abogen.infrastructure.exporters.static_ffmpeg.add_paths", lambda *a, **k: None)
+        audio, cover = self._fixture(tmp_path)
+
+        ExportService().embed_m4b_metadata(
+            audio, {"title": "Cover Test", "artist": "Abogen"}, self.CHAPTERS,
+            cover_path=cover, cover_mime="image/png",
+        )
+
+        # Whole file decodes, and the audio still lasts about one second.
+        decoded = subprocess.run(
+            ["ffmpeg", "-v", "error", "-i", str(audio), "-map", "0:a", "-f", "s16le", "-ac", "1", "-ar", "8000", "-"],
+            capture_output=True,
+        )
+        assert decoded.returncode == 0, decoded.stderr
+        assert 0.9 <= len(decoded.stdout) / 2 / 8000 <= 1.2
+
+        # Chapter titles and timings survive.
+        meta = tmp_path / "out.ffmeta"
+        dumped = self._ffmpeg("-i", str(audio), "-f", "ffmetadata", str(meta))
+        assert dumped.returncode == 0, dumped.stderr
+        text = meta.read_text(encoding="utf-8")
+        assert "title=Opening" in text and "title=Closing" in text
+        assert "title=Cover Test" in text
+        spans = []
+        for block in text.split("[CHAPTER]")[1:]:
+            fields = dict(line.split("=", 1) for line in block.strip().splitlines())
+            num, den = (int(x) for x in fields["TIMEBASE"].split("/"))
+            spans.append((fields["title"], int(fields["START"]) * num / den, int(fields["END"]) * num / den))
+        assert [title for title, _, _ in spans] == ["Opening", "Closing"]
+        assert [(round(s, 2), round(e, 2)) for _, s, e in spans] == [(0.0, 0.5), (0.5, 1.0)]
+
+        self._assert_cover(audio, tmp_path)
+
+    def test_cover_without_chapter_metadata_is_kept(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("abogen.infrastructure.exporters.static_ffmpeg.add_paths", lambda *a, **k: None)
+        audio, cover = self._fixture(tmp_path)
+
+        ExportService().embed_m4b_metadata(audio, {}, [], cover_path=cover, cover_mime="image/png")
+
+        decoded = self._ffmpeg("-i", str(audio), "-f", "null", "-")
+        assert decoded.returncode == 0, decoded.stderr
+        self._assert_cover(audio, tmp_path)
+
+    RICH_METADATA = {
+        "title": "Café — 東京 Story",
+        "artist": "Zoë Author",
+        "album": "Ålbum Name",
+        "genre": "Audiobook",
+        "year": 2026,
+        "narrator": "Narrátor 声",
+        "series": "Série Name",
+        "series_part": 3,
+        "empty_key": "",
+        "none_key": None,
+    }
+
+    def _mux_rich(self, tmp_path, monkeypatch, with_cover):
+        monkeypatch.setattr("abogen.infrastructure.exporters.static_ffmpeg.add_paths", lambda *a, **k: None)
+        audio, cover = self._fixture(tmp_path)
+        ExportService().embed_m4b_metadata(
+            audio, dict(self.RICH_METADATA), self.CHAPTERS,
+            cover_path=cover if with_cover else None, cover_mime="image/png" if with_cover else None,
+        )
+        return audio
+
+    def _assert_audio_and_chapters(self, audio, tmp_path):
+        decoded = subprocess.run(
+            ["ffmpeg", "-v", "error", "-i", str(audio), "-map", "0:a", "-f", "s16le", "-ac", "1", "-ar", "8000", "-"],
+            capture_output=True,
+        )
+        assert decoded.returncode == 0, decoded.stderr
+        assert 0.9 <= len(decoded.stdout) / 2 / 8000 <= 1.2
+        meta = tmp_path / "rich.ffmeta"
+        dumped = self._ffmpeg("-i", str(audio), "-f", "ffmetadata", str(meta))
+        assert dumped.returncode == 0, dumped.stderr
+        text = meta.read_text(encoding="utf-8")
+        assert text.count("[CHAPTER]") == 2
+        assert "title=Opening" in text and "title=Closing" in text
+        return text
+
+    def test_cover_export_preserves_custom_metadata(self, tmp_path, monkeypatch):
+        audio = self._mux_rich(tmp_path, monkeypatch, with_cover=True)
+        text = self._assert_audio_and_chapters(audio, tmp_path)
+        for line in ("title=Café — 東京 Story", "artist=Zoë Author", "album=Ålbum Name",
+                     "genre=Audiobook", "date=2026", "narrator=Narrátor 声", "series=Série Name",
+                     "series_part=3", "year=2026"):
+            assert line in text, (line, text)
+        self._assert_cover(audio, tmp_path)
+
+        from mutagen.mp4 import MP4
+        tags = MP4(str(audio)).tags
+        # Standard atoms.
+        assert tags["\xa9nam"] == ["Café — 東京 Story"]
+        assert tags["\xa9ART"] == ["Zoë Author"]
+        assert tags["\xa9alb"] == ["Ålbum Name"]
+        assert tags["\xa9gen"] == ["Audiobook"]
+        assert tags["\xa9day"] == ["2026"]
+        # Every non-empty key is also a freeform tag, coerced with str().
+        freeform = {
+            key.split(":", 2)[2]: bytes(values[0]).decode("utf-8")
+            for key, values in tags.items() if key.startswith("----:com.apple.iTunes:")
+        }
+        assert freeform == {
+            key: str(value) for key, value in self.RICH_METADATA.items() if value not in (None, "")
+        }
+
+    def test_no_cover_export_keeps_metadata_tags_path(self, tmp_path, monkeypatch):
+        audio = self._mux_rich(tmp_path, monkeypatch, with_cover=False)
+        text = self._assert_audio_and_chapters(audio, tmp_path)
+        # Unchanged path: use_metadata_tags stores every key as an mdta tag.
+        for line in ("narrator=Narrátor 声", "series=Série Name", "series_part=3", "year=2026",
+                     "title=Café — 東京 Story", "artist=Zoë Author", "album=Ålbum Name", "genre=Audiobook"):
+            assert line in text, (line, text)
+        from mutagen.mp4 import MP4
+        assert not any(k.startswith("----:") for k in (MP4(str(audio)).tags or {}))
+
+    def _assert_cover(self, audio, tmp_path):
+        # The cover is an attached-picture stream and a real JPEG covr atom.
+        from mutagen.mp4 import MP4
+        covr = MP4(str(audio)).tags["covr"]
+        assert len(covr) == 1 and bytes(covr[0]).startswith(b"\xff\xd8")
+        extracted = tmp_path / "extracted.jpg"
+        pulled = self._ffmpeg("-i", str(audio), "-map", "0:v:0", "-c", "copy", "-f", "mjpeg", str(extracted))
+        assert pulled.returncode == 0, pulled.stderr
+        assert extracted.read_bytes() == bytes(covr[0])
+        frame = self._ffmpeg("-i", str(extracted), "-f", "null", "-")
+        assert frame.returncode == 0, frame.stderr
