@@ -71,11 +71,10 @@ def test_roman_numerals_world_war():
 
 
 def test_footnote_removal():
-    # Bob is awesome1. -> Bob is awesome.
+    # A plain digit suffix cannot reliably be identified as a footnote.
     normalized = normalize("Bob is awesome1.")
     print(f"Bob is awesome1. -> {normalized}")
-    assert "bob is awesome." in normalized.lower()
-    assert "1" not in normalized
+    assert normalized == "Bob is awesome1."
 
     # Citation needed[1]. -> Citation needed.
     normalized = normalize("Citation needed[1].")
@@ -98,11 +97,23 @@ def test_footnote_cleanup_preserves_alphanumeric_terms(text, mode):
 
 
 @pytest.mark.parametrize("mode", ["spacy", "off"])
-def test_footnote_cleanup_removes_explicit_markers_only(mode):
+@pytest.mark.parametrize("convert_numbers", [True, False])
+def test_footnote_cleanup_removes_explicit_markers_only(mode, convert_numbers):
     assert normalize(
         "F1[1] and H2O[23][2]. Evidence[123].",
-        {"normalization_apostrophe_mode": mode},
+        {
+            "normalization_apostrophe_mode": mode,
+            "normalization_numbers": convert_numbers,
+        },
     ) == "F1 and H2O. Evidence."
+
+
+@pytest.mark.parametrize("mode", ["spacy", "off"])
+def test_superscript_digits_are_normalized_without_guessing_footnotes(mode):
+    # NFKC flattens superscripts before footnote cleanup sees the text.
+    assert normalize(
+        "Evidence¹ and Evidence²³.", {"normalization_apostrophe_mode": mode}
+    ) == "Evidence1 and Evidence23."
 
 
 @pytest.mark.parametrize("mode", ["spacy", "off"])
