@@ -71,17 +71,62 @@ def test_roman_numerals_world_war():
 
 
 def test_footnote_removal():
-    # Bob is awesome1. -> Bob is awesome.
+    # A plain digit suffix cannot reliably be identified as a footnote.
     normalized = normalize("Bob is awesome1.")
     print(f"Bob is awesome1. -> {normalized}")
-    assert "bob is awesome." in normalized.lower()
-    assert "1" not in normalized
+    assert normalized == "Bob is awesome1."
 
     # Citation needed[1]. -> Citation needed.
     normalized = normalize("Citation needed[1].")
     print(f"Citation needed[1]. -> {normalized}")
     assert "citation needed." in normalized.lower()
     assert "[1]" not in normalized
+
+
+@pytest.mark.parametrize("mode", ["spacy", "off"])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "F1 FP1 Q1 Q2 Q3 CO2 H2O 3D MP3 x86.",
+        "word1 awesome1 version2 item23.",
+        "H2O2 B2B ISO9001 F1-car model2_rev3.",
+    ],
+)
+def test_footnote_cleanup_preserves_alphanumeric_terms(text, mode):
+    assert normalize(text, {"normalization_apostrophe_mode": mode}) == text
+
+
+@pytest.mark.parametrize("mode", ["spacy", "off"])
+@pytest.mark.parametrize("convert_numbers", [True, False])
+def test_footnote_cleanup_removes_explicit_markers_only(mode, convert_numbers):
+    assert normalize(
+        "F1[1] and H2O[23][2]. Evidence[123].",
+        {
+            "normalization_apostrophe_mode": mode,
+            "normalization_numbers": convert_numbers,
+        },
+    ) == "F1 and H2O. Evidence."
+
+
+@pytest.mark.parametrize("mode", ["spacy", "off"])
+def test_superscript_digits_are_normalized_without_guessing_footnotes(mode):
+    # NFKC flattens superscripts before footnote cleanup sees the text.
+    assert normalize(
+        "Evidence¹ and Evidence²³.", {"normalization_apostrophe_mode": mode}
+    ) == "Evidence1 and Evidence23."
+
+
+@pytest.mark.parametrize("mode", ["spacy", "off"])
+def test_footnote_cleanup_disabled_preserves_bracket_markers(mode):
+    text = "F1[1] and H2O[23][2]."
+    assert normalize(
+        text,
+        {
+            "normalization_apostrophe_mode": mode,
+            "normalization_footnotes": False,
+            "normalization_numbers": False,
+        },
+    ) == "F1[1] and H2O[23] [2]."
 
 
 def test_manual_override_normalization():

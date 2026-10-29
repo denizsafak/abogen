@@ -153,7 +153,6 @@ _CURRENCY_RE = re.compile(
 _URL_RE = re.compile(
     r"(https?://)?(www\.)?(?P<domain>[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+)(/[^\s]*)?"
 )
-_FOOTNOTE_RE = re.compile(r"([a-zA-Z]+)(\d+)")
 _BRACKET_FOOTNOTE_RE = re.compile(r"\[\d+\]")
 
 _ISO_DATE_RE = re.compile(
@@ -2002,16 +2001,13 @@ def _normalize_grouped_numbers(text: str, cfg: ApostropheConfig) -> str:
         spoken = domain.replace(".", " dot ")
         return spoken
 
-    def _remove_footnote(match: re.Match[str]) -> str:
-        return match.group(1)
-
     normalized = text
 
     # Apply URL replacement first (independent of number conversion).
     normalized = _URL_RE.sub(_replace_url, normalized)
 
     if getattr(cfg, "remove_footnotes", False):
-        normalized = _FOOTNOTE_RE.sub(_remove_footnote, normalized)
+        # Unmarked letter-digit text is ambiguous (word1, F1, H2O).
         normalized = _BRACKET_FOOTNOTE_RE.sub("", normalized)
 
     if cfg.convert_currency:
