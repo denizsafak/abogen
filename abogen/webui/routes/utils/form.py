@@ -73,6 +73,47 @@ _WIZARD_STEP_META = {
 }
 
 
+def _resync_chunks(
+    previous_chunks: Optional[Iterable[Any]],
+    enabled_chapters: List[Dict[str, Any]],
+    level: ChunkLevel,
+) -> List[Dict[str, Any]]:
+    """Align speech chunks with the current chapter selection.
+
+    The planner groups chunks by selected-chapter ordinal, so chunks must follow
+    every selection change. Chunk ids are prefixed with the source chapter id:
+    a chapter whose previous chunks match its text at this level keeps them
+    (speakers, normalized_text) without normalizing again; only newly selected
+    or changed chapters are chunked and normalized.
+    """
+    previous_by_chapter: Dict[str, List[Dict[str, Any]]] = {}
+    for chunk in previous_chunks or []:
+        if isinstance(chunk, dict) and chunk.get("level") == level:
+            chapter_id = str(chunk.get("id") or "").split("_p", 1)[0]
+            previous_by_chapter.setdefault(chapter_id, []).append(chunk)
+
+    synced: List[Dict[str, Any]] = []
+    for ordinal, chapter in enumerate(enabled_chapters):
+        previous = sorted(
+            previous_by_chapter.get(str(chapter.get("id")), []),
+            key=lambda chunk: int(chunk.get("chunk_index") or 0),
+        )
+        source = " ".join(str(chapter.get("text") or "").split())
+        if previous and " ".join(str(chunk.get("text") or "") for chunk in previous) == source:
+            chapter_chunks = [dict(chunk) for chunk in previous]
+        else:
+            chapter_chunks = build_chunks_for_chapters([chapter], level=level)
+            for chunk in chapter_chunks:
+                chunk["speaker_id"] = "narrator"
+                chunk["speaker_label"] = "Narrator"
+        for chunk in chapter_chunks:
+            chunk["chapter_index"] = ordinal
+            for key in ("voice", "voice_profile", "voice_formula"):
+                chunk[key] = chapter.get(key)
+        synced.extend(chapter_chunks)
+    return synced
+
+
 def apply_prepare_form(
     pending: PendingJob, form: Mapping[str, Any]
 ) -> tuple[
@@ -299,6 +340,8 @@ def apply_prepare_form(
         pending.chapters[index] = dict(entry)
 
     enabled_overrides = [entry for entry in overrides if entry.get("enabled")]
+
+    pending.chunks = _resync_chunks(pending.chunks, enabled_overrides, chunk_level_literal)
 
     heteronym_entries = getattr(pending, "heteronym_overrides", None)
     if isinstance(heteronym_entries, list) and heteronym_entries:
