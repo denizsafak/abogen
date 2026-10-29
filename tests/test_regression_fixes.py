@@ -84,6 +84,40 @@ def test_footnote_removal():
     assert "[1]" not in normalized
 
 
+@pytest.mark.parametrize("mode", ["spacy", "off"])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "F1 FP1 Q1 Q2 Q3 CO2 H2O 3D MP3 x86.",
+        "word1 awesome1 version2 item23.",
+        "H2O2 B2B ISO9001 F1-car model2_rev3.",
+    ],
+)
+def test_footnote_cleanup_preserves_alphanumeric_terms(text, mode):
+    assert normalize(text, {"normalization_apostrophe_mode": mode}) == text
+
+
+@pytest.mark.parametrize("mode", ["spacy", "off"])
+def test_footnote_cleanup_removes_explicit_markers_only(mode):
+    assert normalize(
+        "F1[1] and H2O[23][2]. Evidence[123].",
+        {"normalization_apostrophe_mode": mode},
+    ) == "F1 and H2O. Evidence."
+
+
+@pytest.mark.parametrize("mode", ["spacy", "off"])
+def test_footnote_cleanup_disabled_preserves_bracket_markers(mode):
+    text = "F1[1] and H2O[23][2]."
+    assert normalize(
+        text,
+        {
+            "normalization_apostrophe_mode": mode,
+            "normalization_footnotes": False,
+            "normalization_numbers": False,
+        },
+    ) == "F1[1] and H2O[23] [2]."
+
+
 def test_manual_override_normalization():
     from abogen.entity_analysis import normalize_manual_override_token
 
