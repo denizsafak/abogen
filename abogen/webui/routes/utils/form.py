@@ -39,6 +39,7 @@ from abogen.webui.routes.utils.common import split_profile_spec, extract_checkbo
 from abogen.domain.text_utils import calculate_text_length
 from abogen.voice_profiles import serialize_profiles, normalize_profile_entry
 from abogen.chunking import ChunkLevel, build_chunks_for_chapters
+from abogen.normalization_settings import apply_overrides, get_runtime_settings, normalization_fingerprint
 from abogen.tts_plugin.utils import get_default_voice
 from abogen.speaker_configs import get_config
 from abogen.kokoro_text_normalization import normalize_roman_numeral_titles
@@ -71,6 +72,68 @@ _WIZARD_STEP_META = {
         "hint": "Assign pronunciations, voices, and manual overrides before queueing the conversion.",
     },
 }
+
+
+def _resync_chunks(
+    previous_chunks: Optional[Iterable[Any]],
+    enabled_chapters: List[Dict[str, Any]],
+    level: ChunkLevel,
+    *,
+    normalization_settings: Mapping[str, Any],
+) -> List[Dict[str, Any]]:
+    """Align speech chunks with the current chapter selection.
+
+    The planner groups chunks by selected-chapter ordinal, so chunks must follow
+    every selection change. Chunk ids are prefixed with the source chapter id:
+    a chapter whose previous chunks match its text at this level keeps them
+    (speakers, normalized_text) without normalizing again; only newly selected
+    or changed chapters are chunked and normalized.
+    """
+    fingerprint = normalization_fingerprint(normalization_settings)
+    previous_by_chapter: Dict[str, List[Dict[str, Any]]] = {}
+    for chunk in previous_chunks or []:
+        if isinstance(chunk, dict) and chunk.get("level") == level:
+            chapter_id = str(chunk.get("id") or "").split("_p", 1)[0]
+            previous_by_chapter.setdefault(chapter_id, []).append(chunk)
+
+    synced: List[Dict[str, Any]] = []
+    for ordinal, chapter in enumerate(enabled_chapters):
+        previous = sorted(
+            previous_by_chapter.get(str(chapter.get("id")), []),
+            key=lambda chunk: int(chunk.get("chunk_index") or 0),
+        )
+        source = " ".join(str(chapter.get("text") or "").split())
+        source_matches = bool(previous) and " ".join(str(chunk.get("text") or "") for chunk in previous) == source
+        if source_matches and all(
+            chunk.get("normalization_fingerprint") == fingerprint
+            and isinstance(chunk.get("normalized_text"), str) for chunk in previous
+        ):
+            chapter_chunks = [dict(chunk) for chunk in previous]
+        else:
+            chapter_chunks = build_chunks_for_chapters(
+                [chapter], level=level, normalization_settings=normalization_settings
+            )
+            previous_by_id = {chunk.get("id"): chunk for chunk in previous} if source_matches else {}
+            for chunk in chapter_chunks:
+                old = previous_by_id.get(chunk.get("id"))
+                if old is not None and old.get("text") == chunk.get("text"):
+                    metadata = {key: value for key, value in old.items()
+                                if key not in {"audio_path", "start", "end"}}
+                    metadata.update(chunk)
+                    for key in ("speaker_id", "speaker_label"):
+                        if key in old:
+                            metadata[key] = old[key]
+                    chunk.clear()
+                    chunk.update(metadata)
+                    continue
+                chunk["speaker_id"] = "narrator"
+                chunk["speaker_label"] = "Narrator"
+        for chunk in chapter_chunks:
+            chunk["chapter_index"] = ordinal
+            for key in ("voice", "voice_profile", "voice_formula"):
+                chunk[key] = chapter.get(key)
+        synced.extend(chapter_chunks)
+    return synced
 
 
 def apply_prepare_form(
@@ -299,6 +362,11 @@ def apply_prepare_form(
         pending.chapters[index] = dict(entry)
 
     enabled_overrides = [entry for entry in overrides if entry.get("enabled")]
+
+    pending.chunks = _resync_chunks(
+        pending.chunks, enabled_overrides, chunk_level_literal,
+        normalization_settings=apply_overrides(get_runtime_settings(), pending.normalization_overrides),
+    )
 
     heteronym_entries = getattr(pending, "heteronym_overrides", None)
     if isinstance(heteronym_entries, list) and heteronym_entries:
@@ -717,9 +785,29 @@ def build_pending_job_from_extraction(
     generate_epub3_default = bool(settings.get("generate_epub3", False))
     generate_epub3 = coerce_bool(form.get("generate_epub3"), generate_epub3_default)
 
+    normalization_overrides = {}
+    for key in _NORMALIZATION_BOOLEAN_KEYS:
+        default_val = bool(settings.get(key, True))
+        normalization_overrides[key] = extract_checkbox(form, key, default_val)
+
+    for key in _NORMALIZATION_STRING_KEYS:
+        default_val = str(settings.get(key, ""))
+        val = form.get(key)
+        if val is not None:
+            normalization_overrides[key] = str(val)
+        else:
+            normalization_overrides[key] = default_val
+
+    normalization_settings = apply_overrides(get_runtime_settings(), normalization_overrides)
     selected_chapter_sources = [entry for entry in chapters_payload if entry.get("enabled")]
-    raw_chunks = build_chunks_for_chapters(selected_chapter_sources, level=chunk_level_literal)
-    analysis_chunks = build_chunks_for_chapters(selected_chapter_sources, level="sentence")
+    raw_chunks = build_chunks_for_chapters(
+        selected_chapter_sources, level=chunk_level_literal,
+        normalization_settings=normalization_settings,
+    )
+    analysis_chunks = build_chunks_for_chapters(
+        selected_chapter_sources, level="sentence",
+        normalization_settings=normalization_settings,
+    )
 
     analysis_threshold = coerce_int(
         settings.get("speaker_analysis_threshold"),
@@ -747,19 +835,6 @@ def build_pending_job_from_extraction(
         apply_config=bool(speaker_config_payload),
         inject_recommended=inject_recommended_voices,
     )
-
-    normalization_overrides = {}
-    for key in _NORMALIZATION_BOOLEAN_KEYS:
-        default_val = bool(settings.get(key, True))
-        normalization_overrides[key] = extract_checkbox(form, key, default_val)
-
-    for key in _NORMALIZATION_STRING_KEYS:
-        default_val = str(settings.get(key, ""))
-        val = form.get(key)
-        if val is not None:
-            normalization_overrides[key] = str(val)
-        else:
-            normalization_overrides[key] = default_val
 
     logging.info(
         "[form] Creating PendingJob: language=%s voice=%s speed=%.2f provider=%s",

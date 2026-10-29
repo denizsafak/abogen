@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, Iterator, List, Literal, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Literal, Mapping, Optional, Tuple
 from typing import Pattern
 
 import re
 
 from abogen.kokoro_text_normalization import ApostropheConfig, normalize_for_pipeline
-from abogen.normalization_settings import build_apostrophe_config, get_runtime_settings
+from abogen.normalization_settings import build_apostrophe_config, get_runtime_settings, normalization_fingerprint
 
 ChunkLevel = Literal["paragraph", "sentence"]
 
@@ -78,8 +78,7 @@ def _normalize_whitespace(value: str) -> str:
     return _WHITESPACE_REGEX.sub(" ", value).strip()
 
 
-def _normalize_chunk_text(value: str) -> str:
-    settings = get_runtime_settings()
+def _normalize_chunk_text(value: str, *, settings: Mapping[str, Any]) -> str:
     config = build_apostrophe_config(
         settings=settings, base=_PIPELINE_APOSTROPHE_CONFIG
     )
@@ -128,9 +127,12 @@ def chunk_text(
     voice_profile: Optional[str] = None,
     voice_formula: Optional[str] = None,
     chunk_prefix: Optional[str] = None,
+    normalization_settings: Optional[Mapping[str, Any]] = None,
 ) -> List[Dict[str, object]]:
     """Split text into ordered chunk dictionaries."""
 
+    settings = get_runtime_settings() if normalization_settings is None else normalization_settings
+    fingerprint = normalization_fingerprint(settings)
     prefix = chunk_prefix or f"chap{chapter_index:04d}"
     chunks: List[Dict[str, object]] = []
 
@@ -152,7 +154,8 @@ def chunk_text(
                 voice_profile=voice_profile,
                 voice_formula=voice_formula,
             ).as_dict()
-            payload["normalized_text"] = _normalize_chunk_text(paragraph)
+            payload["normalized_text"] = _normalize_chunk_text(paragraph, settings=settings)
+            payload["normalization_fingerprint"] = fingerprint
             payload["original_text"] = paragraph
             chunks.append(payload)
         _attach_display_text(text, chunks)
@@ -185,7 +188,8 @@ def chunk_text(
                 voice_profile=voice_profile,
                 voice_formula=voice_formula,
             ).as_dict()
-            payload["normalized_text"] = _normalize_chunk_text(raw_sentence)
+            payload["normalized_text"] = _normalize_chunk_text(raw_sentence, settings=settings)
+            payload["normalization_fingerprint"] = fingerprint
             payload["display_text"] = raw_sentence
             payload["original_text"] = raw_sentence
             chunks.append(payload)
@@ -247,8 +251,10 @@ def build_chunks_for_chapters(
     *,
     level: ChunkLevel,
     speaker_id: str = "narrator",
+    normalization_settings: Optional[Mapping[str, Any]] = None,
 ) -> List[Dict[str, object]]:
     """Generate chunk dictionaries for a sequence of chapter payloads."""
+    settings = get_runtime_settings() if normalization_settings is None else normalization_settings
     all_chunks: List[Dict[str, object]] = []
     for chapter_index, entry in enumerate(chapters):
         if not isinstance(entry, dict):  # defensive
@@ -270,6 +276,7 @@ def build_chunks_for_chapters(
             voice_profile=str(voice_profile) if voice_profile else None,
             voice_formula=str(voice_formula) if voice_formula else None,
             chunk_prefix=str(prefix),
+            normalization_settings=settings,
         )
         all_chunks.extend(chapter_chunks)
     return all_chunks

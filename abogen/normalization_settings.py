@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import hashlib
+import json
 from dataclasses import replace
 from functools import lru_cache
 from typing import Any, Dict, Mapping, Optional
@@ -167,6 +169,19 @@ def _cached_settings() -> Dict[str, Any]:
 
 def get_runtime_settings() -> Dict[str, Any]:
     return dict(_cached_settings())
+
+
+def normalization_fingerprint(settings: Mapping[str, Any]) -> str:
+    """Versioned preparation identity, excluding authentication and unrelated UI data.
+
+    Key rotation is not a semantic cache change. Model/endpoint changes are.
+    The caller supplies the same resolved snapshot used for normalization.
+    """
+    semantic = {key: settings.get(key, default)
+                for key, default in _SETTINGS_DEFAULTS.items()
+                if key not in {"llm_api_key", "llm_timeout"}}
+    encoded = json.dumps(semantic, sort_keys=True, separators=(",", ":"))
+    return "normalization-v1:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def clear_cached_settings() -> None:
