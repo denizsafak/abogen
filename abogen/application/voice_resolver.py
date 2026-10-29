@@ -70,7 +70,7 @@ class AppVoiceResolver:
             loaded = resolved
 
         self._cache.set(cache_key, loaded)
-        logging.info("[resolver] Resolved: spec=%s -> provider=%s resolved=%s speed=%.2f steps=%s",
+        logging.info("[resolver] Resolved: spec=%s -> provider=%s resolved=%s speed=%s steps=%s",
                       voice_spec, provider, resolved, speed, steps)
         return ResolvedVoice(
             provider=provider,
