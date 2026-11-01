@@ -222,7 +222,7 @@ def execute_conversion(
         voice_resolver, base_voice_spec, request,
         log_callback=lambda msg: events.log(msg, level="warning"),
     )
-    logging.info("[executor] Base voice resolved: provider=%s voice=%s speed=%.2f", base_provider, base_voice_choice, base_speed)
+    logging.info("[executor] Base voice resolved: provider=%s voice=%s speed=%s", base_provider, base_voice_choice, base_speed)
 
     # Use ExitStack for resource management
     with ExitStack() as stack:
@@ -309,7 +309,7 @@ def execute_conversion(
                 voice_resolver, chapter.voice_spec, request,
                 log_callback=lambda msg: events.log(msg, level="warning"),
             )
-            logging.info("[executor] Chapter %d voice: provider=%s voice=%s speed=%.2f", chapter_idx, chapter_provider, chapter_voice, chapter_speed)
+            logging.info("[executor] Chapter %d voice: provider=%s voice=%s speed=%s", chapter_idx, chapter_provider, chapter_voice, chapter_speed)
             chapter_backend = pipeline_provider.get(chapter_provider, request.language, request.use_gpu)
 
             # Record chapter start for markers

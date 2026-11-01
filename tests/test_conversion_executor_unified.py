@@ -4,6 +4,7 @@ Uses fake/mock objects for ports (events, pipeline_provider, voice_resolver)
 to test the executor without real TTS or audio I/O.
 """
 
+import logging
 import tempfile
 from pathlib import Path
 from typing import Any, List, Optional
@@ -598,6 +599,57 @@ class TestRepeatConversionOutputPath:
             result = self._run(req)
 
             assert result.audio_path == Path(tmpdir) / "my_novel.wav"
+
+
+class TestOptionalVoiceSpeed:
+    """Kokoro voices resolve with speed=None; diagnostics must not crash on it."""
+
+    class _NoSpeedResolver(FakeVoiceResolver):
+        def resolve(self, voice_spec: str) -> ResolvedVoice:
+            resolved = super().resolve(voice_spec)
+            resolved.speed = None
+            return resolved
+
+    class _SpeedRecordingBackend(FakeBackend):
+        def __init__(self):
+            super().__init__()
+            self.speeds: List[Any] = []
+
+        def __call__(self, text: str, *, voice: Any, speed: float = 1.0, **kwargs: Any) -> List:
+            self.speeds.append(speed)
+            return super().__call__(text, voice=voice, speed=speed, **kwargs)
+
+    def test_none_speed_logs_and_falls_back_to_request_speed(self, caplog):
+        # caplog's handler re-raises formatting errors (like RichHandler, the
+        # WebUI console handler), so an unsafe "%.2f" on None fails here.
+        caplog.set_level(logging.INFO)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req = ConversionRequest(
+                direct_text="Hello world",
+                voice="af_heart",
+                speed=1.3,
+                save=SaveConfig(mode="custom_folder", output_folder=Path(tmpdir)),
+                output_format="wav",
+            )
+            from abogen.application.conversion_planner import build_conversion_plan
+
+            pipeline = FakePipelineProvider()
+            backend = self._SpeedRecordingBackend()
+            pipeline.get = lambda *args: backend
+            events = FakeEvents()
+
+            result = execute_conversion(
+                build_conversion_plan(req),
+                events,
+                pipeline,
+                self._NoSpeedResolver(),
+                TTSContext(),
+            )
+
+            assert result.audio_path.exists()
+            assert backend.speeds and set(backend.speeds) == {1.3}
+            assert not [m for m, level in events.logs if level == "warning"]
+            assert "Base voice resolved: provider=kokoro voice=af_heart speed=None" in caplog.text
 
 
 class TestHeadingDedup:
