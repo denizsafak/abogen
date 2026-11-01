@@ -139,14 +139,17 @@ class ExportService:
         metadata_args = self._metadata_to_ffmpeg_args(metadata)
         
         cmd = ["ffmpeg", "-y", "-i", str(audio_path)]
+        has_cover = bool(cover_path and cover_path.exists())
         
         if ffmetadata_path:
             cmd.extend(["-f", "ffmetadata", "-i", str(ffmetadata_path)])
         
-        if cover_path and cover_path.exists():
+        if has_cover:
+            # Cover follows the audio and the optional ffmetadata input.
+            cover_index = 2 if ffmetadata_path else 1
             cmd.extend(["-i", str(cover_path)])
             cmd.extend(["-map", "0:a"])
-            cmd.extend(["-map", "1:v:0", "-c:v:0", "mjpeg", "-disposition:v:0", "attached_pic"])
+            cmd.extend(["-map", f"{cover_index}:v:0", "-c:v:0", "mjpeg", "-disposition:v:0", "attached_pic"])
             if cover_mime:
                 cmd.extend(["-metadata:s:v:0", f"mimetype={cover_mime}"])
             cmd.extend(["-metadata:s:v:0", "title=Cover Art"])
@@ -163,7 +166,10 @@ class ExportService:
         if metadata_args:
             cmd.extend(metadata_args)
         
-        cmd.extend(["-movflags", "+faststart+use_metadata_tags"])
+        # use_metadata_tags makes the mp4 muxer silently drop attached_pic
+        # streams, so it is only kept when there is no cover to embed.
+        movflags = "+faststart" if has_cover else "+faststart+use_metadata_tags"
+        cmd.extend(["-movflags", movflags])
         
         temp_output = audio_path.with_suffix(audio_path.suffix + ".tmp")
         if audio_path.suffix.lower() in {".m4b", ".mp4", ".m4a"}:
@@ -192,8 +198,46 @@ class ExportService:
         if log_callback:
             log_callback("Embedded metadata and chapters into M4B output", "info")
         
+        if has_cover:
+            self._write_m4b_freeform_tags(audio_path, metadata, log_callback)
+
         # Apply chapters via Mutagen for better compatibility
         self._apply_m4b_chapters_mutagen(audio_path, chapters, log_callback)
+
+    def _write_m4b_freeform_tags(
+        self,
+        audio_path: Path,
+        metadata: Dict[str, Any],
+        log_callback: Optional[callable] = None,
+    ) -> None:
+        """Store every metadata key as an MP4 freeform tag.
+
+        Cover exports cannot use use_metadata_tags, so only keys the mp4
+        muxer recognises reach standard atoms; this keeps the rest.
+        """
+        custom = {}
+        for key, value in (metadata or {}).items():
+            if value in (None, ""):
+                continue
+            key_str = str(key).strip()
+            if key_str:
+                custom[key_str] = str(value)
+        if not custom:
+            return
+        try:
+            from mutagen.mp4 import MP4, MP4FreeForm, AtomDataType
+        except ImportError:
+            if log_callback:
+                log_callback("Unable to write custom M4B tags because mutagen is not installed.", "warning")
+            return
+        mp4 = MP4(str(audio_path))
+        if mp4.tags is None:
+            mp4.add_tags()
+        for key_str, value in custom.items():
+            mp4.tags[f"----:com.apple.iTunes:{key_str}"] = [
+                MP4FreeForm(value.encode("utf-8"), dataformat=AtomDataType.UTF8)
+            ]
+        mp4.save()
     
     @staticmethod
     def _metadata_to_ffmpeg_args(metadata: Dict[str, Any]) -> List[str]:
