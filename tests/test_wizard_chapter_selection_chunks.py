@@ -241,9 +241,9 @@ def normalize_calls(monkeypatch):
     calls: List[str] = []
     real = chunking._normalize_chunk_text
 
-    def counting(value):
+    def counting(value, **kwargs):
         calls.append(value)
-        return real(value)
+        return real(value, **kwargs)
 
     monkeypatch.setattr(chunking, "_normalize_chunk_text", counting)
     return calls
@@ -252,7 +252,7 @@ def normalize_calls(monkeypatch):
 def _unavailable_normalizer(monkeypatch):
     import abogen.chunking as chunking
 
-    def unavailable(value):
+    def unavailable(value, **kwargs):
         raise RuntimeError("normalizer unavailable")
 
     monkeypatch.setattr(chunking, "_normalize_chunk_text", unavailable)

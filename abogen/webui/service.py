@@ -1190,6 +1190,10 @@ class ConversionService:
             if normalized_value is not None:
                 chunk["normalized_text"] = str(normalized_value)
 
+            fingerprint = entry.get("normalization_fingerprint")
+            if isinstance(fingerprint, str) and len(fingerprint) <= 128:
+                chunk["normalization_fingerprint"] = fingerprint
+
             for text_key in ("display_text", "original_text"):
                 if text_key in entry and entry[text_key] is not None:
                     chunk[text_key] = str(entry[text_key])
