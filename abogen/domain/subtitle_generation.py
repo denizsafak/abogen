@@ -13,7 +13,51 @@ from typing import List, Optional, Tuple
 from abogen.domain.enums import Language, SubtitleMode
 from abogen.domain.split_pattern import PUNCTUATION_SENTENCE, PUNCTUATION_SENTENCE_COMMA
 
-_CLOSING_DELIMS = "\"\"\"\"'\"”’»›)]}」』"
+_CLOSING_DELIMS = "\"'”’»›)]}」』"
+# Comma characters that trigger a boundary in "Sentence + Comma" mode,
+# covering ASCII, Arabic, CJK fullwidth and ideographic variants.
+_COMMA_CHARS = ",،，、"
+
+
+def _extend_past_closing(text: str, pos: int) -> int:
+    """Advance *pos* past trailing closing quotes/brackets.
+
+    Punctuation boundaries (commas, ellipsis runs) are detected at the
+    punctuation character itself, but the closing delimiters that follow
+    it (e.g. the `"` in `Test,"`) belong to the same subtitle entry.
+    Without this, splits land between the punctuation and its closing
+    quote, producing entries like `" test likes.` and lone `"` entries.
+    """
+    end = len(text)
+    while pos < end and text[pos] in _CLOSING_DELIMS:
+        pos += 1
+    return pos
+
+
+def _merge_lone_closing_entries(
+    subtitle_entries: List[Tuple[float, float, str]],
+) -> None:
+    """Merge entries holding only closing delimiters into the previous entry.
+
+    Safety net for any boundary (spaCy or regex) that lands before a
+    closing quote/bracket: an entry such as `"` or `")` carries no
+    content of its own and must not appear as a standalone subtitle.
+    Merged in-place; the previous entry keeps its start and takes the
+    lone entry's end time.
+    """
+    merged: List[Tuple[float, float, str]] = []
+    for start, end, text in subtitle_entries:
+        stripped = text.strip()
+        if (
+            stripped
+            and all(c in _CLOSING_DELIMS for c in stripped)
+            and merged
+        ):
+            prev_start, _, prev_text = merged[-1]
+            merged[-1] = (prev_start, end, prev_text + stripped)
+        else:
+            merged.append((start, end, text))
+    subtitle_entries[:] = merged
 
 
 def _is_sentence_boundary(
@@ -227,10 +271,14 @@ def _process_spacy_sentences(
     doc = nlp(full_text)
     sentence_boundaries = [sent.end_char for sent in doc.sents]
 
-    # For "Sentence + Comma" mode, also split on commas
+    # For "Sentence + Comma" mode, also split on commas. The boundary
+    # sits AFTER any closing quotes/brackets following the comma so that
+    # e.g. `Test,"` stays together instead of stranding the `"` in the
+    # next entry.
     if subtitle_mode in (SubtitleMode.SENTENCE_COMMA.value, "Sentence + Comma"):
         comma_positions = [
-            i + 1 for i, c in enumerate(full_text) if c == ","
+            _extend_past_closing(full_text, i + 1)
+            for i, c in enumerate(full_text) if c in _COMMA_CHARS
         ]
         sentence_boundaries = sorted(
             set(sentence_boundaries + comma_positions)
@@ -239,10 +287,11 @@ def _process_spacy_sentences(
     # spaCy does not treat ellipsis ("...", "..", "…") as a sentence
     # boundary ("Lorem ipsum... Lorem..." stays one sentence), so ellipsis
     # runs followed by whitespace/end would merge into a single subtitle
-    # entry. Add explicit boundaries after them. Single dots ("Mr.") stay
-    # spaCy's responsibility so abbreviations don't regress.
-    for m in re.finditer(r"\.{2,}(?=[\s\"'”’»›)\]}]|$)|…(?=[\s\"'”’»›)\]}]|$)", full_text):
-        sentence_boundaries.append(m.end())
+    # entry. Add explicit boundaries after them (including any trailing
+    # closing quotes/brackets, so `trip..."` stays together). Single dots
+    # ("Mr.") stay spaCy's responsibility so abbreviations don't regress.
+    for m in re.finditer(r"\.{2,}(?=[\s\"'”’»›)\]}」』]|$)|…(?=[\s\"'”’»›)\]}」』]|$)", full_text):
+        sentence_boundaries.append(_extend_past_closing(full_text, m.end()))
     # Double newlines are paragraph breaks: always split, even when spaCy
     # sees no sentence boundary.
     for m in re.finditer(r"\n{2,}", full_text):
@@ -283,6 +332,7 @@ def _process_spacy_sentences(
                     remainder_end = cur_start
                 subtitle_entries.append((cur_start, remainder_end, remainder))
 
+        _merge_lone_closing_entries(subtitle_entries)
         _apply_fallback_end_time(subtitle_entries, fallback_end_time)
         return
 
@@ -336,6 +386,7 @@ def _process_spacy_sentences(
                 (start_time, end_time, sentence_text)
             )
 
+    _merge_lone_closing_entries(subtitle_entries)
     # Fallback for last entry
     _apply_fallback_end_time(subtitle_entries, fallback_end_time)
 

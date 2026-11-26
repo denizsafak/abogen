@@ -400,3 +400,107 @@ class TestEllipsisAndParagraphBreaks:
             fallback_end_time=3.0,
         )
         assert [e[2] for e in entries] == ["Lorem ipsum...", "Lorem...", "Lorem..."]
+
+
+class TestClosingDelimiterAttachment:
+    """Regression: closing quotes/brackets stranded by comma/ellipsis splits.
+
+    In "Sentence + Comma" mode with spaCy, comma boundaries were computed
+    as ``i + 1`` (right after the comma) and ellipsis boundaries as
+    ``m.end()`` (right after the dots), i.e. BEFORE any trailing closing
+    quote/bracket. For ``Test," test`` this split between ``,`` and ``"``,
+    producing ``Test,`` + ``" test likes.`` and a lone ``"`` entry for
+    ``trip..."``. Boundaries must sit after trailing closing delimiters.
+    """
+
+    @staticmethod
+    def _tok(text_ws, dur=0.5):
+        toks, t = [], 0.0
+        for text, ws in text_ws:
+            toks.append({"start": t, "end": t + dur, "text": text, "whitespace": ws})
+            t += dur
+        return toks, t
+
+    def test_comma_before_closing_quote_stays_attached(self):
+        """'Test," test' must not strand the closing quote in the next entry."""
+        toks, end = self._tok([
+            ('"Test', " "), ("morning,", " "), ("Test,", ""),
+            ('"', " "), ("test", " "), ("likes.", ""),
+        ])
+        entries = []
+        process_subtitle_tokens(
+            toks, entries, max_subtitle_words=50, subtitle_mode="Sentence + Comma",
+            language=Language.EN_US, use_spacy_segmentation=True,
+            fallback_end_time=end,
+        )
+        assert [e[2] for e in entries] == ['"Test morning,', 'Test,"', "test likes."]
+        for _, _, text in entries:
+            assert not text.startswith('" ')
+
+    def test_ellipsis_before_closing_quote_no_lone_entry(self):
+        """'trip..."' must stay together; no standalone '"' subtitle."""
+        toks, end = self._tok([
+            ("Test", " "), ("that", " "), ("long", " "),
+            ("trip...", ""), ('"', ""),
+        ])
+        entries = []
+        process_subtitle_tokens(
+            toks, entries, max_subtitle_words=50, subtitle_mode="Sentence + Comma",
+            language=Language.EN_US, use_spacy_segmentation=True,
+            fallback_end_time=end,
+        )
+        assert [e[2] for e in entries] == ['Test that long trip..."']
+
+    def test_reported_dialogue_end_to_end(self):
+        """Full reported passage: quotes attached, no lone-quote entries."""
+        toks, end = self._tok([
+            ('"Test', " "), ("morning,", " "), ("Test,", ""),
+            ('"', " "), ("test", " "), ("likes.", " "),
+            ('"', ""), ("Test.", " "), ("Test", " "), ("that", " "),
+            ("long", " "), ("trip...", ""), ('"', ""),
+        ])
+        entries = []
+        process_subtitle_tokens(
+            toks, entries, max_subtitle_words=50, subtitle_mode="Sentence + Comma",
+            language=Language.EN_US, use_spacy_segmentation=True,
+            fallback_end_time=end,
+        )
+        texts = [e[2] for e in entries]
+        assert texts == [
+            '"Test morning,', 'Test,"', "test likes.", '"Test.',
+            'Test that long trip..."',
+        ]
+        # No entry may consist solely of closing punctuation.
+        for text in texts:
+            assert text.strip('"\'”’»›)]}」』').strip()
+
+    def test_other_closing_marks_attached(self):
+        """Parens, brackets, curly/single quotes behave like straight quotes."""
+        toks, end = self._tok([
+            ("Hello", " "), ("(dear", " "), ("friend).", " "),
+            ("She", " "), ("said", ""), (",", ""),
+            ("”", " "), ("and", " "), ("left.", ""),
+        ])
+        entries = []
+        process_subtitle_tokens(
+            toks, entries, max_subtitle_words=50, subtitle_mode="Sentence + Comma",
+            language=Language.EN_US, use_spacy_segmentation=True,
+            fallback_end_time=end,
+        )
+        texts = [e[2] for e in entries]
+        assert "Hello (dear friend)." in texts
+        assert "”" not in texts
+        assert all(t.strip('"\'”’»›)]}」』').strip() for t in texts)
+
+    def test_faketoken_comma_quote_attachment(self):
+        """Single FakeToken (non-English-style) keeps ,'\"' together as well."""
+        entries = []
+        process_subtitle_tokens(
+            [{"start": 0.0, "end": 6.0,
+              "text": '"Test morning, Test," test likes.',
+              "whitespace": ""}],
+            entries, max_subtitle_words=50, subtitle_mode="Sentence + Comma",
+            language=Language.EN_US, use_spacy_segmentation=True,
+            fallback_end_time=6.0,
+        )
+        assert [e[2] for e in entries] == ['"Test morning,', 'Test,"', "test likes."]

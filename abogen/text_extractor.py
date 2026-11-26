@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup, NavigableString  # type: ignore[import]
 from ebooklib import epub  # type: ignore[import]
 
 from .utils import clean_text, detect_encoding
-from .domain.text_utils import calculate_text_length
+from .domain.text_utils import calculate_text_length, prepare_soup_block_breaks
 
 logger = logging.getLogger(__name__)
 
@@ -352,6 +352,7 @@ def _parse_markdown(
         header_tag = section_soup.find(attrs={"id": header_id})
         if header_tag:
             header_tag.decompose()
+        prepare_soup_block_breaks(section_soup)
         section_text = clean_text(section_soup.get_text()).strip()
         if not section_text:
             continue
@@ -1056,11 +1057,10 @@ class EpubExtractor:
             return ""
         soup = BeautifulSoup(html, "html.parser")
 
-        # Add line breaks after block-level elements to ensure pauses in speech
-        for tag in soup.find_all(
-            ["p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote"]
-        ):
-            tag.append("\n\n")
+        # Ensure block boundaries survive soup.get_text(): without explicit
+        # markers, tags like <br>/<section>/<td> concatenate with ZERO
+        # characters (e.g. 'it."Test'), breaking TXT output and subtitles.
+        prepare_soup_block_breaks(soup)
 
         for ol in soup.find_all("ol"):
             start_attr = ol.get("start")

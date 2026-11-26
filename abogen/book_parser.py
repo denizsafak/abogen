@@ -14,7 +14,7 @@ import markdown
 
 from abogen.utils import detect_encoding
 from abogen.subtitle_utils import clean_text
-from abogen.domain.text_utils import calculate_text_length
+from abogen.domain.text_utils import calculate_text_length, prepare_soup_block_breaks
 
 # Pre-compile frequently used regex patterns
 _BRACKETED_NUMBERS_PATTERN = re.compile(r"\[\s*\d+\s*\]")
@@ -384,6 +384,7 @@ class MarkdownParser(BaseBookParser):
             if header_tag:
                 header_tag.decompose()
 
+            prepare_soup_block_breaks(section_soup)
             section_text = clean_text(section_soup.get_text()).strip()
             chapter_id = header_id
             if section_text:
@@ -929,11 +930,10 @@ class EpubParser(BaseBookParser):
             if slice_html.strip():
                 slice_soup = BeautifulSoup(slice_html, "html.parser")
 
-                # Add line breaks after block-level elements to ensure pauses in speech
-                for tag in slice_soup.find_all(
-                    ["p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote"]
-                ):
-                    tag.append("\n\n")
+                # Preserve block boundaries so adjacent paragraphs never merge
+                # with zero characters (e.g. 'it."Test'). Covers <br>,
+                # <section>, tables, etc. — not just p/div.
+                prepare_soup_block_breaks(slice_soup)
 
                 for ol in slice_soup.find_all("ol"):
                     start = int(ol.get("start", 1))
@@ -977,6 +977,7 @@ class EpubParser(BaseBookParser):
                 prefix_soup = BeautifulSoup(prefix_html, "html.parser")
                 for tag in prefix_soup.find_all(["sup", "sub"]):
                     tag.decompose()
+                prepare_soup_block_breaks(prefix_soup)
                 prefix_text = clean_text(prefix_soup.get_text()).strip()
 
                 if prefix_text:
@@ -1040,6 +1041,9 @@ class EpubParser(BaseBookParser):
                 for tag in soup.find_all(["sup", "sub"]):
                     tag.decompose()
 
+                # Spine fallback previously had NO block handling at all, so
+                # even plain <p>..</p><p>..</p> merged with zero characters.
+                prepare_soup_block_breaks(soup)
                 text = clean_text(soup.get_text()).strip()
                 if text:
                     self.content_texts[doc_href] = text
