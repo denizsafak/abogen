@@ -388,3 +388,28 @@ def test_currency_magnitude():
         assert (
             expected.lower() in normalized.lower()
         ), f"Failed for {input_text}: got '{normalized}'"
+
+
+@pytest.mark.parametrize(
+    ("text", "is_us", "expected"),
+    [
+        ("See you on 3/14/24.", True, ("march", "fourteenth", "twenty twenty-four")),
+        ("See you on 3/14/2024.", True, ("march", "fourteenth", "twenty twenty-four")),
+        ("Remember 9/11/01.", True, ("september", "eleventh", "two thousand one")),
+        ("Remember 9/11/01.", False, ("ninth", "november", "two thousand one")),
+        ("Use 1/2 cup.", True, ("one half",)),
+    ],
+)
+def test_numeric_slash_dates_and_fractions(
+    text: str, is_us: bool, expected: tuple[str, ...]
+) -> None:
+    with patch("abogen.kokoro_text_normalization._is_us_locale", return_value=is_us):
+        normalized = _normalize_text(
+            text,
+            normalization_overrides={
+                "normalization_apostrophe_mode": "off",
+                "normalization_numbers": True,
+            },
+        ).lower()
+
+    assert all(value in normalized for value in expected)

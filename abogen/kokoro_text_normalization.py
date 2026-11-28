@@ -163,6 +163,9 @@ _MDY_DATE_RE = re.compile(
     r"(?P<day>\d{1,2})(?:st|nd|rd|th)?\s*,\s*(?P<year>\d{4})\b",
     re.IGNORECASE,
 )
+_NUMERIC_SLASH_DATE_RE = re.compile(
+    r"\b(?P<a>\d{1,2})\s*/\s*(?P<b>\d{1,2})\s*/\s*(?P<year>\d{4}|\d{2})\b"
+)
 
 _TIME_RE = re.compile(
     r"\b(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<meridian>a\.?m\.?|p\.?m\.?)\b",
@@ -171,6 +174,21 @@ _TIME_RE = re.compile(
 
 _ADDRESS_ABBR_RE = re.compile(
     r"(?P<prefix>\b\w+\s+)(?P<abbr>St|Rd|Ave|Blvd|Ln|Dr)\.(?=\s*(?:,|\.|!|\?|$))"
+)
+
+_MONTH_NAMES = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 )
 
 _MONTH_MAP = {
@@ -246,20 +264,7 @@ def _normalize_dates(text: str, language: str) -> str:
         day = int(match.group("day"))
         if not (1 <= month <= 12 and 1 <= day <= 31):
             return match.group(0)
-        month_name = [
-            "January",
-            "February",
-            "March",
-            "April",
-            "May",
-            "June",
-            "July",
-            "August",
-            "September",
-            "October",
-            "November",
-            "December",
-        ][month - 1]
+        month_name = _MONTH_NAMES[month - 1]
         ordinal = _int_to_ordinal_words(day, language) or str(day)
         year_words = _year_to_words_american(year, language)
         return (
@@ -283,8 +288,28 @@ def _normalize_dates(text: str, language: str) -> str:
             else f"{ordinal} {month_name} {year_words}"
         )
 
+    def _format_numeric_slash(match: re.Match[str]) -> str:
+        first = int(match.group("a"))
+        second = int(match.group("b"))
+        month, day = (first, second) if us else (second, first)
+        if not (1 <= month <= 12 and 1 <= day <= 31):
+            month, day = day, month
+            if not (1 <= month <= 12 and 1 <= day <= 31):
+                return match.group(0)
+        year_text = match.group("year")
+        year = int(year_text) + (2000 if len(year_text) == 2 else 0)
+        month_name = _MONTH_NAMES[month - 1]
+        ordinal = _int_to_ordinal_words(day, language) or str(day)
+        year_words = _year_to_words_american(year, language)
+        return (
+            f"{month_name} {ordinal}, {year_words}"
+            if us
+            else f"{ordinal} {month_name} {year_words}"
+        )
+
     out = _ISO_DATE_RE.sub(_format_iso, text)
     out = _MDY_DATE_RE.sub(_format_mdy, out)
+    out = _NUMERIC_SLASH_DATE_RE.sub(_format_numeric_slash, out)
     return out
 
 
